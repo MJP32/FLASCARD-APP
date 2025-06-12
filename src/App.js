@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, updateDoc, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, updateDoc, doc, getDoc, setDoc, deleteDoc, getDocs, where, Timestamp } from 'firebase/firestore';
 import LoginScreen from './LoginScreen.jsx';
+import * as XLSX from 'xlsx';
+import Calendar from './Calendar';
 
 // Main App component for the flashcard application
 function App() {
@@ -20,6 +22,7 @@ function App() {
   const [uploadMessage, setUploadMessage] = useState(''); // Message for CSV upload success
   const [uploadError, setUploadError] = useState('');     // Message for CSV upload errors
   const [showCalendarModal, setShowCalendarModal] = useState(false); // State for calendar modal visibility
+  const [calendarDates, setCalendarDates] = useState([]); // State for calendar dates and card counts
   const [showLoginModal, setShowLoginModal] = useState(false); // State for login modal visibility
   const [selectedCategory, setSelectedCategory] = useState('All'); // State for selected category filter
   const [authError, setAuthError] = useState(''); // New state for Firebase authentication errors
@@ -61,9 +64,9 @@ function App() {
 
   // API Keys state
   const [apiKeys, setApiKeys] = useState({
-    gemini: '',
-    anthropic: '',
-    openai: ''
+    gemini: process.env.REACT_APP_GEMINI_API_KEY || '',
+    anthropic: process.env.REACT_APP_ANTHROPIC_API_KEY || '',
+    openai: process.env.REACT_APP_OPENAI_API_KEY || ''
   });
   const [selectedApiProvider, setSelectedApiProvider] = useState('gemini'); // Default to Gemini
 
@@ -107,9 +110,6 @@ function App() {
       const firestore = getFirestore(app);
       const authentication = getAuth(app);
       
-      // Initialize Firebase Analytics (optional)
-      // const analytics = getAnalytics(app); 
-
       setDb(firestore);
       setAuth(authentication);
 
@@ -118,9 +118,11 @@ function App() {
           setUserId(user.uid);
           setAuthError(''); // Clear auth error on successful sign-in
           setUserDisplayName(user.displayName || user.email || user.uid); // Set user display name
+          setShowLoginScreen(false); // Hide login screen when user is authenticated
         } else {
           setUserId(null);
           setUserDisplayName('');
+          setShowLoginScreen(true); // Show login screen when no user is authenticated
         }
         setIsAuthReady(true);
       });
@@ -135,13 +137,15 @@ function App() {
   // Function to handle login
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!auth) return;
+    if (!auth) {
+      setAuthError("Authentication not initialized");
+      return;
+    }
 
     try {
       setAuthError('');
-      await signInWithEmailAndPassword(auth, email, password);
-      setShowLoginScreen(false); // Hide login screen after successful login
-      console.log("User logged in successfully.");
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("User logged in successfully:", userCredential.user.uid);
     } catch (error) {
       console.error("Login error:", error);
       setAuthError(`Login failed: ${error.message}`);
@@ -151,13 +155,15 @@ function App() {
   // Function to handle registration
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (!auth) return;
+    if (!auth) {
+      setAuthError("Authentication not initialized");
+      return;
+    }
 
     try {
       setAuthError('');
-      await createUserWithEmailAndPassword(auth, email, password);
-      setShowLoginScreen(false); // Hide login screen after successful registration
-      console.log("User registered successfully.");
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log("User registered successfully:", userCredential.user.uid);
     } catch (error) {
       console.error("Registration error:", error);
       setAuthError(`Registration failed: ${error.message}`);
@@ -166,13 +172,15 @@ function App() {
 
   // Function to handle anonymous login
   const handleAnonymousLogin = async () => {
-    if (!auth) return;
+    if (!auth) {
+      setAuthError("Authentication not initialized");
+      return;
+    }
 
     try {
       setAuthError('');
-      await signInAnonymously(auth);
-      setShowLoginScreen(false); // Hide login screen after successful anonymous login
-      console.log("User logged in anonymously.");
+      const userCredential = await signInAnonymously(auth);
+      console.log("User logged in anonymously:", userCredential.user.uid);
     } catch (error) {
       console.error("Anonymous login error:", error);
       setAuthError(`Anonymous login failed: ${error.message}`);
@@ -181,21 +189,24 @@ function App() {
 
   // Function to handle logout
   const handleLogout = async () => {
-    if (auth) {
-      try {
-        await signOut(auth);
-        setUserId(null); // Clear userId on logout
-        setUserDisplayName(''); // Clear display name on logout
-        setAuthError(''); // Clear any auth errors
-        setShowSettingsModal(false); // Close settings modal after logout
-        setEmail(''); // Clear email
-        setPassword(''); // Clear password
-        setShowLoginScreen(true); // Show login screen after logout
-        console.log("User logged out successfully.");
-      } catch (error) {
-        console.error("Error logging out:", error);
-        setAuthError(`Logout failed: ${error.message}`);
-      }
+    if (!auth) {
+      setAuthError("Authentication not initialized");
+      return;
+    }
+
+    try {
+      await signOut(auth);
+      setUserId(null);
+      setUserDisplayName('');
+      setAuthError('');
+      setShowSettingsModal(false);
+      setEmail('');
+      setPassword('');
+      setShowLoginScreen(true);
+      console.log("User logged out successfully");
+    } catch (error) {
+      console.error("Error logging out:", error);
+      setAuthError(`Logout failed: ${error.message}`);
     }
   };
 
@@ -267,13 +278,27 @@ function App() {
     });
   };
 
+  // Function to check if API keys are configured
+  const checkApiKeys = () => {
+    const missingKeys = [];
+    if (!apiKeys.gemini) missingKeys.push('Gemini');
+    if (!apiKeys.anthropic) missingKeys.push('Anthropic');
+    if (!apiKeys.openai) missingKeys.push('OpenAI');
+    
+    if (missingKeys.length > 0) {
+      console.warn(`Missing API keys for: ${missingKeys.join(', ')}. Please configure them in your .env file.`);
+      return false;
+    }
+    return true;
+  };
+
   // Function to update API keys and save to Firestore
   const updateApiKey = (provider, key) => {
     setApiKeys(prev => {
       const newApiKeys = { ...prev, [provider]: key };
       // Save to Firestore if settings are already loaded
       if (db && userId && settingsLoaded) {
-        const appId = "flashcard-app-3f2a3"; // Hardcoding appId based on the provided config
+        const appId = "flashcard-app-3f2a3";
         const settingsDocRef = doc(db, `/artifacts/${appId}/users/${userId}/settings`, 'app_settings');
         updateDoc(settingsDocRef, { apiKeys: newApiKeys }).catch(error => console.error("Error updating API keys:", error));
       }
@@ -348,14 +373,14 @@ function App() {
     setShowAnswer(false);
   }, [flashcards, selectedCategory, userId, showDueTodayOnly]);
 
-  const nextCard = () => {
+  const nextCard = React.useCallback(() => {
     setShowAnswer(false);
     setGeneratedExample(''); // Clear generated example on next card
     setGeneratedQuestions([]); // Clear generated questions on next card
     setGeminiExplanation(''); // Clear generated explanation on next card
     setShowGeneratedQuestionsModal(false); // Close modal on card change
     setCurrentCardIndex((prevIndex) => (prevIndex + 1) % filteredFlashcards.length);
-  };
+  }, [filteredFlashcards.length, setShowAnswer, setGeneratedExample, setGeneratedQuestions, setGeminiExplanation, setShowGeneratedQuestionsModal, setCurrentCardIndex]);
 
   const prevCard = () => {
     setShowAnswer(false);
@@ -420,115 +445,264 @@ function App() {
   /**
    * Applies a simplified FSRS-like algorithm to update flashcard parameters.
    * Uses customizable factors from fsrsParams state.
+   * Wrapped in useCallback to avoid dependency issues in useEffect
    */
-  const reviewCard = async (quality, card) => {
-    if (!db || !userId || !card || !settingsLoaded) return; // Ensure settings are loaded
-
-    const lastReviewDate = card.lastReview ? card.lastReview.toDate() : new Date();
-    const now = new Date();
-    const elapsedDays = (now.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24);
-
-    let newDifficulty = card.difficulty;
-    let newStability = card.stability;
-    let newIntervalDays = 0;
-
-    switch (quality) {
-      case 1: // Again
-        newDifficulty = Math.min(10, newDifficulty + 1.5);
-        newStability = Math.max(0.1, newStability * fsrsParams.againFactor);
-        newIntervalDays = 0.5;
-        break;
-      case 2: // Hard
-        newDifficulty = Math.min(10, newDifficulty + 0.8);
-        newStability = Math.max(0.5, newStability * fsrsParams.hardFactor);
-        newIntervalDays = newStability;
-        break;
-      case 3: // Good
-        newDifficulty = Math.max(1, newDifficulty - 0.5);
-        newStability = newStability * (1 + 0.1 * elapsedDays / newDifficulty) * fsrsParams.goodFactor;
-        newIntervalDays = newStability;
-        break;
-      case 4: // Easy
-        newDifficulty = Math.max(1, newDifficulty - 1.0);
-        newStability = newStability * (1 + 0.2 * elapsedDays / newDifficulty) * fsrsParams.easyFactor;
-        newIntervalDays = newStability * 1.5;
-        break;
-      default:
-        console.warn("Invalid quality rating:", quality);
-        return;
+  const reviewCard = React.useCallback(async (quality, card) => {
+    console.log("reviewCard called with:", { quality, cardId: card?.id });
+    
+    if (!db || !userId || !card || !settingsLoaded) {
+      console.error("Missing dependencies:", { db: !!db, userId: !!userId, card: !!card, settingsLoaded });
+      return;
     }
 
-    newStability = Math.max(0.1, newStability);
-    newDifficulty = Math.max(1, Math.min(10, newDifficulty));
-
-    const nextReview = new Date(now.getTime() + newIntervalDays * 24 * 60 * 60 * 1000);
-
-    const appId = "flashcard-app-3f2a3"; // Hardcoding appId
     try {
-      await updateDoc(doc(db, `/artifacts/${appId}/users/${userId}/flashcards`, card.id), {
-        difficulty: newDifficulty,
-        stability: newStability,
-        lastReview: serverTimestamp(),
-        nextReview: nextReview,
+      const appId = "flashcard-app-3f2a3";
+      const now = new Date();
+      console.log("Processing review for card:", card.id);
+
+      // Get current card data
+      const cardRef = doc(db, `artifacts/${appId}/users/${userId}/flashcards`, card.id);
+      const cardDoc = await getDoc(cardRef);
+      
+      if (!cardDoc.exists()) {
+        console.error("Card not found in database:", card.id);
+        return;
+      }
+
+      const cardData = cardDoc.data();
+      console.log("Retrieved card data:", cardData);
+      
+      // Calculate next review date based on quality rating
+      const nextReview = new Date(now);
+      let daysToAdd = 0;
+      
+      switch (quality) {
+        case 1: // Again
+          daysToAdd = 0; // Review again today
+          break;
+        case 2: // Hard
+          daysToAdd = 1;
+          break;
+        case 3: // Good
+          daysToAdd = 3;
+          break;
+        case 4: // Easy
+          daysToAdd = 10;
+          break;
+        default:
+          console.warn("Invalid quality rating:", quality);
+          return;
+      }
+
+      nextReview.setDate(now.getDate() + daysToAdd);
+      // Set time to end of day (23:59:59) to ensure card appears on the correct day
+      nextReview.setHours(23, 59, 59, 999);
+
+      console.log("Updating card with new values:", {
+        nextReview: nextReview
       });
-      console.log(`Card ${card.id} reviewed with quality ${quality}. Next review in ${newIntervalDays.toFixed(1)} days.`);
+
+      // Update card in database
+      await updateDoc(cardRef, {
+        lastReview: serverTimestamp(),
+        nextReview: nextReview
+      });
+
+      console.log(`Card ${card.id} reviewed with quality ${quality}. Next review in ${daysToAdd} days.`);
+      
+      // Always move to next card after updating
       nextCard();
+      
     } catch (error) {
       console.error("Error updating flashcard:", error);
-      if (error.code && error.code === 'unavailable' || error.message.includes('offline')) {
-          setAuthError("Firestore write failed: You appear to be offline or there's a network issue. Please check your internet connection.");
-        } else {
-          setAuthError(`Error updating flashcard: ${error.message}`);
-        }
+      if (error.code && (error.code === 'unavailable' || error.message.includes('offline'))) {
+        setAuthError("Firestore write failed: You appear to be offline or there's a network issue. Please check your internet connection.");
+      } else {
+        setAuthError(`Error updating flashcard: ${error.message}`);
+      }
     }
-  };
+  }, [db, userId, settingsLoaded, nextCard, setAuthError]);
+
+  // Function to get cards due on a specific date
+  const getCardsDueOnDate = React.useCallback(async (date) => {
+    if (!db || !userId) {
+      console.log("getCardsDueOnDate: db or userId not available");
+      return 0;
+    }
+
+    try {
+      // Create proper Firestore Timestamp objects for query
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      // Get all flashcards and filter them in memory
+      const cardsRef = collection(db, `artifacts/flashcard-app-3f2a3/users/${userId}/flashcards`);
+      const querySnapshot = await getDocs(cardsRef);
+      
+      // Filter cards due on the specified date
+      const dueCards = querySnapshot.docs.filter(doc => {
+        const card = doc.data();
+        if (!card.nextReview) return false;
+        
+        const nextReviewDate = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+        const reviewDate = new Date(nextReviewDate);
+        reviewDate.setHours(0, 0, 0, 0);
+        
+        const compareDate = new Date(date);
+        compareDate.setHours(0, 0, 0, 0);
+        
+        return reviewDate.getTime() === compareDate.getTime();
+      });
+      
+      return dueCards.length;
+    } catch (error) {
+      console.error("Error getting cards due on date:", error);
+      return 0;
+    }
+  }, [db, userId]);
+
+  // Update calendar dates with correct card counts
+  const updateCalendarDates = React.useCallback(async () => {
+    if (!db || !userId) return;
+
+    try {
+      // Get current date in Central Time
+      const now = new Date();
+      const centralTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+      const today = new Date(centralTime.getFullYear(), centralTime.getMonth(), centralTime.getDate());
+      
+      const dates = [];
+      
+      // Generate dates for the next 30 days
+      for (let i = 0; i < 30; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        const cardCount = await getCardsDueOnDate(date);
+        dates.push({
+          date: date,
+          cardCount: cardCount
+        });
+      }
+
+      setCalendarDates(dates);
+    } catch (error) {
+      console.error("Error updating calendar dates:", error);
+    }
+  }, [db, userId, getCardsDueOnDate]);
+
+  // Effect to update calendar when cards change or when calendar modal is shown
+  useEffect(() => {
+    if (db && userId && showCalendarModal) {
+      updateCalendarDates();
+    }
+  }, [db, userId, showCalendarModal, updateCalendarDates, flashcards]);
 
   /**
    * Parses a CSV string into an array of flashcard objects.
-   * Handles quoted fields, including multiline content and commas within quotes.
-   * Expected format: number,category,question,answer,additional_info
+   * Handles quoted fields, including multiline content, commas within quotes, and code comments.
+   * Expected format: id,number,category,question,answer,additional_info
    */
   const parseCSV = (csvString) => {
-    // Split into lines, filter empty ones, and slice to ignore the header row
-    const lines = csvString.split(/\r?\n/).filter(line => line.trim() !== '').slice(1);
-    const cards = [];
-
-    lines.forEach((line, index) => {
+    // Split the CSV into rows carefully handling quoted content which may contain newlines
+    const getRows = (text) => {
+      const rows = [];
+      let row = '';
       let inQuote = false;
-      let fieldBuffer = '';
-      const rowFields = [];
-
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-
-        if (char === '"') {
-          if (i + 1 < line.length && line[i + 1] === '"') {
-            fieldBuffer += '"';
-            i++;
-          } else {
-            inQuote = !inQuote;
-          }
-        } else if (char === ',' && !inQuote) {
-          rowFields.push(fieldBuffer);
-          fieldBuffer = '';
-        } else {
-          fieldBuffer += char;
+      
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+        
+        // Handle escaped quotes ("")
+        if (char === '"' && nextChar === '"') {
+          row += '"';
+          i++;
+          continue;
         }
+        
+        // Toggle quote state
+        if (char === '"') {
+          inQuote = !inQuote;
+          row += char;
+          continue;
+        }
+        
+        // Handle newline
+        if ((char === '\n' || (char === '\r' && nextChar === '\n')) && !inQuote) {
+          if (char === '\r') i++; // Skip \n of CRLF
+          rows.push(row);
+          row = '';
+          continue;
+        }
+        
+        row += char;
       }
-      rowFields.push(fieldBuffer);
-
-      while (rowFields.length < 5) {
-        rowFields.push('');
+      
+      if (row) rows.push(row);
+      return rows;
+    };
+    
+    // Parse a single row into fields
+    const parseRow = (row) => {
+      const fields = [];
+      let field = '';
+      let inQuote = false;
+      
+      for (let i = 0; i < row.length; i++) {
+        const char = row[i];
+        const nextChar = row[i + 1];
+        
+        // Handle escaped quotes ("")
+        if (char === '"' && nextChar === '"') {
+          field += '"';
+          i++;
+          continue;
+        }
+        
+        // Toggle quote state
+        if (char === '"') {
+          inQuote = !inQuote;
+          continue;
+        }
+        
+        // Field delimiter
+        if (char === ',' && !inQuote) {
+          fields.push(field);
+          field = '';
+          continue;
+        }
+        
+        field += char;
       }
-
-      const csvNumber = rowFields[0].trim();
-      const category = rowFields[1].trim() || 'Uncategorized';
-      const question = rowFields[2].trim();
-      const answer = rowFields[3].trim();
-      const additional_info = rowFields[4].trim();
-
+      
+      fields.push(field);
+      return fields;
+    };
+    
+    // Get and process rows
+    const rows = getRows(csvString);
+    rows.shift(); // Remove header row (first row is headers)
+    const cards = [];
+    
+    rows.forEach((row, index) => {
+      if (!row.trim()) return; // Skip empty rows
+      
+      const fields = parseRow(row);
+      while (fields.length < 6) fields.push('');
+      
+      const id = fields[0].trim();
+      const csvNumber = fields[1].trim();
+      const category = fields[2].trim() || 'Uncategorized';
+      const question = fields[3]; // Don't trim to preserve formatting
+      const answer = fields[4];   // Don't trim to preserve formatting
+      const additional_info = fields[5]; // Don't trim to preserve formatting
+      
       if (question && answer) {
         cards.push({
+          id: id || null,
           csvNumber: csvNumber || null,
           category,
           question,
@@ -536,11 +710,47 @@ function App() {
           additional_info: additional_info || null,
         });
       } else {
-        console.warn(`Skipping row ${index + 1} due to missing Question or Answer: "${line}"`);
+        console.warn(`Skipping row ${index + 1} due to missing Question or Answer`);
       }
     });
-
+    
     return cards;
+  };
+
+  // Function to parse Excel file
+  const parseExcel = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+          
+          // Skip header row and process data
+          const cards = jsonData.slice(1).map(row => {
+            const [csvNumber, category, question, answer, additional_info] = row;
+            if (question && answer) {
+              return {
+                csvNumber: csvNumber || null,
+                category: category || 'Uncategorized',
+                question: question.toString().trim(),
+                answer: answer.toString().trim(),
+                additional_info: additional_info ? additional_info.toString().trim() : null,
+              };
+            }
+            return null;
+          }).filter(card => card !== null);
+          
+          resolve(cards);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = (error) => reject(error);
+      reader.readAsArrayBuffer(file);
+    });
   };
 
   // Handles the CSV file selection (for multiple files)
@@ -557,29 +767,45 @@ function App() {
       return;
     }
 
-    setUploadMessage('Processing CSV files...');
+    setUploadMessage('Processing files...');
     setUploadError('');
 
     let totalCardsAdded = 0;
+    let totalCardsUpdated = 0;
     let totalFilesProcessed = 0;
     let errorsFound = false;
 
+    // Function to sanitize text for Firestore
+    const sanitizeText = (text) => {
+      if (!text) return text;
+      // We no longer need to replace all forward slashes as this breaks code examples
+      // Firestore document content can include forward slashes, only document paths have restrictions
+      return text;
+    };
+
     for (const file of selectedUploadFiles) {
-      if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
-        setUploadError((prev) => prev + `Invalid file type for ${file.name}. Only CSV files are supported.\n`);
+      const isExcel = file.name.endsWith('.xlsx');
+      const isCsv = file.name.endsWith('.csv');
+
+      if (!isExcel && !isCsv) {
+        setUploadError((prev) => prev + `Invalid file type for ${file.name}. Only CSV and Excel (.xlsx) files are supported.\n`);
         errorsFound = true;
         continue;
       }
 
       try {
-        const csvContent = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target.result);
-          reader.onerror = (e) => reject(e);
-          reader.readAsText(file, 'UTF-8');
-        });
-
-        const parsedCards = parseCSV(csvContent);
+        let parsedCards;
+        if (isExcel) {
+          parsedCards = await parseExcel(file);
+        } else {
+          const csvContent = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(e);
+            reader.readAsText(file, 'UTF-8');
+          });
+          parsedCards = parseCSV(csvContent);
+        }
 
         if (parsedCards.length === 0) {
           setUploadError((prev) => prev + `No valid flashcards found in ${file.name}.\n`);
@@ -589,22 +815,48 @@ function App() {
 
         for (const cardData of parsedCards) {
           if (db && userId) {
-            const appId = "flashcard-app-3f2a3"; // Hardcoding appId
+            const appId = "flashcard-app-3f2a3";
             const now = new Date();
 
-            await addDoc(collection(db, `/artifacts/${appId}/users/${userId}/flashcards`), {
-              question: cardData.question,
-              answer: cardData.answer,
-              category: cardData.category,
-              additional_info: cardData.additional_info,
+            // Sanitize the data to prevent Firestore path issues
+            const sanitizedData = {
+              question: sanitizeText(cardData.question),
+              answer: sanitizeText(cardData.answer),
+              category: sanitizeText(cardData.category),
+              additional_info: cardData.additional_info ? sanitizeText(cardData.additional_info) : null,
               csvNumber: cardData.csvNumber,
               difficulty: fsrsParams.initialDifficulty,
               stability: fsrsParams.initialStability,
               lastReview: serverTimestamp(),
               nextReview: now,
               createdAt: serverTimestamp(),
-            });
-            totalCardsAdded++;
+            };
+
+            try {
+              if (cardData.id) {
+                // If card has an ID, try to update existing card
+                const existingCardRef = doc(db, `/artifacts/${appId}/users/${userId}/flashcards`, cardData.id);
+                const existingCard = await getDoc(existingCardRef);
+                
+                if (existingCard.exists()) {
+                  // Update existing card
+                  await updateDoc(existingCardRef, sanitizedData);
+                  totalCardsUpdated++;
+                } else {
+                  // Add new card with specified ID
+                  await setDoc(existingCardRef, sanitizedData);
+                  totalCardsAdded++;
+                }
+              } else {
+                // Add new card without ID
+                await addDoc(collection(db, `/artifacts/${appId}/users/${userId}/flashcards`), sanitizedData);
+                totalCardsAdded++;
+              }
+            } catch (error) {
+              console.error(`Error processing card: ${error.message}`);
+              setUploadError((prev) => prev + `Failed to process card: ${error.message}\n`);
+              errorsFound = true;
+            }
           }
         }
         totalFilesProcessed++;
@@ -615,13 +867,18 @@ function App() {
       }
     }
 
-    if (!errorsFound && totalFilesProcessed > 0) {
-      setUploadMessage(`Successfully added ${totalCardsAdded} flashcard(s) from ${totalFilesProcessed} file(s).`);
-    } else if (errorsFound && totalFilesProcessed > 0) {
-        setUploadMessage(`Processed ${totalFilesProcessed} file(s). Added ${totalCardsAdded} cards. Some errors occurred.`);
-    } else if (errorsFound && totalFilesProcessed === 0) {
-        setUploadMessage("No files were successfully processed.");
+    let message = '';
+    if (totalCardsUpdated > 0) {
+      message += `Updated ${totalCardsUpdated} existing card(s). `;
     }
+    if (!errorsFound && totalFilesProcessed > 0) {
+      message += `Successfully added ${totalCardsAdded} new flashcard(s) from ${totalFilesProcessed} file(s).`;
+    } else if (errorsFound && totalFilesProcessed > 0) {
+      message += `Processed ${totalFilesProcessed} file(s). Added ${totalCardsAdded} new cards, updated ${totalCardsUpdated} cards. Some errors occurred.`;
+    } else if (errorsFound && totalFilesProcessed === 0) {
+      message = "No files were successfully processed.";
+    }
+    setUploadMessage(message);
     
     setSelectedUploadFiles([]); // Clear selected files after upload attempt
     if (fileInputRef.current) fileInputRef.current.value = ''; // Clear file input visual
@@ -635,6 +892,11 @@ function App() {
       return;
     }
 
+    if (!checkApiKeys()) {
+      newCardAnswerRef.current.value = "Please configure your API keys in the .env file.";
+      return;
+    }
+
     setIsGeneratingAnswer(true);
     try {
       let chatHistory = [];
@@ -643,11 +905,6 @@ function App() {
 
       const payload = { contents: chatHistory };
       const apiKey = apiKeys.gemini;
-      if (!apiKey) {
-        console.error("Gemini API key not configured");
-        newCardAnswerRef.current.value = "Please configure your Gemini API key in Settings.";
-        return;
-      }
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
       const response = await fetch(apiUrl, {
@@ -661,14 +918,14 @@ function App() {
           result.candidates[0].content && result.candidates[0].content.parts &&
           result.candidates[0].content.parts.length > 0) {
         const text = result.candidates[0].content.parts[0].text;
-        newCardAnswerRef.current.value = text.trim(); // Populate the answer field
+        newCardAnswerRef.current.value = text.trim();
       } else {
         console.error("Gemini API response did not contain expected text:", result);
-        // Optionally display an error message to the user
+        newCardAnswerRef.current.value = "Error generating answer. Please try again.";
       }
     } catch (error) {
       console.error("Error calling Gemini API:", error);
-      // Optionally display an error message to the user
+      newCardAnswerRef.current.value = "Error generating answer. Please check your API key and try again.";
     } finally {
       setIsGeneratingAnswer(false);
     }
@@ -1097,20 +1354,18 @@ function App() {
         setGeneratedExample(''); // Clear generated example when flipping
         setGeneratedQuestions([]); // Clear generated questions when flipping
         setGeminiExplanation(''); // Clear generated explanation when flipping
-      } else if (showAnswer) { // Only allow review shortcuts if the answer is shown
-        if (event.key === 'a' || event.key === 'A') {
-          event.preventDefault();
-          reviewCard(1, filteredFlashcards[currentCardIndex]);
-        } else if (event.key === 'h' || event.key === 'H') {
-          event.preventDefault();
-          reviewCard(2, filteredFlashcards[currentCardIndex]);
-        } else if (event.key === 'g' || event.key === 'G') {
-          event.preventDefault();
-          reviewCard(3, filteredFlashcards[currentCardIndex]);
-        } else if (event.key === 'e' || event.key === 'E') {
-          event.preventDefault();
-          reviewCard(4, filteredFlashcards[currentCardIndex]);
-        }
+      } else if (event.key === 'a' || event.key === 'A') {
+        event.preventDefault();
+        reviewCard(1, filteredFlashcards[currentCardIndex]);
+      } else if (event.key === 'h' || event.key === 'H') {
+        event.preventDefault();
+        reviewCard(2, filteredFlashcards[currentCardIndex]);
+      } else if (event.key === 'g' || event.key === 'G') {
+        event.preventDefault();
+        reviewCard(3, filteredFlashcards[currentCardIndex]);
+      } else if (event.key === 'e' || event.key === 'E') {
+        event.preventDefault();
+        reviewCard(4, filteredFlashcards[currentCardIndex]);
       }
     };
 
@@ -1125,12 +1380,11 @@ function App() {
     showUploadCsvForm,
     showCalendarModal,
     showSettingsModal,
-    isEditingCard, // Added dependency for edit mode
-    showGeneratedQuestionsModal, // Added dependency
-    filteredFlashcards, // Dependency for filteredFlashcards[currentCardIndex]
-    currentCardIndex,   // Dependency for filteredFlashcards[currentCardIndex]
-    showAnswer,         // Dependency for conditional review shortcuts
-    reviewCard          // Dependency for reviewCard function
+    isEditingCard,
+    showGeneratedQuestionsModal,
+    filteredFlashcards,
+    currentCardIndex,
+    reviewCard
   ]);
 
   // Content for the CSV Upload Guide in Settings
@@ -1253,6 +1507,55 @@ Example with no number, category, or additional_info:
   // Determine the current flashcard to display
   const currentCard = filteredFlashcards[currentCardIndex];
 
+  // Function to export cards as CSV
+  const handleExportCards = () => {
+    if (!filteredFlashcards || filteredFlashcards.length === 0) {
+      alert('No cards to export!');
+      return;
+    }
+
+    // Create CSV content
+    const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
+    const csvContent = [
+      headers.join(','),
+      ...filteredFlashcards.map((card, index) => {
+        // Function to properly escape and quote CSV fields
+        const escapeField = (field) => {
+          if (!field) return '';
+          // Replace double quotes with double double quotes and wrap in quotes
+          return `"${field.replace(/"/g, '""')}"`;
+        };
+
+        const row = [
+          card.id || '',
+          card.csvNumber || '',
+          card.category || '',
+          escapeField(card.question),
+          escapeField(card.answer),
+          escapeField(card.additional_info)
+        ];
+        return row.join(',');
+      })
+    ].join('\n');
+
+    // Create and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    // Format the date as 'Wednesday, June 11, 2025'
+    const today = new Date();
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const formattedDate = today.toLocaleDateString('en-US', options);
+    
+    // Use both formats in filename for clarity
+    link.setAttribute('download', `flashcards_export_${formattedDate.replace(/,/g, '').replace(/ /g, '_')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 font-inter bg-gradient-to-br from-blue-100 to-blue-200 dark:from-gray-800 dark:to-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-500">
       {/* Top-Left Buttons and Category Dropdown */}
@@ -1263,7 +1566,7 @@ Example with no number, category, or additional_info:
               setShowCreateCardForm(false);
               setShowUploadCsvForm(false);
             }}
-            className={`px-5 py-2.5 rounded-lg text-base font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-blue-300
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-blue-300
               ${
                 !showCreateCardForm && !showUploadCsvForm
                   ? 'bg-blue-600 text-white scale-105'
@@ -1282,7 +1585,7 @@ Example with no number, category, or additional_info:
               setShowCreateCardForm(true);
               setShowUploadCsvForm(false);
             }}
-            className={`px-5 py-2.5 rounded-lg text-base font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-green-300
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-green-300
               ${
                 showCreateCardForm
                   ? 'bg-green-600 text-white scale-105'
@@ -1301,7 +1604,7 @@ Example with no number, category, or additional_info:
               setShowUploadCsvForm(true);
               setShowCreateCardForm(false);
             }}
-            className={`px-5 py-2.5 rounded-lg text-base font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-indigo-300
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-indigo-300
               ${
                 showUploadCsvForm
                   ? 'bg-indigo-600 text-white scale-105'
@@ -1314,6 +1617,15 @@ Example with no number, category, or additional_info:
             }}
           >
             Upload Cards (CSV)
+          </button>
+          <button
+            onClick={handleExportCards}
+            className="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-purple-300 bg-purple-200 text-purple-700 hover:bg-purple-300 dark:bg-purple-800 dark:text-white dark:hover:bg-purple-700"
+            style={{
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            Export Cards (CSV)
           </button>
 
           {/* Login/Logout Button */}
@@ -1335,7 +1647,7 @@ Example with no number, category, or additional_info:
           {userId && (
             <button
               onClick={() => setShowDueTodayOnly(!showDueTodayOnly)}
-              className={`px-5 py-2.5 rounded-lg text-base font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 ${
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 ${
                 showDueTodayOnly
                   ? 'focus:ring-orange-300 bg-orange-200 text-orange-700 hover:bg-orange-300 dark:bg-orange-800 dark:text-white dark:hover:bg-orange-700'
                   : 'focus:ring-gray-300 bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700'
@@ -1357,11 +1669,13 @@ Example with no number, category, or additional_info:
                 id="category-filter"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="block w-full max-w-[20vw] min-w-[200px] py-2.5 px-4 border-2 border-blue-300 bg-white rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-semibold cursor-pointer
-                           dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:focus:ring-blue-400 dark:focus:border-blue-400"
+                className="block w-full max-w-[15vw] min-w-[180px] py-2.5 px-4 border-2 border-blue-300 bg-white rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-semibold cursor-pointer
+                            dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:focus:ring-blue-400 dark:focus:border-blue-400"
                 style={{
                   backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                  maxHeight: '200px',
+                  overflowY: 'auto'
                 }}
               >
                 {uniqueCategories.map(cat => (
@@ -1409,14 +1723,13 @@ Example with no number, category, or additional_info:
 
         {/* Action Buttons */}
         <div className="flex items-center gap-3" style={{ zIndex: 9999 }}>
-          {/* Calendar Icon Button */}
+          {/* Calendar Button */}
           <button
             onClick={() => setShowCalendarModal(true)}
-            className="p-3 bg-purple-200 hover:bg-purple-300 rounded-full shadow-md transition-all duration-200 transform hover:scale-110 active:scale-90 focus:outline-none focus:ring-4 focus:ring-purple-300 dark:bg-purple-700 dark:hover:bg-purple-600"
-            style={{ backgroundColor: '#e9d5ff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
-            aria-label="Show due cards calendar"
+            className="p-3 bg-gray-200 hover:bg-gray-300 rounded-full shadow-md transition-all duration-200 transform hover:scale-110 active:scale-90 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+            aria-label="Show calendar"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-700 dark:text-purple-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700 dark:text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
@@ -1424,7 +1737,6 @@ Example with no number, category, or additional_info:
           <button
             onClick={() => setShowSettingsModal(true)}
             className="p-3 bg-gray-200 hover:bg-gray-300 rounded-full shadow-md transition-all duration-200 transform hover:scale-110 active:scale-90 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
-            style={{ backgroundColor: '#e5e7eb', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
             aria-label="Open settings"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700 dark:text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1474,7 +1786,7 @@ Example with no number, category, or additional_info:
                 disabled={isGeneratingAnswer}
                 className={`w-full mt-3 py-2 px-4 rounded-lg font-semibold transition-all duration-300 transform shadow-md
                            ${isGeneratingAnswer ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}
-                           text-white focus:outline-none focus:ring-4 focus:ring-purple-300 active:scale-95`}
+                           text-white focus:outline-none focus:ring-4 focus:ring-purple-300 dark:bg-purple-800 dark:hover:bg-purple-700`}
               >
                 {isGeneratingAnswer ? 'Suggesting...' : 'Suggest Answer ✨'}
               </button>
@@ -1524,10 +1836,10 @@ Example with no number, category, or additional_info:
               <input
                 id="csv-upload"
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx"
                 ref={fileInputRef}
-                onChange={handleFileSelect} // Changed to handleFileSelect
-                multiple // Added multiple attribute
+                onChange={handleFileSelect}
+                multiple
                 className="block w-full text-sm text-gray-500
                            file:mr-4 file:py-2 file:px-4
                            file:rounded-full file:border-0
@@ -1654,8 +1966,10 @@ Example with no number, category, or additional_info:
                     <div className="absolute inset-0 bg-white rounded-2xl flex flex-col justify-between p-8 text-gray-800 transition-all duration-500 ease-in-out backface-hidden dark:bg-gray-700 dark:text-gray-100"
                          style={{ transform: showAnswer ? 'rotateY(0deg)' : 'rotateY(-180deg)', backfaceVisibility: 'hidden' }}>
                       {/* Display answer as plain text */}
-                      <div className="text-2xl font-semibold mb-6 overflow-auto w-full leading-relaxed">
-                        {currentCard.answer}
+                      <div className="text-2xl font-semibold mb-6 overflow-y-auto w-full leading-relaxed flex-grow" style={{ maxHeight: 'calc(100% - 200px)' }}>
+                        <pre className="whitespace-pre-wrap font-sans text-2xl">
+                          {currentCard.answer}
+                        </pre>
                       </div>
                       {/* Additional Info / Generated Content within the card */}
                       {currentCard.additional_info && (
@@ -1736,28 +2050,52 @@ Example with no number, category, or additional_info:
 
                 <div className="flex mt-8 space-x-4">
                   <button
-                    onClick={() => reviewCard(1, currentCard)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (currentCard) {
+                        reviewCard(1, currentCard);
+                      }
+                    }}
                     className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700"
                   >
-                    Again <span className="text-xs ml-1">(A)</span>
+                    Again (1)
                   </button>
                   <button
-                    onClick={() => reviewCard(2, currentCard)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (currentCard) {
+                        reviewCard(2, currentCard);
+                      }
+                    }}
                     className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:bg-yellow-800 dark:hover:bg-yellow-700"
                   >
-                    Hard <span className="text-xs ml-1">(H)</span>
+                    Hard (2)
                   </button>
                   <button
-                    onClick={() => reviewCard(3, currentCard)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (currentCard) {
+                        reviewCard(3, currentCard);
+                      }
+                    }}
                     className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700"
                   >
-                    Good <span className="text-xs ml-1">(G)</span>
+                    Good (3)
                   </button>
                   <button
-                    onClick={() => reviewCard(4, currentCard)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (currentCard) {
+                        reviewCard(4, currentCard);
+                      }
+                    }}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
                   >
-                    Easy <span className="text-xs ml-1">(E)</span>
+                    Easy (4)
                   </button>
                 </div>
               </div>
@@ -1775,7 +2113,7 @@ Example with no number, category, or additional_info:
       {/* Card Edit Modal */}
       {isEditingCard && editCardData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800">
+          <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800">
             <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center dark:text-gray-100">Edit Flashcard</h2>
             <div className="space-y-6">
               <div>
@@ -1786,8 +2124,8 @@ Example with no number, category, or additional_info:
                   id="edit-question"
                   ref={editQuestionRef}
                   defaultValue={editCardData.question}
-                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="4"
+                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  rows="6"
                 ></textarea>
               </div>
               <div>
@@ -1798,8 +2136,8 @@ Example with no number, category, or additional_info:
                   id="edit-answer"
                   ref={editAnswerRef}
                   defaultValue={editCardData.answer}
-                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="4"
+                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  rows="8"
                 ></textarea>
               </div>
               <div>
@@ -1822,8 +2160,8 @@ Example with no number, category, or additional_info:
                   id="edit-additional-info"
                   ref={editAdditionalInfoRef}
                   defaultValue={editCardData.additional_info || ''}
-                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="3"
+                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                  rows="6"
                 ></textarea>
               </div>
 
@@ -1891,92 +2229,26 @@ Example with no number, category, or additional_info:
         </div>
       )}
 
-      {/* Calendar Modal - Dropdown Style */}
+      {/* Calendar Modal */}
       {showCalendarModal && (
-        <>
-          {/* Background overlay */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-30 z-40"
-            onClick={() => setShowCalendarModal(false)}
-          ></div>
-
-          {/* Calendar dropdown positioned near the button */}
-          <div
-            className="fixed top-20 right-4 bg-white rounded-lg shadow-2xl border border-gray-200 w-96 z-50 transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800 dark:border-gray-600"
-            style={{
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05)',
-              height: '500px',
-              maxHeight: '70vh'
-            }}
-          >
-            {/* Header */}
-            <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-600 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-gray-700 dark:to-gray-700 rounded-t-lg">
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Upcoming Reviews
-              </h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-[400px] max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Review Schedule</h2>
               <button
                 onClick={() => setShowCalendarModal(false)}
-                className="text-gray-500 hover:text-gray-700 p-2 rounded-full hover:bg-gray-200 transition-colors dark:text-gray-400 dark:hover:bg-gray-600"
-                aria-label="Close calendar"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-6 h-6 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-
-            {/* Scrollable content */}
-            <div
-              className="p-4"
-              style={{
-                height: '420px',
-                maxHeight: 'calc(70vh - 80px)',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                scrollbarWidth: 'thin',
-                scrollbarColor: '#9ca3af #f3f4f6'
-              }}
-            >
-              <div className="space-y-3 pr-2">
-                {Object.entries(dailyDueCounts).map(([dateString, count]) => {
-                  const date = new Date(dateString);
-                  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                  let displayDate = date.toLocaleDateString(undefined, options);
-
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  const tomorrow = new Date(today);
-                  tomorrow.setDate(today.getDate() + 1);
-
-                  if (date.getTime() === today.getTime()) {
-                    displayDate += " (Today)";
-                  } else if (date.getTime() === tomorrow.getTime()) {
-                    displayDate += " (Tomorrow)";
-                  }
-
-                  return (
-                    <div key={dateString} className="flex justify-between items-center p-3 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 transition-colors dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-650">
-                      <span className="text-gray-700 font-medium dark:text-gray-200 text-sm leading-relaxed">{displayDate}</span>
-                      <span className={`px-3 py-1 rounded-full text-white font-bold text-sm min-w-[2.5rem] text-center ${count > 0 ? 'bg-gradient-to-r from-blue-500 to-purple-600' : 'bg-gray-400'}`}>
-                        {count}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Footer info */}
-              <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-600">
-                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                  Showing review schedule for the next 30 days
-                </p>
-              </div>
+            <div className="p-4">
+              <Calendar calendarDates={calendarDates} onClose={() => setShowCalendarModal(false)} />
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Settings Modal */}
@@ -1984,7 +2256,7 @@ Example with no number, category, or additional_info:
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-600">
             {/* Header */}
-            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-600 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-700">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-600 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-800">
               <div className="flex items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 mr-3 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.942 3.33.83 2.891 2.673a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.942 1.543-.83 3.33-2.673 2.891a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.942-3.33-.83-2.891-2.673a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.942-1.543.83-3.33 2.673-2.891a1.724 1.724 0 002.572-1.065z" />
@@ -2117,7 +2389,7 @@ Example with no number, category, or additional_info:
                     <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg border border-blue-200 dark:border-blue-700">
                       <div className="flex items-start">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.586l6.243-6.243C11.978 9.927 12 9.464 12 9a6 6 0 016-6z" />
                         </svg>
                         <p className="text-blue-800 text-xs dark:text-blue-200">
                           <strong>Security:</strong> API keys are encrypted and stored securely in your user settings. They are only used for direct AI feature requests and never shared with third parties.
@@ -2137,7 +2409,7 @@ Example with no number, category, or additional_info:
                   <div className="flex items-center">
                     <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg mr-3">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0h2a2 2 0 012 2v2a2 2 0 01-2 2H9a2 2 0 01-2-2v-2a2 2 0 012-2zm0 0h2a2 2 0 012 2v2a2 2 0 01-2 2H9a2 2 0 01-2-2v-2a2 2 0 012-2z" />
                       </svg>
                     </div>
                     <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">FSRS Review Factors</h3>
@@ -2347,7 +2619,7 @@ Example with no number, category, or additional_info:
                   <div className="flex items-center">
                     <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg mr-3">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.586l6.243-6.243C11.978 9.927 12 9.464 12 9a6 6 0 016-6z" />
                       </svg>
                     </div>
                     <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">CSV Upload Format Guide</h3>
