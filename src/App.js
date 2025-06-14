@@ -625,6 +625,43 @@ function App() {
     }
   }, [db, userId, showCalendarModal, updateCalendarDates, flashcards]);
 
+  // Keyboard shortcuts for navigation
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Only handle keyboard shortcuts when not in input fields or modals
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || 
+          showCreateCardForm || showUploadCsvForm || showSettingsModal || showCalendarModal || showLoginModal) {
+        return;
+      }
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          event.preventDefault();
+          prevCard();
+          break;
+        case 'ArrowRight':
+          event.preventDefault();
+          nextCard();
+          break;
+        case ' ':
+        case 'Spacebar':
+          event.preventDefault();
+          if (filteredFlashcards.length > 0) {
+            setShowAnswer(!showAnswer);
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAnswer, showCreateCardForm, showUploadCsvForm, showSettingsModal, showCalendarModal, showLoginModal, filteredFlashcards.length]);
+
   // Helper function to calculate estimated next review days based on FSRS factors
   const calculateEstimatedReviewDays = (factor, baseInterval = 3) => {
     return Math.round(baseInterval * factor);
@@ -1606,14 +1643,14 @@ Example with no number, category, or additional_info:
     <>
     <div className="min-h-screen flex flex-col items-center justify-center p-6 font-inter bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-gray-900 dark:to-indigo-950 text-slate-800 dark:text-slate-100 transition-all duration-700 ease-out backdrop-blur-sm"
          style={{
-           background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e0e7ff 50%, #f0f9ff 75%, #fafafa 100%)',
+           background: 'linear-gradient(135deg, #ffffff 0%, #fefeff 25%, #fdfdff 50%, #fefffe 75%, #ffffff 100%)',
            backgroundSize: '400% 400%',
            animation: 'gradientShift 15s ease infinite',
-           paddingTop: '120px'
+           paddingTop: '260px'
          }}>
       {/* Combined Header Panel */}
       <div className="fixed top-6 left-6 right-6 z-50" style={{ position: 'fixed', top: '24px', left: '24px', right: '24px', zIndex: 9999 }}>
-        <div className="backdrop-blur-xl bg-gray-100/90 dark:bg-gray-700/90 rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-600/50 p-6 relative">
+        <div className="backdrop-blur-xl rounded-2xl shadow-2xl border border-blue-700/50 dark:border-blue-700/50 p-6 relative" style={{ backgroundColor: 'rgba(147, 197, 253, 0.7)' }}>
           {/* Top Row - Navigation and Logo */}
           <div className="flex items-center justify-between mb-4">
             
@@ -1998,59 +2035,60 @@ Example with no number, category, or additional_info:
           {filteredFlashcards.length > 0 ? (
             <>
               <div className="flex items-center justify-center w-full md:w-3/4 flex-col"> {/* Main card wrapper and AI buttons container */}
-                <div className="flex items-center justify-center w-full"> {/* Card and arrows */}
-                  {/* Left Arrow Button */}
-                  <button
-                    onClick={prevCard}
-                    className="group p-4 mr-6 backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white/90 dark:hover:bg-slate-700/90 rounded-2xl shadow-lg border border-white/20 dark:border-slate-700/50 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    aria-label="Previous card"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
+                <div className="flex items-center justify-center w-full"> {/* Card container */}
+                  {/* Flashcard Panel Container with navigation layout */}
+                  <div className="relative backdrop-blur-xl rounded-3xl shadow-2xl border border-blue-700/50 dark:border-blue-700/50 p-16" style={{ backgroundColor: 'rgba(147, 197, 253, 0.7)', borderRadius: '1.5rem', overflow: 'visible', minHeight: '56rem', minWidth: '80rem' }}>
+                    
+                    {/* Spacer for top */}
+                    <div className="h-8"></div>
+                    
+                    {/* Main content area with arrows positioned in space between card and panel edges */}
+                    <div className="relative flex items-center justify-center">
+                      
+                      {/* Left Arrow Button - Positioned just outside card edge within panel */}
+                      <button
+                        onClick={prevCard}
+                        className="absolute top-1/2 transform -translate-y-1/2 group flex items-center justify-center p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-blue-50/90 dark:hover:bg-blue-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 z-10"
+                        style={{ left: '2rem' }}
+                        aria-label="Previous card (Left Arrow)"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
 
-                  {/* Flashcard (main content area) */}
-                  <div
-                    className="relative w-full max-w-5xl h-[52rem] backdrop-blur-2xl bg-gradient-to-br from-white/90 via-blue-50/80 to-indigo-100/90 dark:from-slate-800/90 dark:via-slate-700/80 dark:to-indigo-900/90 rounded-3xl shadow-2xl border border-white/30 dark:border-slate-600/30 flex flex-col items-center justify-center text-center p-10 cursor-pointer transform transition-all duration-700 ease-out hover:scale-[1.02] hover:shadow-3xl"
-                    onClick={() => setShowAnswer(!showAnswer)}
-                    style={{ 
-                      minHeight: '52rem', 
-                      minWidth: '850px',
-                      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
-                      background: 'linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(240, 249, 255, 0.8) 25%, rgba(224, 231, 255, 0.8) 75%, rgba(255,255,255,0.9) 100%)'
-                    }}
-                  >
+                      {/* Flashcard Container */}
+                      <div className="flex justify-center items-center">
+                    {/* Flashcard (main content area) */}
+                    <div
+                      className="relative w-full max-w-7xl h-[58rem] backdrop-blur-2xl bg-gradient-to-br from-white/90 via-blue-50/80 to-indigo-100/90 dark:from-slate-800/90 dark:via-slate-700/80 dark:to-indigo-900/90 rounded-3xl shadow-2xl border border-white/30 dark:border-slate-600/30 flex flex-col items-center justify-center text-center p-14 cursor-pointer transform transition-all duration-700 ease-out hover:scale-[1.02] hover:shadow-3xl"
+                      onClick={() => setShowAnswer(!showAnswer)}
+                      style={{ 
+                        minHeight: '58rem', 
+                        minWidth: '1050px',
+                        borderRadius: '1.5rem',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                        background: 'linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(240, 249, 255, 0.8) 25%, rgba(224, 231, 255, 0.8) 75%, rgba(255,255,255,0.9) 100%)',
+                        overflow: 'hidden'
+                      }}
+                    >
                     <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-start p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem' }}
                          style={{ transform: showAnswer ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
-                      <div className="text-3xl font-bold mb-8 overflow-auto max-h-full leading-relaxed text-center">
-                        <div className="text-2xl text-blue-600 dark:text-blue-400 mb-4 font-bold">Question</div>
-                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed">
+                      <div className="text-4xl font-bold mb-8 overflow-auto max-h-full leading-relaxed text-center mt-8">
+                        <div className="text-3xl text-blue-600 dark:text-blue-400 mb-4 font-bold">Question</div>
+                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed text-2xl">
                           {currentCard.question}
                         </p>
                       </div>
-                      {/* Edit Card Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent card from flipping
-                          handleEditCard(currentCard);
-                        }}
-                        className="absolute top-6 right-6 p-3 backdrop-blur-sm bg-white/80 dark:bg-slate-700/80 hover:bg-white/90 dark:hover:bg-slate-600/90 rounded-full shadow-lg text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-300 border border-white/50 dark:border-slate-600/50"
-                        aria-label="Edit card"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.38-2.828-2.828z" />
-                        </svg>
-                      </button>
                     </div>
 
                     <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-between p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem' }}
                          style={{ transform: showAnswer ? 'rotateY(0deg)' : 'rotateY(-180deg)', backfaceVisibility: 'hidden' }}>
                       {/* Display answer with improved formatting */}
-                      <div className="mb-6 overflow-y-auto w-full flex-grow" style={{ maxHeight: 'calc(100% - 200px)' }}>
-                        <div className="text-2xl text-emerald-600 dark:text-emerald-400 mb-6 font-bold text-center">Answer</div>
+                      <div className="mb-6 overflow-y-auto w-full flex-grow mt-8" style={{ maxHeight: 'calc(100% - 200px)' }}>
+                        <div className="text-3xl text-emerald-600 dark:text-emerald-400 mb-6 font-bold text-center">Answer</div>
                         <div className="prose prose-lg max-w-none dark:prose-invert">
-                          <div className="text-xl leading-relaxed font-bold text-slate-700 dark:text-slate-200">
+                          <div className="text-2xl leading-relaxed font-bold text-slate-700 dark:text-slate-200">
                             {currentCard.answer.split('\n').map((line, index) => {
                               // Handle code blocks (lines that start with spaces or contain code-like syntax)
                               if (line.trim().startsWith('```') || line.trim().match(/^[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=\(\{]/)) {
@@ -2185,18 +2223,38 @@ Example with no number, category, or additional_info:
                         </button>
                       </div>
                     </div>
-                  </div>
+                    </div>
+                      </div>
 
-                  {/* Right Arrow Button */}
-                  <button
-                    onClick={nextCard}
-                    className="group p-4 ml-6 backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white/90 dark:hover:bg-slate-700/90 rounded-2xl shadow-lg border border-white/20 dark:border-slate-700/50 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                    aria-label="Next card"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
+                      {/* Right Arrow Button - Positioned just outside card edge within panel */}
+                      <button
+                        onClick={nextCard}
+                        className="absolute top-1/2 transform -translate-y-1/2 group flex items-center justify-center p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-blue-50/90 dark:hover:bg-blue-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 z-10"
+                        style={{ right: '2rem' }}
+                        aria-label="Next card (Right Arrow)"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    {/* Spacer for bottom */}
+                    <div className="h-8"></div>
+                    
+                    {/* Edit Card Button - Bottom right of panel */}
+                    <button
+                      onClick={() => handleEditCard(currentCard)}
+                      className="absolute bottom-4 right-4 group flex items-center gap-2 px-4 py-2 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-blue-50/90 dark:hover:bg-blue-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 font-semibold z-10"
+                      aria-label="Edit card"
+                      style={{ position: 'absolute', bottom: '16px', right: '16px' }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 transition-colors duration-300" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.38-2.828-2.828z" />
+                      </svg>
+                      Edit Card
+                    </button>
+                  </div>
                 </div>
 
                 {filteredFlashcards.length > 0 && (
@@ -2205,7 +2263,7 @@ Example with no number, category, or additional_info:
                   </p>
                 )}
 
-                <div className="flex mt-8 space-x-4">
+                <div className="flex mt-4 space-x-4">
                   <button
                     onClick={(e) => {
                       e.preventDefault();
