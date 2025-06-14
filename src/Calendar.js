@@ -5,6 +5,9 @@ const Calendar = ({ calendarDates = [], onClose }) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalData, setModalData] = useState(null);
+  
+  // Debug logging
+  console.log('Calendar component received calendarDates:', calendarDates);
 
   const navigateMonth = (direction) => {
     const newDate = new Date(currentDate);
@@ -58,13 +61,18 @@ const Calendar = ({ calendarDates = [], onClose }) => {
     
     const date = new Date(year, month - 1, day);
     const due = getCardsForDay(day);
+    console.log('Calendar day pressed:', day, 'due cards found:', due);
     if (due) {
-      setModalData({
+      const modalDataToSet = {
         date: date.toLocaleDateString(),
         value: due.cardCount,
         type: 'cards'
-      });
+      };
+      console.log('Setting modal data:', modalDataToSet);
+      setModalData(modalDataToSet);
       setShowModal(true);
+    } else {
+      console.log('No due cards found for day:', day);
     }
   };
 
@@ -75,7 +83,16 @@ const Calendar = ({ calendarDates = [], onClose }) => {
     const month = currentDate.getMonth() + 1;
     const date = new Date(year, month - 1, day);
     
-    return calendarDates.find(d => d.date?.toDateString() === date.toDateString());
+    // More robust date comparison - normalize to same format
+    const targetDateString = date.toDateString();
+    const found = calendarDates.find(d => {
+      if (!d.date) return false;
+      const calendarDateString = d.date.toDateString ? d.date.toDateString() : new Date(d.date).toDateString();
+      return calendarDateString === targetDateString;
+    });
+    
+    console.log('getCardsForDay - day:', day, 'target date:', targetDateString, 'found:', found);
+    return found;
   };
 
   const getValueColorClass = (type) => {
@@ -276,7 +293,7 @@ const Calendar = ({ calendarDates = [], onClose }) => {
                           fontWeight: '500',
                           boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                         }}>
-                          {due.cardCount}
+                          {(() => { console.log('Calendar Badge - Day:', day, 'Due:', due, 'Count:', due.cardCount); return due.cardCount; })()}
                         </div>
                       </div>
                     )}
@@ -388,7 +405,7 @@ const Calendar = ({ calendarDates = [], onClose }) => {
                 color: '#6b7280',
                 margin: 0
               }}>
-                <span style={{ fontWeight: '600' }}>{modalData.value}</span> cards due
+                <span style={{ fontWeight: '600' }}>{(() => { console.log('Calendar Modal - Date:', modalData.date, 'Value:', modalData.value, 'Modal Data:', modalData); return modalData.value; })()}</span> cards due
               </p>
             </div>
             <button

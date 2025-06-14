@@ -557,6 +557,14 @@ function App() {
       const querySnapshot = await getDocs(cardsRef);
       
       // Filter cards due on the specified date
+      // For today: include overdue cards (cards due today or earlier)
+      // For future dates: only include cards due exactly on that date
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const specifiedDate = new Date(date);
+      specifiedDate.setHours(0, 0, 0, 0);
+      const isToday = today.getTime() === specifiedDate.getTime();
+      
       const dueCards = querySnapshot.docs.filter(doc => {
         const card = doc.data();
         if (!card.nextReview) return false;
@@ -565,10 +573,13 @@ function App() {
         const reviewDate = new Date(nextReviewDate);
         reviewDate.setHours(0, 0, 0, 0);
         
-        const compareDate = new Date(date);
-        compareDate.setHours(0, 0, 0, 0);
-        
-        return reviewDate.getTime() === compareDate.getTime();
+        if (isToday) {
+          // For today's date: include all cards due today or earlier (overdue)
+          return reviewDate.getTime() <= specifiedDate.getTime();
+        } else {
+          // For future dates: only include cards due exactly on that date
+          return reviewDate.getTime() === specifiedDate.getTime();
+        }
       });
       
       return dueCards.length;
@@ -1315,6 +1326,22 @@ function App() {
   const reviewedCount = reviewedCards.length;
   const toReviewCount = yetToReviewCards.length;
 
+  // Calculate cards actually due today
+  // If showDueTodayOnly is true, filteredFlashcards already contains only cards due today
+  // If showDueTodayOnly is false, we need to calculate cards due today from all cards
+  const cardsDueToday = showDueTodayOnly ? 
+    totalCardsCount : 
+    flashcards.filter(card => {
+      // Apply category filter first
+      if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+      
+      if (!card.nextReview) return false;
+      const nextReviewDate = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); // End of today to match the filtering logic
+      return nextReviewDate <= today;
+    }).length;
+
 
   // Function to get daily due counts for the next 30 days (for ALL flashcards, not just filtered)
   const getDailyDueCounts = () => {
@@ -1577,15 +1604,6 @@ Example with no number, category, or additional_info:
 
   return (
     <>
-      {/* Top Header with FSRS Flashcards Logo */}
-      <div className="fixed" style={{ top: '80px', left: 'calc(50% + 120px)', zIndex: 10000 }}>
-        <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50 px-12 py-6">
-          <h1 className="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-700 dark:from-blue-400 dark:to-purple-500">
-            FSRS Flashcards
-          </h1>
-        </div>
-      </div>
-    
     <div className="min-h-screen flex flex-col items-center justify-center p-6 font-inter bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-gray-900 dark:to-indigo-950 text-slate-800 dark:text-slate-100 transition-all duration-700 ease-out backdrop-blur-sm"
          style={{
            background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e0e7ff 50%, #f0f9ff 75%, #fafafa 100%)',
@@ -1593,10 +1611,14 @@ Example with no number, category, or additional_info:
            animation: 'gradientShift 15s ease infinite',
            paddingTop: '120px'
          }}>
-      {/* Top-Left Navigation Panel */}
-      <div className="fixed top-6 left-6 z-50" style={{ position: 'fixed', top: '24px', left: '24px', zIndex: 9999 }}>
-        <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50 p-4">
-          <div className="flex flex-wrap gap-3" style={{ zIndex: 9999 }}>
+      {/* Combined Header Panel */}
+      <div className="fixed top-6 left-6 right-6 z-50" style={{ position: 'fixed', top: '24px', left: '24px', right: '24px', zIndex: 9999 }}>
+        <div className="backdrop-blur-xl bg-gray-100/90 dark:bg-gray-700/90 rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-600/50 p-6 relative">
+          {/* Top Row - Navigation and Logo */}
+          <div className="flex items-center justify-between mb-4">
+            
+            {/* Left Section - Navigation Buttons */}
+            <div className="flex flex-wrap gap-3">
           <button
             onClick={() => {
               setShowCreateCardForm(false);
@@ -1678,9 +1700,108 @@ Example with no number, category, or additional_info:
               </span>
             </button>
           )}
-        </div>
-          {flashcards.length > 0 && ( // Only show dropdown if there are cards
-            <div className="mt-3" style={{ zIndex: 9999 }}>
+            </div>
+            
+            {/* Center Section - FSRS Logo */}
+            <div className="flex-1 flex justify-center">
+              <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-700 dark:from-blue-400 dark:to-purple-500">
+                FSRS Flashcards
+              </h1>
+            </div>
+            
+            {/* Right Section - Statistics */}
+            <div className="flex items-center">
+              {/* Statistics */}
+              <div className="flex flex-col space-y-2 text-right">
+                {showDueTodayOnly ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📅</span>
+                      <div>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Due Today</p>
+                        <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsDueToday}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📚</span>
+                      <div>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Total Cards</p>
+                        <p className="text-blue-600 dark:text-blue-400 text-sm font-semibold">{flashcards.length}</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📚</span>
+                      <div>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Total Cards</p>
+                        <p className="text-blue-600 dark:text-blue-400 text-lg font-bold">{totalCardsCount}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">✅</span>
+                      <div>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Reviewed</p>
+                        <p className="text-emerald-600 dark:text-emerald-400 text-sm font-semibold">{reviewedCount}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⏳</span>
+                      <div>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">To Review</p>
+                        <p className="text-orange-600 dark:text-orange-400 text-sm font-semibold">{toReviewCount}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {/* Action Buttons - Bottom Right */}
+          <div className="absolute bottom-6 right-6" style={{ position: 'absolute', bottom: '24px', right: '24px' }}>
+            <div className="flex items-center gap-2">
+              {/* Calendar Button */}
+              <button
+                onClick={() => setShowCalendarModal(true)}
+                className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-blue-50/90 dark:hover:bg-blue-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                aria-label="Show calendar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+              {/* Settings Icon Button */}
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-slate-50/90 dark:hover:bg-slate-700/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                aria-label="Open settings"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.942 3.33.83 2.891 2.673a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.942 1.543-.83 3.33-2.673 2.891a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.942-3.33-.83-2.891-2.673a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.942-1.543.83-3.33 2.673-2.891a1.724 1.724 0 002.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
+              
+              {/* Logout Button - Only show when logged in */}
+              {userId && (
+                <button
+                  onClick={handleLogout}
+                  className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-red-50/90 dark:hover:bg-red-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  aria-label="Logout"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* Category Filter - Full width below */}
+          {flashcards.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-300/50 dark:border-gray-600/50">
               <label htmlFor="category-filter" className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
                 Filter by Category:
               </label>
@@ -1688,115 +1809,20 @@ Example with no number, category, or additional_info:
                 id="category-filter"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="block w-full min-w-[140px] py-3 px-4 border-0 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer text-slate-700 dark:text-slate-200 transition-all duration-300"
-                style={{
-                  maxHeight: '150px',
-                  overflowY: 'auto'
-                }}
+                className="block w-full max-w-xs py-2 px-3 border-0 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer text-slate-700 dark:text-slate-200 transition-all duration-300"
               >
                 {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat} className="py-2">
+                  <option key={cat} value={cat} className="py-1">
                     {cat}
                   </option>
                 ))}
               </select>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Top-Right Statistics Panel */}
-      <div className="fixed top-6 right-6 flex flex-col items-end space-y-4 z-50" style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 9999 }}>
-        {/* Card Statistics - Modern Glass Design */}
-        <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 rounded-2xl p-6 shadow-2xl border border-white/20 dark:border-slate-700/50"
-             style={{ boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-          <div className="flex flex-col space-y-3 text-right">
-            {showDueTodayOnly ? (
-              <>
-                <div className="flex items-center justify-end gap-3">
-                  <span className="text-2xl">📅</span>
-                  <div>
-                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Due Today</p>
-                    <p className="text-amber-600 dark:text-amber-400 text-2xl font-bold">{totalCardsCount}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <span className="text-2xl">📚</span>
-                  <div>
-                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Total Cards</p>
-                    <p className="text-blue-600 dark:text-blue-400 text-xl font-semibold">{flashcards.length}</p>
-                  </div>
-                </div>
-                <p className="text-slate-500 dark:text-slate-400 text-xs italic mt-2">
-                  Showing cards due today
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-end gap-3">
-                  <span className="text-2xl">📚</span>
-                  <div>
-                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Total Cards</p>
-                    <p className="text-blue-600 dark:text-blue-400 text-2xl font-bold">{totalCardsCount}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <span className="text-2xl">✅</span>
-                  <div>
-                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Reviewed</p>
-                    <p className="text-emerald-600 dark:text-emerald-400 text-xl font-semibold">{reviewedCount}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <span className="text-2xl">⏳</span>
-                  <div>
-                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">To Review</p>
-                    <p className="text-orange-600 dark:text-orange-400 text-xl font-semibold">{toReviewCount}</p>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3" style={{ zIndex: 9999 }}>
-          {/* Calendar Button */}
-          <button
-            onClick={() => setShowCalendarModal(true)}
-            className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-blue-50/90 dark:hover:bg-blue-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            aria-label="Show calendar"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
-          {/* Settings Icon Button */}
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-slate-50/90 dark:hover:bg-slate-700/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            aria-label="Open settings"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.942 3.33.83 2.891 2.673a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.942 1.543-.83 3.33-2.673 2.891a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.942-3.33-.83-2.891-2.673a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.942-1.543.83-3.33 2.673-2.891a1.724 1.724 0 002.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
           
-          {/* Logout Button - Only show when logged in */}
-          {userId && (
-            <button
-              onClick={handleLogout}
-              className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-red-50/90 dark:hover:bg-red-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-              aria-label="Logout"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
+
 
       {showCreateCardForm ? (
         // Create New Card Form
