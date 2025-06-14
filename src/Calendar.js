@@ -101,41 +101,96 @@ const Calendar = ({ calendarDates = [], onClose }) => {
   }
 
   return (
-    <div className="w-[400px] bg-white rounded-lg shadow-lg">
+    <div style={{ width: '480px', backgroundColor: '#ffffff', borderRadius: '8px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', border: '1px solid #e5e7eb' }}>
       {/* Header */}
-      <div className="flex justify-between items-center p-4 border-b border-gray-200">
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: '20px', 
+        borderBottom: '1px solid #e5e7eb',
+        background: 'linear-gradient(to right, #eff6ff, #e0e7ff)',
+        borderTopLeftRadius: '8px',
+        borderTopRightRadius: '8px'
+      }}>
         <button 
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          style={{
+            padding: '8px',
+            borderRadius: '50%',
+            border: 'none',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#374151'
+          }}
           onClick={() => navigateMonth(-1)}
+          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.5)'}
+          onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
         >
-          <span className="text-xl font-bold text-gray-700">←</span>
+          ‹
         </button>
         
-        <h1 className="text-xl font-bold text-gray-800">
+        <h1 style={{ 
+          fontSize: '24px', 
+          fontWeight: 'bold', 
+          color: '#1f2937', 
+          margin: 0,
+          letterSpacing: '0.025em'
+        }}>
           {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
         </h1>
         
         <button 
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          style={{
+            padding: '8px',
+            borderRadius: '50%',
+            border: 'none',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#374151'
+          }}
           onClick={() => navigateMonth(1)}
+          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.5)'}
+          onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
         >
-          <span className="text-xl font-bold text-gray-700">→</span>
+          ›
         </button>
       </div>
 
       {/* Calendar Grid */}
-      <div className="p-4">
-        {/* Day names */}
-        <div className="grid grid-cols-7 mb-2">
+      <div style={{ padding: '20px' }}>
+        {/* Day names header */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(7, 1fr)', 
+          marginBottom: '12px',
+          borderBottom: '1px solid #e5e7eb',
+          paddingBottom: '8px'
+        }}>
           {dayNames.map((dayName, index) => (
-            <div key={index} className="text-center text-sm font-medium text-gray-600">
+            <div key={index} style={{ 
+              textAlign: 'center', 
+              fontSize: '14px', 
+              fontWeight: '600', 
+              color: '#6b7280',
+              padding: '4px 0'
+            }}>
               {dayName}
             </div>
           ))}
         </div>
 
-        {/* Calendar dates */}
-        <div className="grid grid-cols-7 gap-1">
+        {/* Calendar dates grid */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(7, 1fr)', 
+          gap: '4px'
+        }}>
           {days.map((day, index) => {
             const date = day ? new Date(currentDate.getFullYear(), currentDate.getMonth(), day) : null;
             const isToday = date && date.toDateString() === today.toDateString();
@@ -145,30 +200,84 @@ const Calendar = ({ calendarDates = [], onClose }) => {
             const dateKey = day ? formatDateKey(year, month, day) : null;
             const isSelected = selectedDate === dateKey;
 
+            let backgroundColor = '#ffffff';
+            let borderColor = '#f3f4f6';
+            let textColor = '#374151';
+            let fontWeight = '500';
+
+            if (!day) {
+              backgroundColor = '#f9fafb';
+            } else if (isToday) {
+              backgroundColor = '#dbeafe';
+              borderColor = '#93c5fd';
+              textColor = '#1d4ed8';
+              fontWeight = '700';
+            } else if (isSelected) {
+              backgroundColor = '#eff6ff';
+              borderColor = '#bfdbfe';
+              textColor = '#2563eb';
+              fontWeight = '600';
+            }
+
             return (
               <div
                 key={index}
-                className={`
-                  aspect-square p-1 flex flex-col items-center justify-center
-                  ${!day ? 'bg-gray-50' : 'hover:bg-gray-50 cursor-pointer'}
-                  ${isToday ? 'bg-blue-50' : ''}
-                  ${isSelected ? 'bg-blue-100' : ''}
-                  rounded-lg transition-colors
-                `}
+                style={{
+                  height: '64px',
+                  padding: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  border: `1px solid ${borderColor}`,
+                  backgroundColor: backgroundColor,
+                  cursor: day ? 'pointer' : 'default',
+                  transition: 'all 0.2s',
+                  borderRadius: '4px'
+                }}
                 onClick={() => handleDayPress(day)}
+                onMouseOver={(e) => {
+                  if (day && !isToday && !isSelected) {
+                    e.target.style.backgroundColor = '#f9fafb';
+                    e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (day && !isToday && !isSelected) {
+                    e.target.style.backgroundColor = '#ffffff';
+                    e.target.style.boxShadow = 'none';
+                  }
+                }}
               >
                 {day && (
                   <>
-                    <span className={`
-                      text-sm font-medium
-                      ${isToday ? 'text-blue-600 font-bold' : 'text-gray-700'}
-                      ${isSelected && !isToday ? 'text-blue-600 font-bold' : ''}
-                    `}>
+                    <span style={{
+                      fontSize: '14px',
+                      fontWeight: fontWeight,
+                      color: textColor,
+                      lineHeight: 1
+                    }}>
                       {day}
                     </span>
                     {due && (
-                      <div className={`mt-1 px-2 py-0.5 rounded-full text-white text-xs font-medium ${getValueColorClass('cards')}`}>
-                        {due.cardCount}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '4px',
+                        left: '50%',
+                        transform: 'translateX(-50%)'
+                      }}>
+                        <div style={{
+                          padding: '2px 6px',
+                          borderRadius: '9999px',
+                          backgroundColor: '#3b82f6',
+                          color: '#ffffff',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                        }}>
+                          {due.cardCount}
+                        </div>
                       </div>
                     )}
                   </>
@@ -180,32 +289,124 @@ const Calendar = ({ calendarDates = [], onClose }) => {
       </div>
 
       {/* Legend */}
-      <div className="p-4 border-t border-gray-200">
-        <div className="flex justify-center space-x-6">
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-blue-50 rounded-full mr-2"></div>
-            <span className="text-sm text-gray-600">Today</span>
+      <div style={{
+        padding: '16px',
+        borderTop: '1px solid #e5e7eb',
+        backgroundColor: '#f9fafb',
+        borderBottomLeftRadius: '8px',
+        borderBottomRightRadius: '8px'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: '32px'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <div style={{
+              width: '16px',
+              height: '16px',
+              backgroundColor: '#dbeafe',
+              border: '2px solid #93c5fd',
+              borderRadius: '2px',
+              marginRight: '8px'
+            }}></div>
+            <span style={{
+              fontSize: '14px',
+              color: '#6b7280',
+              fontWeight: '500'
+            }}>Today</span>
           </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-            <span className="text-sm text-gray-600">Due Cards</span>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <div style={{
+              width: '16px',
+              height: '16px',
+              backgroundColor: '#3b82f6',
+              borderRadius: '2px',
+              marginRight: '8px'
+            }}></div>
+            <span style={{
+              fontSize: '14px',
+              color: '#6b7280',
+              fontWeight: '500'
+            }}>Cards Due</span>
           </div>
         </div>
       </div>
 
       {/* Modal */}
       {showModal && modalData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">{modalData.date}</h2>
-            <div className="space-y-2">
-              <p className="text-gray-600">
-                <span className="font-semibold">Cards Due:</span> {modalData.value}
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            padding: '24px',
+            borderRadius: '8px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            maxWidth: '384px',
+            width: '100%',
+            margin: '0 16px',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h2 style={{
+              fontSize: '20px',
+              fontWeight: 'bold',
+              color: '#1f2937',
+              marginBottom: '16px',
+              textAlign: 'center',
+              margin: '0 0 16px 0'
+            }}>{modalData.date}</h2>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              marginBottom: '16px'
+            }}>
+              <div style={{
+                width: '16px',
+                height: '16px',
+                backgroundColor: '#3b82f6',
+                borderRadius: '50%'
+              }}></div>
+              <p style={{
+                color: '#6b7280',
+                margin: 0
+              }}>
+                <span style={{ fontWeight: '600' }}>{modalData.value}</span> cards due
               </p>
             </div>
             <button
-              className="mt-6 w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded transition-colors"
+              style={{
+                width: '100%',
+                backgroundColor: '#3b82f6',
+                color: '#ffffff',
+                fontWeight: '500',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'background-color 0.2s',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+              }}
               onClick={() => setShowModal(false)}
+              onMouseOver={(e) => e.target.style.backgroundColor = '#2563eb'}
+              onMouseOut={(e) => e.target.style.backgroundColor = '#3b82f6'}
             >
               Close
             </button>
@@ -219,13 +420,14 @@ const Calendar = ({ calendarDates = [], onClose }) => {
 // Demo component with sample data
 const CalendarDemo = () => {
   // Sample calendar dates for demonstration
+  const today = new Date();
   const sampleCalendarDates = [
-    { date: new Date(2025, 5, 12), cardCount: 5 }, // June 12, 2025 (today)
-    { date: new Date(2025, 5, 15), cardCount: 3 },
-    { date: new Date(2025, 5, 18), cardCount: 8 },
-    { date: new Date(2025, 5, 22), cardCount: 2 },
-    { date: new Date(2025, 5, 25), cardCount: 6 },
-    { date: new Date(2025, 5, 28), cardCount: 4 },
+    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate()), cardCount: 5 }, // Today
+    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3), cardCount: 3 },
+    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 6), cardCount: 8 },
+    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 10), cardCount: 2 },
+    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 13), cardCount: 6 },
+    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 16), cardCount: 4 },
   ];
 
   return (
@@ -238,4 +440,4 @@ const CalendarDemo = () => {
   );
 };
 
-export default CalendarDemo;
+export default Calendar;

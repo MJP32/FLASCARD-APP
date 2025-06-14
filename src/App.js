@@ -371,6 +371,9 @@ function App() {
     setFilteredFlashcards(filtered);
     setCurrentCardIndex(0);
     setShowAnswer(false);
+    setGeneratedExample(''); // Clear generated example when filtering cards
+    setGeminiExplanation(''); // Clear generated explanation when filtering cards
+    setGeneratedQuestions([]); // Clear generated questions when filtering cards
   }, [flashcards, selectedCategory, userId, showDueTodayOnly]);
 
   const nextCard = React.useCallback(() => {
@@ -472,22 +475,25 @@ function App() {
       const cardData = cardDoc.data();
       console.log("Retrieved card data:", cardData);
       
-      // Calculate next review date based on quality rating
+      // Calculate next review date based on quality rating using FSRS factors
       const nextReview = new Date(now);
       let daysToAdd = 0;
       
+      // Get the current interval from card data, or use default if first review
+      const currentInterval = cardData.interval || 1;
+      
       switch (quality) {
         case 1: // Again
-          daysToAdd = 0; // Review again today
+          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.againFactor));
           break;
         case 2: // Hard
-          daysToAdd = 1;
+          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.hardFactor));
           break;
         case 3: // Good
-          daysToAdd = 3;
+          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.goodFactor));
           break;
         case 4: // Easy
-          daysToAdd = 10;
+          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.easyFactor));
           break;
         default:
           console.warn("Invalid quality rating:", quality);
@@ -502,13 +508,21 @@ function App() {
         nextReview: nextReview
       });
 
-      // Update card in database
+      // Update card in database with new interval and review data
       await updateDoc(cardRef, {
         lastReview: serverTimestamp(),
-        nextReview: nextReview
+        nextReview: nextReview,
+        interval: daysToAdd,
+        lastQuality: quality,
+        reviewCount: (cardData.reviewCount || 0) + 1
       });
 
       console.log(`Card ${card.id} reviewed with quality ${quality}. Next review in ${daysToAdd} days.`);
+      
+      // Update calendar dates to reflect the new review schedule
+      if (showCalendarModal) {
+        updateCalendarDates();
+      }
       
       // Always move to next card after updating
       nextCard();
@@ -599,6 +613,11 @@ function App() {
       updateCalendarDates();
     }
   }, [db, userId, showCalendarModal, updateCalendarDates, flashcards]);
+
+  // Helper function to calculate estimated next review days based on FSRS factors
+  const calculateEstimatedReviewDays = (factor, baseInterval = 3) => {
+    return Math.round(baseInterval * factor);
+  };
 
   /**
    * Parses a CSV string into an array of flashcard objects.
@@ -1557,165 +1576,184 @@ Example with no number, category, or additional_info:
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 font-inter bg-gradient-to-br from-blue-100 to-blue-200 dark:from-gray-800 dark:to-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-500">
-      {/* Top-Left Buttons and Category Dropdown */}
-      <div className="fixed top-4 left-4 flex flex-col space-y-3 z-50" style={{ position: 'fixed', top: '16px', left: '16px', zIndex: 9999 }}>
-        <div className="flex flex-wrap gap-2" style={{ zIndex: 9999 }}> {/* Navigation buttons container */}
+    <>
+      {/* Top Header with FSRS Flashcards Logo */}
+      <div className="fixed" style={{ top: '80px', left: 'calc(50% + 120px)', zIndex: 10000 }}>
+        <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50 px-12 py-6">
+          <h1 className="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-700 dark:from-blue-400 dark:to-purple-500">
+            FSRS Flashcards
+          </h1>
+        </div>
+      </div>
+    
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 font-inter bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-gray-900 dark:to-indigo-950 text-slate-800 dark:text-slate-100 transition-all duration-700 ease-out backdrop-blur-sm"
+         style={{
+           background: 'linear-gradient(135deg, #f8fafc 0%, #e0f2fe 25%, #e0e7ff 50%, #f0f9ff 75%, #fafafa 100%)',
+           backgroundSize: '400% 400%',
+           animation: 'gradientShift 15s ease infinite',
+           paddingTop: '120px'
+         }}>
+      {/* Top-Left Navigation Panel */}
+      <div className="fixed top-6 left-6 z-50" style={{ position: 'fixed', top: '24px', left: '24px', zIndex: 9999 }}>
+        <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 rounded-2xl shadow-2xl border border-white/20 dark:border-slate-700/50 p-4">
+          <div className="flex flex-wrap gap-3" style={{ zIndex: 9999 }}>
           <button
             onClick={() => {
               setShowCreateCardForm(false);
               setShowUploadCsvForm(false);
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-blue-300
-              ${
-                !showCreateCardForm && !showUploadCsvForm
-                  ? 'bg-blue-600 text-white scale-105'
-                  : 'bg-blue-200 text-blue-700 hover:bg-blue-300 dark:bg-blue-800 dark:text-white dark:hover:bg-blue-700'
-              }`}
-            style={{
-              boxShadow: !showCreateCardForm && !showUploadCsvForm
-                ? '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-                : '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-            }}
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
           >
-            Study Cards
+            <span className="relative z-10 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+              Study Cards
+            </span>
           </button>
           <button
             onClick={() => {
               setShowCreateCardForm(true);
               setShowUploadCsvForm(false);
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-green-300
-              ${
-                showCreateCardForm
-                  ? 'bg-green-600 text-white scale-105'
-                  : 'bg-green-200 text-green-700 hover:bg-green-300 dark:bg-green-800 dark:text-white dark:hover:bg-green-700'
-              }`}
-            style={{
-              boxShadow: showCreateCardForm
-                ? '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-                : '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-            }}
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
           >
-            Create New Card
+            <span className="relative z-10 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create Card
+            </span>
           </button>
           <button
             onClick={() => {
               setShowUploadCsvForm(true);
               setShowCreateCardForm(false);
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-indigo-300
-              ${
-                showUploadCsvForm
-                  ? 'bg-indigo-600 text-white scale-105'
-                  : 'bg-indigo-200 text-indigo-700 hover:bg-indigo-300 dark:bg-indigo-800 dark:text-white dark:hover:bg-indigo-700'
-              }`}
-            style={{
-              boxShadow: showUploadCsvForm
-                ? '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-                : '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-            }}
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
           >
-            Upload Cards (CSV)
+            <span className="relative z-10 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload CSV
+            </span>
           </button>
           <button
             onClick={handleExportCards}
-            className="px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-purple-300 bg-purple-200 text-purple-700 hover:bg-purple-300 dark:bg-purple-800 dark:text-white dark:hover:bg-purple-700"
-            style={{
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-            }}
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
           >
-            Export Cards (CSV)
+            <span className="relative z-10 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export CSV
+            </span>
           </button>
 
-          {/* Login/Logout Button */}
-          <button
-            onClick={userId ? handleLogout : () => setShowLoginModal(true)}
-            className={`px-5 py-2.5 rounded-lg text-base font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 ${
-              userId
-                ? 'focus:ring-red-300 bg-red-200 text-red-700 hover:bg-red-300 dark:bg-red-800 dark:text-white dark:hover:bg-red-700'
-                : 'focus:ring-emerald-300 bg-emerald-200 text-emerald-700 hover:bg-emerald-300 dark:bg-emerald-800 dark:text-white dark:hover:bg-emerald-700'
-            }`}
-            style={{
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-            }}
-          >
-            {userId ? 'Logout' : 'Login'}
-          </button>
+          {/* Login Button - Only show when not logged in */}
+          {!userId && (
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-emerald-100 to-green-100 dark:from-emerald-800 dark:to-green-800 text-emerald-700 dark:text-emerald-200 hover:from-emerald-200 hover:to-green-200 dark:hover:from-emerald-700 dark:hover:to-green-700 focus:ring-emerald-400 shadow-md hover:shadow-lg"
+            >
+              <span className="relative z-10 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                </svg>
+                Login
+              </span>
+            </button>
+          )}
 
           {/* Due Today Toggle Button - Only show when logged in */}
           {userId && (
             <button
               onClick={() => setShowDueTodayOnly(!showDueTodayOnly)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-lg hover:shadow-xl active:shadow-inner focus:outline-none focus:ring-4 focus:ring-offset-2 ${
-                showDueTodayOnly
-                  ? 'focus:ring-orange-300 bg-orange-200 text-orange-700 hover:bg-orange-300 dark:bg-orange-800 dark:text-white dark:hover:bg-orange-700'
-                  : 'focus:ring-gray-300 bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700'
-              }`}
-              style={{
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-              }}
+              className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
             >
-              {showDueTodayOnly ? '📅 Due Today' : '📚 All Cards'}
+              <span className="relative z-10 flex items-center gap-2">
+                {showDueTodayOnly ? '📅' : '📚'}
+                {showDueTodayOnly ? 'Due Today' : 'All Cards'}
+              </span>
             </button>
           )}
         </div>
-        {flashcards.length > 0 && ( // Only show dropdown if there are cards
-            <div className="self-start mt-3" style={{ zIndex: 9999 }}>
-              <label htmlFor="category-filter" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+          {flashcards.length > 0 && ( // Only show dropdown if there are cards
+            <div className="mt-3" style={{ zIndex: 9999 }}>
+              <label htmlFor="category-filter" className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
                 Filter by Category:
               </label>
               <select
                 id="category-filter"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="block w-full max-w-[15vw] min-w-[180px] py-2.5 px-4 border-2 border-blue-300 bg-white rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base font-semibold cursor-pointer
-                            dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:focus:ring-blue-400 dark:focus:border-blue-400"
+                className="block w-full min-w-[140px] py-3 px-4 border-0 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-xl shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer text-slate-700 dark:text-slate-200 transition-all duration-300"
                 style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                  maxHeight: '200px',
+                  maxHeight: '150px',
                   overflowY: 'auto'
                 }}
               >
                 {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat}>
+                  <option key={cat} value={cat} className="py-2">
                     {cat}
                   </option>
                 ))}
               </select>
             </div>
           )}
+        </div>
       </div>
 
-      {/* Top-Right Card Counts/Calendar/Settings */}
-      <div className="fixed top-4 right-4 flex flex-col items-end space-y-3 z-50" style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 9999 }}>
-        {/* Card Statistics - Compact Vertical Layout */}
-        <div className="bg-white bg-opacity-95 rounded-xl p-4 shadow-2xl border-2 border-blue-300 dark:bg-gray-700 dark:bg-opacity-95 dark:border-gray-600" style={{ backgroundColor: 'rgba(255, 255, 255, 0.98)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-          <div className="flex flex-col space-y-2 text-right">
+      {/* Top-Right Statistics Panel */}
+      <div className="fixed top-6 right-6 flex flex-col items-end space-y-4 z-50" style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 9999 }}>
+        {/* Card Statistics - Modern Glass Design */}
+        <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 rounded-2xl p-6 shadow-2xl border border-white/20 dark:border-slate-700/50"
+             style={{ boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+          <div className="flex flex-col space-y-3 text-right">
             {showDueTodayOnly ? (
               <>
-                <p className="text-gray-700 font-semibold text-lg dark:text-gray-100">
-                  <span className="text-orange-600 dark:text-orange-400">📅 Due Today:</span> {totalCardsCount}
-                </p>
-                <p className="text-gray-700 font-semibold text-lg dark:text-gray-100">
-                  <span className="text-blue-600 dark:text-blue-400">📚 Total Cards:</span> {flashcards.length}
-                </p>
-                <p className="text-gray-700 font-semibold text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex items-center justify-end gap-3">
+                  <span className="text-2xl">📅</span>
+                  <div>
+                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Due Today</p>
+                    <p className="text-amber-600 dark:text-amber-400 text-2xl font-bold">{totalCardsCount}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <span className="text-2xl">📚</span>
+                  <div>
+                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Total Cards</p>
+                    <p className="text-blue-600 dark:text-blue-400 text-xl font-semibold">{flashcards.length}</p>
+                  </div>
+                </div>
+                <p className="text-slate-500 dark:text-slate-400 text-xs italic mt-2">
                   Showing cards due today
                 </p>
               </>
             ) : (
               <>
-                <p className="text-gray-700 font-semibold text-lg dark:text-gray-100">
-                  <span className="text-blue-600 dark:text-blue-400">Total Cards:</span> {totalCardsCount}
-                </p>
-                <p className="text-gray-700 font-semibold text-lg dark:text-gray-100">
-                  <span className="text-green-600 dark:text-green-400">Reviewed:</span> {reviewedCount}
-                </p>
-                <p className="text-gray-700 font-semibold text-lg dark:text-gray-100">
-                  <span className="text-orange-600 dark:text-orange-400">To Review:</span> {toReviewCount}
-                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <span className="text-2xl">📚</span>
+                  <div>
+                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Total Cards</p>
+                    <p className="text-blue-600 dark:text-blue-400 text-2xl font-bold">{totalCardsCount}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <span className="text-2xl">✅</span>
+                  <div>
+                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">Reviewed</p>
+                    <p className="text-emerald-600 dark:text-emerald-400 text-xl font-semibold">{reviewedCount}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-3">
+                  <span className="text-2xl">⏳</span>
+                  <div>
+                    <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">To Review</p>
+                    <p className="text-orange-600 dark:text-orange-400 text-xl font-semibold">{toReviewCount}</p>
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -1726,30 +1764,39 @@ Example with no number, category, or additional_info:
           {/* Calendar Button */}
           <button
             onClick={() => setShowCalendarModal(true)}
-            className="p-3 bg-gray-200 hover:bg-gray-300 rounded-full shadow-md transition-all duration-200 transform hover:scale-110 active:scale-90 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+            className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-blue-50/90 dark:hover:bg-blue-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             aria-label="Show calendar"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700 dark:text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </button>
           {/* Settings Icon Button */}
           <button
             onClick={() => setShowSettingsModal(true)}
-            className="p-3 bg-gray-200 hover:bg-gray-300 rounded-full shadow-md transition-all duration-200 transform hover:scale-110 active:scale-90 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600"
+            className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-slate-50/90 dark:hover:bg-slate-700/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             aria-label="Open settings"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-700 dark:text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.942 3.33.83 2.891 2.673a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.942 1.543-.83 3.33-2.673 2.891a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.942-3.33-.83-2.891-2.673a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.942-1.543.83-3.33 2.673-2.891a1.724 1.724 0 002.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </button>
+          
+          {/* Logout Button - Only show when logged in */}
+          {userId && (
+            <button
+              onClick={handleLogout}
+              className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-red-50/90 dark:hover:bg-red-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              aria-label="Logout"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
-
-      <h1 className="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-700 shadow-xl p-6 rounded-lg bg-white dark:bg-gray-700 dark:from-blue-400 dark:to-purple-500 mt-12">
-        FSRS Flashcards
-      </h1>
 
       {showCreateCardForm ? (
         // Create New Card Form
@@ -1786,7 +1833,7 @@ Example with no number, category, or additional_info:
                 disabled={isGeneratingAnswer}
                 className={`w-full mt-3 py-2 px-4 rounded-lg font-semibold transition-all duration-300 transform shadow-md
                            ${isGeneratingAnswer ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}
-                           text-white focus:outline-none focus:ring-4 focus:ring-purple-300 dark:bg-purple-800 dark:hover:bg-purple-700`}
+                           text-black focus:outline-none focus:ring-4 focus:ring-purple-300 dark:bg-purple-800 dark:hover:bg-purple-700`}
               >
                 {isGeneratingAnswer ? 'Suggesting...' : 'Suggest Answer ✨'}
               </button>
@@ -1818,7 +1865,7 @@ Example with no number, category, or additional_info:
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-black font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
             >
               Add Card
             </button>
@@ -1865,16 +1912,16 @@ Example with no number, category, or additional_info:
               disabled={selectedUploadFiles.length === 0 || uploadMessage.startsWith('Processing')}
               className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 transform shadow-md hover:shadow-lg active:shadow-inner
                          ${selectedUploadFiles.length === 0 || uploadMessage.startsWith('Processing') ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}
-                         text-white focus:outline-none focus:ring-4 focus:ring-blue-300 active:scale-95`}
+                         text-black focus:outline-none focus:ring-4 focus:ring-blue-300 active:scale-95`}
             >
               {uploadMessage.startsWith('Processing') ? 'Uploading...' : `Upload Selected CSV${selectedUploadFiles.length > 1 ? 's' : ''}`}
             </button>
 
             {uploadMessage && !uploadMessage.startsWith('Processing') && (
-              <p className="text-green-600 text-center font-medium">{uploadMessage}</p>
+              <p className="text-green-600 text-center font-bold">{uploadMessage}</p>
             )}
             {uploadError && (
-              <p className="text-red-600 text-center font-medium">{uploadError}</p>
+              <p className="text-red-600 text-center font-bold">{uploadError}</p>
             )}
 
             {/* Prompt for Generating Flashcards - Now a collapsible dropdown */}
@@ -1929,32 +1976,40 @@ Example with no number, category, or additional_info:
                   {/* Left Arrow Button */}
                   <button
                     onClick={prevCard}
-                    className="p-3 mr-4 bg-gray-300 hover:bg-gray-400 rounded-full shadow-md transition-transform duration-200 transform hover:scale-110 active:scale-90 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-100"
+                    className="group p-4 mr-6 backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white/90 dark:hover:bg-slate-700/90 rounded-2xl shadow-lg border border-white/20 dark:border-slate-700/50 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     aria-label="Previous card"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-800 dark:text-gray-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                     </svg>
                   </button>
 
                   {/* Flashcard (main content area) */}
                   <div
-                    className="relative w-full max-w-4xl h-[50rem] bg-gradient-to-br from-blue-400 to-purple-500 rounded-2xl shadow-2xl flex flex-col items-center justify-center text-center p-8 cursor-pointer transform transition-all duration-500 ease-in-out hover:scale-105 dark:from-blue-700 dark:to-purple-800"
+                    className="relative w-full max-w-5xl h-[52rem] backdrop-blur-2xl bg-gradient-to-br from-white/90 via-blue-50/80 to-indigo-100/90 dark:from-slate-800/90 dark:via-slate-700/80 dark:to-indigo-900/90 rounded-3xl shadow-2xl border border-white/30 dark:border-slate-600/30 flex flex-col items-center justify-center text-center p-10 cursor-pointer transform transition-all duration-700 ease-out hover:scale-[1.02] hover:shadow-3xl"
                     onClick={() => setShowAnswer(!showAnswer)}
-                    style={{ minHeight: '50rem', minWidth: '800px' }}
+                    style={{ 
+                      minHeight: '52rem', 
+                      minWidth: '850px',
+                      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(240, 249, 255, 0.8) 25%, rgba(224, 231, 255, 0.8) 75%, rgba(255,255,255,0.9) 100%)'
+                    }}
                   >
-                    <div className="absolute inset-0 bg-white rounded-2xl flex flex-col justify-start p-8 text-gray-800 transition-all duration-500 ease-in-out backface-hidden dark:bg-gray-700 dark:text-gray-100"
+                    <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-start p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem' }}
                          style={{ transform: showAnswer ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
-                      <p className="text-2xl font-semibold mb-6 overflow-auto max-h-full leading-relaxed">
-                        {currentCard.question}
-                      </p>
+                      <div className="text-3xl font-bold mb-8 overflow-auto max-h-full leading-relaxed text-center">
+                        <div className="text-2xl text-blue-600 dark:text-blue-400 mb-4 font-bold">Question</div>
+                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed">
+                          {currentCard.question}
+                        </p>
+                      </div>
                       {/* Edit Card Button */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation(); // Prevent card from flipping
                           handleEditCard(currentCard);
                         }}
-                        className="absolute top-3 right-3 p-2 bg-gray-200 hover:bg-gray-300 rounded-full shadow-md text-gray-700 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-100"
+                        className="absolute top-6 right-6 p-3 backdrop-blur-sm bg-white/80 dark:bg-slate-700/80 hover:bg-white/90 dark:hover:bg-slate-600/90 rounded-full shadow-lg text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-300 border border-white/50 dark:border-slate-600/50"
                         aria-label="Edit card"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -1963,13 +2018,89 @@ Example with no number, category, or additional_info:
                       </button>
                     </div>
 
-                    <div className="absolute inset-0 bg-white rounded-2xl flex flex-col justify-between p-8 text-gray-800 transition-all duration-500 ease-in-out backface-hidden dark:bg-gray-700 dark:text-gray-100"
+                    <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-between p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem' }}
                          style={{ transform: showAnswer ? 'rotateY(0deg)' : 'rotateY(-180deg)', backfaceVisibility: 'hidden' }}>
-                      {/* Display answer as plain text */}
-                      <div className="text-2xl font-semibold mb-6 overflow-y-auto w-full leading-relaxed flex-grow" style={{ maxHeight: 'calc(100% - 200px)' }}>
-                        <pre className="whitespace-pre-wrap font-sans text-2xl">
-                          {currentCard.answer}
-                        </pre>
+                      {/* Display answer with improved formatting */}
+                      <div className="mb-6 overflow-y-auto w-full flex-grow" style={{ maxHeight: 'calc(100% - 200px)' }}>
+                        <div className="text-2xl text-emerald-600 dark:text-emerald-400 mb-6 font-bold text-center">Answer</div>
+                        <div className="prose prose-lg max-w-none dark:prose-invert">
+                          <div className="text-xl leading-relaxed font-bold text-slate-700 dark:text-slate-200">
+                            {currentCard.answer.split('\n').map((line, index) => {
+                              // Handle code blocks (lines that start with spaces or contain code-like syntax)
+                              if (line.trim().startsWith('```') || line.trim().match(/^[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=\(\{]/)) {
+                                return (
+                                  <div key={index} className="my-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border-l-4 border-blue-500">
+                                    <code className="text-sm font-mono text-blue-700 dark:text-blue-300 whitespace-pre-wrap">
+                                      {line}
+                                    </code>
+                                  </div>
+                                );
+                              }
+                              // Handle headers (lines that start with #)
+                              else if (line.trim().startsWith('#')) {
+                                const headerLevel = line.match(/^#+/)?.[0].length || 1;
+                                const headerText = line.replace(/^#+\s*/, '');
+                                const headerClass = headerLevel === 1 ? 'text-2xl font-bold mt-4 mb-2' : 
+                                                  headerLevel === 2 ? 'text-xl font-semibold mt-3 mb-2' : 
+                                                  'text-lg font-bold mt-2 mb-1';
+                                return (
+                                  <h3 key={index} className={`${headerClass} text-blue-700 dark:text-blue-300`}>
+                                    {headerText}
+                                  </h3>
+                                );
+                              }
+                              // Handle bullet points
+                              else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+                                return (
+                                  <div key={index} className="flex items-start my-1">
+                                    <span className="text-blue-500 font-bold mr-2 mt-1">•</span>
+                                    <span className="flex-1">{line.replace(/^[-*]\s*/, '')}</span>
+                                  </div>
+                                );
+                              }
+                              // Handle numbered lists
+                              else if (line.trim().match(/^\d+\.\s/)) {
+                                const number = line.match(/^(\d+)\./)?.[1];
+                                const text = line.replace(/^\d+\.\s*/, '');
+                                return (
+                                  <div key={index} className="flex items-start my-1">
+                                    <span className="text-blue-500 font-semibold mr-2 min-w-[1.5rem]">{number}.</span>
+                                    <span className="flex-1">{text}</span>
+                                  </div>
+                                );
+                              }
+                              // Handle inline code (text within backticks)
+                              else if (line.includes('`')) {
+                                const parts = line.split(/(`[^`]+`)/);
+                                return (
+                                  <p key={index} className="my-2 leading-relaxed">
+                                    {parts.map((part, partIndex) => 
+                                      part.startsWith('`') && part.endsWith('`') ? (
+                                        <code key={partIndex} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
+                                          {part.slice(1, -1)}
+                                        </code>
+                                      ) : (
+                                        <span key={partIndex}>{part}</span>
+                                      )
+                                    )}
+                                  </p>
+                                );
+                              }
+                              // Handle empty lines
+                              else if (line.trim() === '') {
+                                return <div key={index} className="h-3"></div>;
+                              }
+                              // Regular text paragraphs
+                              else {
+                                return (
+                                  <p key={index} className="my-2 leading-relaxed">
+                                    {line}
+                                  </p>
+                                );
+                              }
+                            })}
+                          </div>
+                        </div>
                       </div>
                       {/* Additional Info / Generated Content within the card */}
                       {currentCard.additional_info && (
@@ -2002,7 +2133,7 @@ Example with no number, category, or additional_info:
                           disabled={isGeneratingExample}
                           className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-md
                                      ${isGeneratingExample ? 'bg-gray-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'}
-                                     text-white focus:outline-none focus:ring-4 focus:ring-teal-300 active:scale-95`}
+                                     text-black focus:outline-none focus:ring-4 focus:ring-teal-300 active:scale-95`}
                         >
                           {isGeneratingExample ? 'Generating...' : 'Example ✨'}
                         </button>
@@ -2012,7 +2143,7 @@ Example with no number, category, or additional_info:
                           disabled={isGeneratingQuestions}
                           className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-md
                                      ${isGeneratingQuestions ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-600 hover:bg-orange-700'}
-                                     text-white focus:outline-none focus:ring-4 focus:ring-orange-300 active:scale-95`}
+                                     text-black focus:outline-none focus:ring-4 focus:ring-orange-300 active:scale-95`}
                         >
                           {isGeneratingQuestions ? 'Generating...' : 'Related Questions ✨'}
                         </button>
@@ -2022,7 +2153,7 @@ Example with no number, category, or additional_info:
                           disabled={isExplainingConcept}
                           className={`flex-1 py-2 px-3 rounded-lg text-sm font-semibold transition-all duration-300 transform shadow-md
                                      ${isExplainingConcept ? 'bg-gray-400 cursor-not-allowed' : 'bg-pink-600 hover:bg-pink-700'}
-                                     text-white focus:outline-none focus:ring-4 focus:ring-pink-300 active:scale-95`}
+                                     text-black focus:outline-none focus:ring-4 focus:ring-pink-300 active:scale-95`}
                         >
                           {isExplainingConcept ? 'Explaining...' : 'Explain ✨'}
                         </button>
@@ -2033,11 +2164,11 @@ Example with no number, category, or additional_info:
                   {/* Right Arrow Button */}
                   <button
                     onClick={nextCard}
-                    className="p-3 ml-4 bg-gray-300 hover:bg-gray-400 rounded-full shadow-md transition-transform duration-200 transform hover:scale-110 active:scale-90 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-100"
+                    className="group p-4 ml-6 backdrop-blur-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white/90 dark:hover:bg-slate-700/90 rounded-2xl shadow-lg border border-white/20 dark:border-slate-700/50 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     aria-label="Next card"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-800 dark:text-gray-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
                   </button>
                 </div>
@@ -2057,7 +2188,7 @@ Example with no number, category, or additional_info:
                         reviewCard(1, currentCard);
                       }
                     }}
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700"
+                    className="bg-red-600 hover:bg-red-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700"
                   >
                     Again (1)
                   </button>
@@ -2069,7 +2200,7 @@ Example with no number, category, or additional_info:
                         reviewCard(2, currentCard);
                       }
                     }}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:bg-yellow-800 dark:hover:bg-yellow-700"
+                    className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:bg-yellow-800 dark:hover:bg-yellow-700"
                   >
                     Hard (2)
                   </button>
@@ -2081,7 +2212,7 @@ Example with no number, category, or additional_info:
                         reviewCard(3, currentCard);
                       }
                     }}
-                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700"
+                    className="bg-green-600 hover:bg-green-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700"
                   >
                     Good (3)
                   </button>
@@ -2093,7 +2224,7 @@ Example with no number, category, or additional_info:
                         reviewCard(4, currentCard);
                       }
                     }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
+                    className="bg-blue-600 hover:bg-blue-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
                   >
                     Easy (4)
                   </button>
@@ -2183,7 +2314,7 @@ Example with no number, category, or additional_info:
               <div className="flex justify-between space-x-4 mt-6">
                 <button
                   onClick={handleSaveCardChanges}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-black font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
                 >
                   Save Changes
                 </button>
@@ -2195,7 +2326,7 @@ Example with no number, category, or additional_info:
                 </button>
                 <button
                   onClick={handleDeleteCard}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700"
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-black font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700"
                 >
                   Delete Card
                 </button>
@@ -2214,7 +2345,7 @@ Example with no number, category, or additional_info:
             <div className="flex justify-around space-x-4">
               <button
                 onClick={confirmDelete}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-300 dark:bg-red-800 dark:hover:bg-red-700"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-black font-bold py-2 px-4 rounded-lg shadow-md transition-all duration-300 dark:bg-red-800 dark:hover:bg-red-700"
               >
                 Delete
               </button>
@@ -2234,7 +2365,7 @@ Example with no number, category, or additional_info:
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-[400px] max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">Review Schedule</h2>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-black">Review Schedule</h2>
               <button
                 onClick={() => setShowCalendarModal(false)}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -2251,10 +2382,17 @@ Example with no number, category, or additional_info:
         </div>
       )}
 
-      {/* Settings Modal */}
+      {/* Settings Modal - Popout Style */}
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-600">
+        <>
+          {/* Invisible backdrop for click-to-close */}
+          <div className="fixed inset-0 z-50" onClick={() => setShowSettingsModal(false)}></div>
+          {/* Settings panel */}
+          <div 
+            className="fixed top-24 right-6 bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 backdrop-blur-xl bg-white/95 dark:bg-gray-800/95"
+            style={{ zIndex: 10001 }}
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-600 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-800">
               <div className="flex items-center">
@@ -2449,6 +2587,11 @@ Example with no number, category, or additional_info:
                           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 slider-green"
                         />
                         <p className="text-gray-500 text-xs mt-2 dark:text-gray-400">Interval growth after "Easy" recall</p>
+                        <div className="mt-2 text-center">
+                          <span className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-3 py-1 rounded-full text-sm font-semibold">
+                            ~{calculateEstimatedReviewDays(fsrsParams.easyFactor, 10)} days
+                          </span>
+                        </div>
                       </div>
 
                       {/* Good Factor Slider */}
@@ -2467,6 +2610,11 @@ Example with no number, category, or additional_info:
                           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 slider-blue"
                         />
                         <p className="text-gray-500 text-xs mt-2 dark:text-gray-400">Interval growth after "Good" recall</p>
+                        <div className="mt-2 text-center">
+                          <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full text-sm font-semibold">
+                            ~{calculateEstimatedReviewDays(fsrsParams.goodFactor, 3)} days
+                          </span>
+                        </div>
                       </div>
 
                       {/* Hard Factor Slider */}
@@ -2485,6 +2633,11 @@ Example with no number, category, or additional_info:
                           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 slider-yellow"
                         />
                         <p className="text-gray-500 text-xs mt-2 dark:text-gray-400">Interval growth after "Hard" recall</p>
+                        <div className="mt-2 text-center">
+                          <span className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-3 py-1 rounded-full text-sm font-semibold">
+                            ~{Math.max(1, calculateEstimatedReviewDays(fsrsParams.hardFactor, 1))} day{Math.max(1, calculateEstimatedReviewDays(fsrsParams.hardFactor, 1)) !== 1 ? 's' : ''}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Again Factor Slider */}
@@ -2503,6 +2656,11 @@ Example with no number, category, or additional_info:
                           className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-600 slider-red"
                         />
                         <p className="text-gray-500 text-xs mt-2 dark:text-gray-400">Interval reduction after "Again" recall</p>
+                        <div className="mt-2 text-center">
+                          <span className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 px-3 py-1 rounded-full text-sm font-semibold">
+                            ~{Math.max(1, calculateEstimatedReviewDays(fsrsParams.againFactor, 1))} day{Math.max(1, calculateEstimatedReviewDays(fsrsParams.againFactor, 1)) !== 1 ? 's' : ''}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -2595,12 +2753,6 @@ Example with no number, category, or additional_info:
                           <p className="text-gray-600 text-xs mb-4 dark:text-gray-400">
                             This unique identifier is used to store your flashcards and settings securely.
                           </p>
-                          <button
-                            onClick={handleLogout}
-                            className="px-4 py-2 rounded-lg font-semibold transition-all duration-300 transform shadow-md bg-red-600 hover:bg-red-700 text-white focus:outline-none focus:ring-4 focus:ring-red-300 active:scale-95"
-                          >
-                            🚪 Logout
-                          </button>
                         </>
                       ) : (
                         <p className="text-gray-700 dark:text-gray-300">Not logged in.</p>
@@ -2663,7 +2815,7 @@ Example with no number, category, or additional_info:
                     className={`px-6 py-3 rounded-lg font-semibold transition-all duration-300 transform shadow-md focus:outline-none focus:ring-4 active:scale-95 ${
                       isDarkMode
                         ? 'bg-yellow-500 hover:bg-yellow-600 text-yellow-900 focus:ring-yellow-300'
-                        : 'bg-gray-800 hover:bg-gray-900 text-white focus:ring-gray-300'
+                        : 'bg-gray-800 hover:bg-gray-900 text-black focus:ring-gray-300'
                     }`}
                   >
                     {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
@@ -2673,9 +2825,10 @@ Example with no number, category, or additional_info:
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
+    </>
   );
 }
 
