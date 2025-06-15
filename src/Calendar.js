@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const Calendar = ({ calendarDates = [], onClose }) => {
+const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -118,15 +118,21 @@ const Calendar = ({ calendarDates = [], onClose }) => {
   }
 
   return (
-    <div style={{ width: '480px', backgroundColor: '#ffffff', borderRadius: '8px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', border: '1px solid #e5e7eb' }}>
+    <div style={{ 
+      width: '480px', 
+      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+      borderRadius: '8px', 
+      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', 
+      border: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}` 
+    }}>
       {/* Header */}
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
         padding: '20px', 
-        borderBottom: '1px solid #e5e7eb',
-        background: 'linear-gradient(to right, #eff6ff, #e0e7ff)',
+        borderBottom: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}`,
+        background: isDarkMode ? 'linear-gradient(to right, rgba(30, 58, 138, 0.3), rgba(67, 56, 202, 0.3))' : 'linear-gradient(to right, #eff6ff, #e0e7ff)',
         borderTopLeftRadius: '8px',
         borderTopRightRadius: '8px'
       }}>
@@ -140,10 +146,10 @@ const Calendar = ({ calendarDates = [], onClose }) => {
             transition: 'background-color 0.2s',
             fontSize: '24px',
             fontWeight: 'bold',
-            color: '#374151'
+            color: isDarkMode ? '#d1d5db' : '#374151'
           }}
           onClick={() => navigateMonth(-1)}
-          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.5)'}
+          onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(55, 65, 81, 0.5)' : 'rgba(255,255,255,0.5)'}
           onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
         >
           ‹
@@ -152,7 +158,7 @@ const Calendar = ({ calendarDates = [], onClose }) => {
         <h1 style={{ 
           fontSize: '24px', 
           fontWeight: 'bold', 
-          color: '#1f2937', 
+          color: isDarkMode ? '#f9fafb' : '#1f2937', 
           margin: 0,
           letterSpacing: '0.025em'
         }}>
@@ -169,10 +175,10 @@ const Calendar = ({ calendarDates = [], onClose }) => {
             transition: 'background-color 0.2s',
             fontSize: '24px',
             fontWeight: 'bold',
-            color: '#374151'
+            color: isDarkMode ? '#d1d5db' : '#374151'
           }}
           onClick={() => navigateMonth(1)}
-          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.5)'}
+          onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(55, 65, 81, 0.5)' : 'rgba(255,255,255,0.5)'}
           onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
         >
           ›
@@ -186,7 +192,7 @@ const Calendar = ({ calendarDates = [], onClose }) => {
           display: 'grid', 
           gridTemplateColumns: 'repeat(7, 1fr)', 
           marginBottom: '12px',
-          borderBottom: '1px solid #e5e7eb',
+          borderBottom: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}`,
           paddingBottom: '8px'
         }}>
           {dayNames.map((dayName, index) => (
@@ -194,7 +200,7 @@ const Calendar = ({ calendarDates = [], onClose }) => {
               textAlign: 'center', 
               fontSize: '14px', 
               fontWeight: '600', 
-              color: '#6b7280',
+              color: isDarkMode ? '#9ca3af' : '#6b7280',
               padding: '4px 0'
             }}>
               {dayName}
@@ -217,22 +223,22 @@ const Calendar = ({ calendarDates = [], onClose }) => {
             const dateKey = day ? formatDateKey(year, month, day) : null;
             const isSelected = selectedDate === dateKey;
 
-            let backgroundColor = '#ffffff';
-            let borderColor = '#f3f4f6';
-            let textColor = '#374151';
+            let backgroundColor = isDarkMode ? '#1f2937' : '#ffffff';
+            let borderColor = isDarkMode ? '#4b5563' : '#f3f4f6';
+            let textColor = isDarkMode ? '#d1d5db' : '#374151';
             let fontWeight = '500';
 
             if (!day) {
-              backgroundColor = '#f9fafb';
+              backgroundColor = isDarkMode ? '#1f2937' : '#f9fafb';
             } else if (isToday) {
-              backgroundColor = '#dbeafe';
-              borderColor = '#93c5fd';
-              textColor = '#1d4ed8';
+              backgroundColor = isDarkMode ? 'rgba(30, 58, 138, 0.4)' : '#dbeafe';
+              borderColor = isDarkMode ? '#2563eb' : '#93c5fd';
+              textColor = isDarkMode ? '#bfdbfe' : '#1d4ed8';
               fontWeight = '700';
             } else if (isSelected) {
-              backgroundColor = '#eff6ff';
-              borderColor = '#bfdbfe';
-              textColor = '#2563eb';
+              backgroundColor = isDarkMode ? 'rgba(30, 58, 138, 0.2)' : '#eff6ff';
+              borderColor = isDarkMode ? '#3b82f6' : '#bfdbfe';
+              textColor = isDarkMode ? '#93c5fd' : '#2563eb';
               fontWeight = '600';
             }
 
@@ -256,13 +262,13 @@ const Calendar = ({ calendarDates = [], onClose }) => {
                 onClick={() => handleDayPress(day)}
                 onMouseOver={(e) => {
                   if (day && !isToday && !isSelected) {
-                    e.target.style.backgroundColor = '#f9fafb';
+                    e.target.style.backgroundColor = isDarkMode ? '#374151' : '#f9fafb';
                     e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
                   }
                 }}
                 onMouseOut={(e) => {
                   if (day && !isToday && !isSelected) {
-                    e.target.style.backgroundColor = '#ffffff';
+                    e.target.style.backgroundColor = backgroundColor;
                     e.target.style.boxShadow = 'none';
                   }
                 }}
@@ -287,7 +293,7 @@ const Calendar = ({ calendarDates = [], onClose }) => {
                         <div style={{
                           padding: '2px 6px',
                           borderRadius: '9999px',
-                          backgroundColor: '#3b82f6',
+                          backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
                           color: '#ffffff',
                           fontSize: '12px',
                           fontWeight: '500',
@@ -308,8 +314,8 @@ const Calendar = ({ calendarDates = [], onClose }) => {
       {/* Legend */}
       <div style={{
         padding: '16px',
-        borderTop: '1px solid #e5e7eb',
-        backgroundColor: '#f9fafb',
+        borderTop: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}`,
+        backgroundColor: isDarkMode ? 'rgba(31, 41, 55, 0.5)' : '#f9fafb',
         borderBottomLeftRadius: '8px',
         borderBottomRightRadius: '8px'
       }}>
@@ -325,14 +331,14 @@ const Calendar = ({ calendarDates = [], onClose }) => {
             <div style={{
               width: '16px',
               height: '16px',
-              backgroundColor: '#dbeafe',
-              border: '2px solid #93c5fd',
+              backgroundColor: isDarkMode ? 'rgba(30, 58, 138, 0.4)' : '#dbeafe',
+              border: `2px solid ${isDarkMode ? '#2563eb' : '#93c5fd'}`,
               borderRadius: '2px',
               marginRight: '8px'
             }}></div>
             <span style={{
               fontSize: '14px',
-              color: '#6b7280',
+              color: isDarkMode ? '#9ca3af' : '#6b7280',
               fontWeight: '500'
             }}>Today</span>
           </div>
@@ -343,13 +349,13 @@ const Calendar = ({ calendarDates = [], onClose }) => {
             <div style={{
               width: '16px',
               height: '16px',
-              backgroundColor: '#3b82f6',
+              backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
               borderRadius: '2px',
               marginRight: '8px'
             }}></div>
             <span style={{
               fontSize: '14px',
-              color: '#6b7280',
+              color: isDarkMode ? '#9ca3af' : '#6b7280',
               fontWeight: '500'
             }}>Cards Due</span>
           </div>
@@ -371,19 +377,19 @@ const Calendar = ({ calendarDates = [], onClose }) => {
           zIndex: 50
         }}>
           <div style={{
-            backgroundColor: '#ffffff',
+            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
             padding: '24px',
             borderRadius: '8px',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
             maxWidth: '384px',
             width: '100%',
             margin: '0 16px',
-            border: '1px solid #e5e7eb'
+            border: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}`
           }}>
             <h2 style={{
               fontSize: '20px',
               fontWeight: 'bold',
-              color: '#1f2937',
+              color: isDarkMode ? '#f9fafb' : '#1f2937',
               marginBottom: '16px',
               textAlign: 'center',
               margin: '0 0 16px 0'
@@ -398,11 +404,11 @@ const Calendar = ({ calendarDates = [], onClose }) => {
               <div style={{
                 width: '16px',
                 height: '16px',
-                backgroundColor: '#3b82f6',
+                backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
                 borderRadius: '50%'
               }}></div>
               <p style={{
-                color: '#6b7280',
+                color: isDarkMode ? '#d1d5db' : '#6b7280',
                 margin: 0
               }}>
                 <span style={{ fontWeight: '600' }}>{(() => { console.log('Calendar Modal - Date:', modalData.date, 'Value:', modalData.value, 'Modal Data:', modalData); return modalData.value; })()}</span> cards due
@@ -411,7 +417,7 @@ const Calendar = ({ calendarDates = [], onClose }) => {
             <button
               style={{
                 width: '100%',
-                backgroundColor: '#3b82f6',
+                backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
                 color: '#ffffff',
                 fontWeight: '500',
                 padding: '12px 16px',
@@ -422,8 +428,8 @@ const Calendar = ({ calendarDates = [], onClose }) => {
                 boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
               }}
               onClick={() => setShowModal(false)}
-              onMouseOver={(e) => e.target.style.backgroundColor = '#2563eb'}
-              onMouseOut={(e) => e.target.style.backgroundColor = '#3b82f6'}
+              onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? '#1d4ed8' : '#2563eb'}
+              onMouseOut={(e) => e.target.style.backgroundColor = isDarkMode ? '#2563eb' : '#3b82f6'}
             >
               Close
             </button>

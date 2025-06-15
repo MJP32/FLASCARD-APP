@@ -5,6 +5,8 @@ import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, u
 import LoginScreen from './LoginScreen.jsx';
 import * as XLSX from 'xlsx';
 import Calendar from './Calendar';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // Main App component for the flashcard application
 function App() {
@@ -51,6 +53,7 @@ function App() {
   const [generatedExample, setGeneratedExample] = useState(''); // State to store generated example
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false); // State for Gemini API loading (Generate Questions)
   const [generatedQuestions, setGeneratedQuestions] = useState([]); // State to store generated questions for selection
+  const [selectedQuestions, setSelectedQuestions] = useState([]); // State to track which questions are selected
   const [showGeneratedQuestionsModal, setShowGeneratedQuestionsModal] = useState(false); // State for related questions modal
   const [isExplainingConcept, setIsExplainingConcept] = useState(false); // State for Gemini API loading (Explain Concept)
   const [geminiExplanation, setGeminiExplanation] = useState(''); // State to store generated explanation
@@ -74,7 +77,7 @@ function App() {
   const [isEditingCard, setIsEditingCard] = useState(false); // State for edit mode
   const [editCardData, setEditCardData] = useState(null); // Data for the card being edited
   const [showConfirmDelete, setShowConfirmDelete] = useState(false); // State for delete confirmation
-  // const [isGeneratingSelectedCards, setIsGeneratingSelectedCards] = useState(false); // New state for batch generation loading
+  const [isGeneratingSelectedCards, setIsGeneratingSelectedCards] = useState(false); // New state for batch generation loading
   const [copyFeedback, setCopyFeedback] = useState(''); // State for copy button feedback
 
   // Refs for new card input fields and file input
@@ -673,6 +676,21 @@ function App() {
    * Expected format: id,number,category,question,answer,additional_info
    */
   const parseCSV = (csvString) => {
+    try {
+      // Validate input
+      if (!csvString || typeof csvString !== 'string') {
+        throw new Error('CSV file appears to be empty or corrupted. Please check the file and try again.');
+      }
+
+      if (csvString.trim().length === 0) {
+        throw new Error('CSV file is empty. Please add flashcard data and try again.');
+      }
+
+      // Check for common file format issues
+      if (csvString.includes('\0') || csvString.includes('\uFFFD')) {
+        throw new Error('CSV file contains invalid characters. This might be a binary file. Please save as CSV format and try again.');
+      }
+
     // Split the CSV into rows carefully handling quoted content which may contain newlines
     const getRows = (text) => {
       const rows = [];
@@ -780,8 +798,23 @@ function App() {
         console.warn(`Skipping row ${index + 1} due to missing Question or Answer`);
       }
     });
+
+    // Validate that we parsed some cards
+    if (cards.length === 0) {
+      throw new Error('No valid flashcards found in CSV. Please check that your file has the correct format: id,number,category,question,answer,additional_info');
+    }
     
     return cards;
+
+    } catch (error) {
+      console.error('CSV parsing error:', error);
+      // Re-throw with context if it's not already a detailed error
+      if (error.message.includes('CSV file') || error.message.includes('No valid flashcards')) {
+        throw error;
+      } else {
+        throw new Error(`CSV parsing failed: ${error.message}. Please check that your file is in proper CSV format.`);
+      }
+    }
   };
 
   // Function to parse Excel file
@@ -791,28 +824,254 @@ function App() {
       reader.onload = (e) => {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
+          const workbook = XLSX.read(data, { 
+            type: 'array', 
+            cellText: true, 
+            cellFormula: false,
+            cellHTML: false,
+            cellStyles: true,
+            raw: false
+          });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
           
-          // Skip header row and process data
-          const cards = jsonData.slice(1).map(row => {
-            const [csvNumber, category, question, answer, additional_info] = row;
-            if (question && answer) {
-              return {
-                csvNumber: csvNumber || null,
-                category: category || 'Uncategorized',
-                question: question.toString().trim(),
-                answer: answer.toString().trim(),
-                additional_info: additional_info ? additional_info.toString().trim() : null,
-              };
+          // Get the range and access cells directly to preserve exact formatting
+          const range = XLSX.utils.decode_range(firstSheet['!ref']);
+          const rawData = [];
+          
+          for (let row = 0; row <= range.e.r; row++) {
+            const rowData = [];
+            for (let col = 0; col <= Math.min(4, range.e.c); col++) {
+              const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+              const cell = firstSheet[cellAddress];
+              
+              if (cell) {
+                // Use the formatted text value (w) which preserves Excel's display formatting
+                rowData[col] = cell.w || cell.v || '';
+              } else {
+                rowData[col] = '';
+              }
             }
-            return null;
-          }).filter(card => card !== null);
+            rawData.push(rowData);
+          }
+          
+          const jsonData = rawData;
+          
+          console.log('Raw Excel data:', jsonData); // Debug logging
+          
+          const cards = [];
+          
+          // Helper function to get complete cell content
+          const getCompleteContent = (cellValue) => {
+            if (cellValue === null || cellValue === undefined) return '';
+            return String(cellValue);
+          };
+          
+          // Process rows and group them into complete flashcards
+          let currentCard = null;
+          
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (!row || row.length === 0) continue;
+            
+            console.log(`Processing row ${i}:`, row); // Debug logging
+            
+            const csvNumber = getCompleteContent(row[0]);
+            const category = getCompleteContent(row[1]);
+            const question = getCompleteContent(row[2]);
+            const answer = getCompleteContent(row[3]);
+            const additional_info = getCompleteContent(row[4]);
+            
+            // Check if this is a new flashcard (has csvNumber and question) or continuation of previous
+            if (csvNumber && question) {
+              // This is a new flashcard - save the previous one if it exists
+              if (currentCard && currentCard.question && currentCard.answer) {
+                cards.push(currentCard);
+              }
+              
+              // Start new flashcard
+              currentCard = {
+                csvNumber: csvNumber,
+                category: category ? category.trim() : 'Uncategorized',
+                question: question,
+                answer: answer,
+                additional_info: additional_info || null,
+              };
+              
+              console.log(`New flashcard started: ${question.substring(0, 100)}...`);
+            } else if (currentCard && answer) {
+              // This is a continuation row - append to current card's answer with proper spacing
+              // Preserve existing spacing and only add newline if answer doesn't start with whitespace
+              const separator = answer.match(/^\s/) ? '' : '\n';
+              currentCard.answer += separator + answer;
+              
+              // Also append additional_info if present
+              if (additional_info) {
+                if (currentCard.additional_info) {
+                  const infoSeparator = additional_info.match(/^\s/) ? '' : '\n';
+                  currentCard.additional_info += infoSeparator + additional_info;
+                } else {
+                  currentCard.additional_info = additional_info;
+                }
+              }
+              
+              console.log(`Answer continued, new length: ${currentCard.answer.length}`);
+            }
+          }
+          
+          // Don't forget to add the last card
+          if (currentCard && currentCard.question && currentCard.answer) {
+            cards.push(currentCard);
+            console.log(`Final card added, total answer length: ${currentCard.answer.length}`);
+          }
+          
+          console.log(`Total flashcards created: ${cards.length}`);
           
           resolve(cards);
         } catch (error) {
-          reject(error);
+          console.error('Excel parsing error:', error);
+          if (error.message.includes('Unsupported file')) {
+            reject(new Error('This Excel file format is not supported. Please save as .xlsx format and try again.'));
+          } else if (error.message.includes('password')) {
+            reject(new Error('Password-protected Excel files are not supported. Please remove password protection and try again.'));
+          } else if (error.message.includes('corrupted')) {
+            reject(new Error('The Excel file appears to be corrupted. Please check the file and try again.'));
+          } else {
+            reject(new Error(`Excel file parsing failed: ${error.message}. Please check that the file is a valid Excel (.xlsx) file.`));
+          }
+        }
+      };
+      reader.onerror = (error) => reject(error);
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  // Function to parse Numbers file (.numbers)
+  const parseNumbers = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          
+          // Numbers files are actually zip archives containing XML/protobuf files
+          // XLSX.js can handle Numbers files similarly to Excel files
+          const workbook = XLSX.read(data, { 
+            type: 'array', 
+            cellText: true, 
+            cellFormula: false,
+            cellHTML: false,
+            cellStyles: true,
+            raw: false
+          });
+          
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          
+          // Get the range and access cells directly to preserve exact formatting
+          const range = XLSX.utils.decode_range(firstSheet['!ref']);
+          const rawData = [];
+          
+          for (let row = 0; row <= range.e.r; row++) {
+            const rowData = [];
+            for (let col = 0; col <= Math.min(4, range.e.c); col++) {
+              const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+              const cell = firstSheet[cellAddress];
+              
+              if (cell) {
+                // Use the formatted text value (w) which preserves Numbers' display formatting
+                rowData[col] = cell.w || cell.v || '';
+              } else {
+                rowData[col] = '';
+              }
+            }
+            rawData.push(rowData);
+          }
+          
+          const jsonData = rawData;
+          
+          console.log('Raw Numbers data:', jsonData); // Debug logging
+          
+          const cards = [];
+          
+          // Helper function to get complete cell content
+          const getCompleteContent = (cellValue) => {
+            if (cellValue === null || cellValue === undefined) return '';
+            return String(cellValue);
+          };
+          
+          // Process rows and group them into complete flashcards
+          let currentCard = null;
+          
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (!row || row.length === 0) continue;
+            
+            console.log(`Processing Numbers row ${i}:`, row); // Debug logging
+            
+            const csvNumber = getCompleteContent(row[0]);
+            const category = getCompleteContent(row[1]);
+            const question = getCompleteContent(row[2]);
+            const answer = getCompleteContent(row[3]);
+            const additional_info = getCompleteContent(row[4]);
+            
+            // Check if this is a new flashcard (has csvNumber and question) or continuation of previous
+            if (csvNumber && question) {
+              // This is a new flashcard - save the previous one if it exists
+              if (currentCard && currentCard.question && currentCard.answer) {
+                cards.push(currentCard);
+              }
+              
+              // Start new flashcard
+              currentCard = {
+                csvNumber: csvNumber,
+                category: category ? category.trim() : 'Uncategorized',
+                question: question,
+                answer: answer,
+                additional_info: additional_info || null,
+              };
+              
+              console.log(`New Numbers flashcard started: ${question.substring(0, 100)}...`);
+            } else if (currentCard && answer) {
+              // This is a continuation row - append to current card's answer with proper spacing
+              // Preserve existing spacing and only add newline if answer doesn't start with whitespace
+              const separator = answer.match(/^\s/) ? '' : '\n';
+              currentCard.answer += separator + answer;
+              
+              // Also append additional_info if present
+              if (additional_info) {
+                if (currentCard.additional_info) {
+                  const infoSeparator = additional_info.match(/^\s/) ? '' : '\n';
+                  currentCard.additional_info += infoSeparator + additional_info;
+                } else {
+                  currentCard.additional_info = additional_info;
+                }
+              }
+              
+              console.log(`Numbers answer continued, new length: ${currentCard.answer.length}`);
+            }
+          }
+          
+          // Don't forget to add the last card
+          if (currentCard && currentCard.question && currentCard.answer) {
+            cards.push(currentCard);
+            console.log(`Final Numbers card added, total answer length: ${currentCard.answer.length}`);
+          }
+          
+          console.log(`Total Numbers flashcards created: ${cards.length}`);
+          
+          resolve(cards);
+        } catch (error) {
+          console.error('Numbers parsing error:', error);
+          if (error.message.includes('Unsupported file')) {
+            reject(new Error('This Numbers file format is not supported. Please export as Excel (.xlsx) or CSV format and try again.'));
+          } else if (error.message.includes('password')) {
+            reject(new Error('Password-protected Numbers files are not supported. Please remove password protection and try again.'));
+          } else if (error.message.includes('corrupted')) {
+            reject(new Error('The Numbers file appears to be corrupted. Please check the file and try again.'));
+          } else if (error.message.includes('ENOENT') || error.message.includes('not found')) {
+            reject(new Error('Numbers file could not be read. Please check the file path and permissions.'));
+          } else {
+            reject(new Error(`Numbers file parsing failed: ${error.message}. Please export as Excel (.xlsx) or CSV format for better compatibility.`));
+          }
         }
       };
       reader.onerror = (error) => reject(error);
@@ -831,6 +1090,11 @@ function App() {
   const handleUploadButtonClick = async () => {
     if (selectedUploadFiles.length === 0) {
       setUploadError('Please select at least one file first.');
+      return;
+    }
+
+    if (!db || !userId) {
+      setUploadError('Database not initialized or user not authenticated. Please try again.');
       return;
     }
 
@@ -853,9 +1117,26 @@ function App() {
     for (const file of selectedUploadFiles) {
       const isExcel = file.name.endsWith('.xlsx');
       const isCsv = file.name.endsWith('.csv');
+      const isNumbers = file.name.endsWith('.numbers');
 
-      if (!isExcel && !isCsv) {
-        setUploadError((prev) => prev + `Invalid file type for ${file.name}. Only CSV and Excel (.xlsx) files are supported.\n`);
+      // File type validation
+      if (!isExcel && !isCsv && !isNumbers) {
+        setUploadError((prev) => prev + `${file.name}: Invalid file type. Only CSV, Excel (.xlsx), and Numbers (.numbers) files are supported.\n`);
+        errorsFound = true;
+        continue;
+      }
+
+      // File size validation (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+      if (file.size > maxSize) {
+        setUploadError((prev) => prev + `${file.name}: File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.\n`);
+        errorsFound = true;
+        continue;
+      }
+
+      // Empty file validation
+      if (file.size === 0) {
+        setUploadError((prev) => prev + `${file.name}: File is empty. Please check the file and try again.\n`);
         errorsFound = true;
         continue;
       }
@@ -864,11 +1145,21 @@ function App() {
         let parsedCards;
         if (isExcel) {
           parsedCards = await parseExcel(file);
+        } else if (isNumbers) {
+          parsedCards = await parseNumbers(file);
         } else {
           const csvContent = await new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(e);
+            reader.onload = (e) => {
+              if (!e.target.result) {
+                reject(new Error('Could not read file content. The file might be empty or corrupted.'));
+                return;
+              }
+              resolve(e.target.result);
+            };
+            reader.onerror = (e) => {
+              reject(new Error(`Failed to read CSV file: ${file.name}. The file might be corrupted or in use by another application.`));
+            };
             reader.readAsText(file, 'UTF-8');
           });
           parsedCards = parseCSV(csvContent);
@@ -929,7 +1220,26 @@ function App() {
         totalFilesProcessed++;
       } catch (error) {
         console.error(`Error processing file ${file.name}:`, error);
-        setUploadError((prev) => prev + `Failed to process ${file.name}: ${error.message || error}.\n`);
+        
+        // Provide specific error messages based on error type
+        let errorMessage = '';
+        if (error.message) {
+          errorMessage = error.message;
+        } else if (error.name === 'NotReadableError') {
+          errorMessage = `Cannot read ${file.name}. The file might be in use by another application or corrupted.`;
+        } else if (error.name === 'SecurityError') {
+          errorMessage = `Access denied to ${file.name}. Please check file permissions.`;
+        } else if (error.name === 'AbortError') {
+          errorMessage = `Upload of ${file.name} was cancelled.`;
+        } else if (error.name === 'NetworkError') {
+          errorMessage = `Network error while uploading ${file.name}. Please check your connection.`;
+        } else if (error.toString().includes('QuotaExceeded')) {
+          errorMessage = `Storage quota exceeded while processing ${file.name}. Please free up space.`;
+        } else {
+          errorMessage = `Unknown error processing ${file.name}. Please try again or use a different file format.`;
+        }
+        
+        setUploadError((prev) => prev + `${file.name}: ${errorMessage}\n`);
         errorsFound = true;
       }
     }
@@ -1108,78 +1418,82 @@ function App() {
   };
 
   // Handle checkbox change for generated questions
-  // const handleGeneratedQuestionCheckboxChange = (id) => {
-  //   setGeneratedQuestions(prevQuestions =>
-  //     prevQuestions.map(q =>
-  //       q.id === id ? { ...q, selected: !q.selected } : q
-  //     )
-  //   );
-  // };
+  const handleGeneratedQuestionCheckboxChange = (id) => {
+    setGeneratedQuestions(prevQuestions =>
+      prevQuestions.map(q =>
+        q.id === id ? { ...q, selected: !q.selected } : q
+      )
+    );
+  };
 
   // Handle generating new cards from selected questions WITH AI-generated answers
-  // const handleGenerateSelectedCards = async () => {
-  //   if (!db || !userId) return;
+  const handleGenerateSelectedCards = async () => {
+    if (!db || !userId) return;
 
-  //   const selectedQ = generatedQuestions.filter(q => q.selected);
-  //   if (selectedQ.length === 0) {
-  //     alert("Please select at least one question to generate a card.");
-  //     return;
-  //   }
+    const selectedQ = generatedQuestions.filter(q => q.selected);
+    if (selectedQ.length === 0) {
+      alert("Please select at least one question to generate a card.");
+      return;
+    }
 
-  //   setIsGeneratingSelectedCards(true); // Start loading for batch generation
-  //   let cardsAdded = 0;
-  //   const appId = "flashcard-app-3f2a3"; // Hardcoding appId
-  //   const now = new Date();
-  //   const currentCategory = filteredFlashcards[currentCardIndex]?.category || 'Uncategorized';
+    setIsGeneratingSelectedCards(true); // Start loading for batch generation
+    let cardsAdded = 0;
+    const appId = "flashcard-app-3f2a3"; // Hardcoding appId
+    const now = new Date();
+    const currentCategory = filteredFlashcards[currentCardIndex]?.category || 'Uncategorized';
 
-  //   for (const qData of selectedQ) {
-  //     try {
-  //       // Generate answer for the new question
-  //       let answerText = "";
-  //       try {
-  //         const chatHistory = [{ role: "user", parts: [{ text: `Provide a concise answer for the Java flashcard question: "${qData.text}"` }] }];
-  //         const payload = { contents: chatHistory };
-  //         const apiKey = "";
-  //         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  //         const response = await fetch(apiUrl, {
-  //           method: 'POST',
-  //           headers: { 'Content-Type': 'application/json' },
-  //           body: JSON.stringify(payload)
-  //         });
-  //         const result = await response.json();
-  //         if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
-  //           answerText = result.candidates[0].content.parts[0].text.trim();
-  //         } else {
-  //           console.warn(`Could not generate answer for question: ${qData.text}`);
-  //           answerText = "Answer could not be generated.";
-  //         }
-  //       } catch (apiError) {
-  //         console.error(`Error generating answer for question "${qData.text}":`, apiError);
-  //         answerText = "Error generating answer.";
-  //       }
+    for (const qData of selectedQ) {
+      try {
+        // Generate answer for the new question
+        let answerText = "";
+        try {
+          const currentApiKey = apiKeys[selectedApiProvider];
+          if (!currentApiKey) {
+            answerText = "API key not configured for answer generation.";
+          } else {
+            const chatHistory = [{ role: "user", parts: [{ text: `Provide a concise answer for the flashcard question: "${qData.text}"` }] }];
+            const payload = { contents: chatHistory };
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
+            const response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
+              answerText = result.candidates[0].content.parts[0].text.trim();
+            } else {
+              console.warn(`Could not generate answer for question: ${qData.text}`);
+              answerText = "Answer could not be generated.";
+            }
+          }
+        } catch (apiError) {
+          console.error(`Error generating answer for question "${qData.text}":`, apiError);
+          answerText = "Error generating answer.";
+        }
 
-  //       await addDoc(collection(db, `/artifacts/${appId}/users/${userId}/flashcards`), {
-  //         question: qData.text,
-  //         answer: answerText, // Use the generated answer
-  //         category: currentCategory, // Inherit category or default
-  //         additional_info: "", // Empty additional info for new cards
-  //         difficulty: fsrsParams.initialDifficulty,
-  //         stability: fsrsParams.initialStability,
-  //         lastReview: serverTimestamp(),
-  //         nextReview: now,
-  //         createdAt: serverTimestamp(),
-  //       });
-  //       cardsAdded++;
-  //     } catch (error) {
-  //       console.error("Error adding generated card:", error);
-  //     }
-  //   }
+        await addDoc(collection(db, `/artifacts/${appId}/users/${userId}/flashcards`), {
+          question: qData.text,
+          answer: answerText, // Use the generated answer
+          category: currentCategory, // Inherit category or default
+          additional_info: "", // Empty additional info for new cards
+          difficulty: fsrsParams.initialDifficulty,
+          stability: fsrsParams.initialStability,
+          lastReview: serverTimestamp(),
+          nextReview: now,
+          createdAt: serverTimestamp(),
+        });
+        cardsAdded++;
+      } catch (error) {
+        console.error("Error adding generated card:", error);
+      }
+    }
 
-  //   alert(`Successfully generated ${cardsAdded} new flashcard(s)!`); // Provide feedback
-  //   setShowGeneratedQuestionsModal(false); // Close the modal
-  //   setGeneratedQuestions([]); // Clear generated questions
-  //   setIsGeneratingSelectedCards(false); // End loading for batch generation
-  // };
+    alert(`Successfully generated ${cardsAdded} new flashcard(s)!`); // Provide feedback
+    setShowGeneratedQuestionsModal(false); // Close the modal
+    setGeneratedQuestions([]); // Clear generated questions
+    setIsGeneratingSelectedCards(false); // End loading for batch generation
+  };
 
 
   // Function to handle explaining a concept using Gemini API
@@ -1379,6 +1693,20 @@ function App() {
       return nextReviewDate <= today;
     }).length;
 
+  // Calculate cards reviewed today
+  const cardsReviewedToday = flashcards.filter(card => {
+    // Apply category filter first
+    if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+    
+    if (!card.lastReview) return false;
+    const lastReviewDate = card.lastReview.toDate ? card.lastReview.toDate() : new Date(card.lastReview);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
+    return lastReviewDate >= today && lastReviewDate < tomorrow;
+  }).length;
+
 
   // Function to get daily due counts for the next 30 days (for ALL flashcards, not just filtered)
   const getDailyDueCounts = () => {
@@ -1470,11 +1798,11 @@ function App() {
     reviewCard
   ]);
 
-  // Content for the CSV Upload Guide in Settings
+  // Content for the File Upload Guide in Settings
   const csvUploadGuideContent = `
-### Understanding the CSV Format and Escape Characters
+### Understanding the File Upload Format
 
-Your flashcard application expects a specific CSV format to correctly parse the data. Here's a breakdown of each field and how to handle special characters:
+Your flashcard application supports CSV, Excel (.xlsx), and Numbers (.numbers) files. All formats expect the same column structure to correctly parse the data. Here's a breakdown of each field and how to handle special characters:
 
 **Format:** \`number,category,question,answer,additional_info\`
 
@@ -1646,13 +1974,13 @@ Example with no number, category, or additional_info:
            background: 'linear-gradient(135deg, #ffffff 0%, #fefeff 25%, #fdfdff 50%, #fefffe 75%, #ffffff 100%)',
            backgroundSize: '400% 400%',
            animation: 'gradientShift 15s ease infinite',
-           paddingTop: '260px'
+           paddingTop: '300px'
          }}>
       {/* Combined Header Panel */}
       <div className="fixed top-6 left-6 right-6 z-50" style={{ position: 'fixed', top: '24px', left: '24px', right: '24px', zIndex: 9999 }}>
-        <div className="backdrop-blur-xl rounded-2xl shadow-2xl border border-blue-700/50 dark:border-blue-700/50 p-6 relative" style={{ backgroundColor: 'rgba(147, 197, 253, 0.7)' }}>
+        <div className="backdrop-blur-xl rounded-2xl shadow-2xl border border-blue-700/50 dark:border-blue-700/50 p-8 relative" style={{ backgroundColor: 'rgba(147, 197, 253, 0.7)' }}>
           {/* Top Row - Navigation and Logo */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-6">
             
             {/* Left Section - Navigation Buttons */}
             <div className="flex flex-wrap gap-3">
@@ -1661,7 +1989,7 @@ Example with no number, category, or additional_info:
               setShowCreateCardForm(false);
               setShowUploadCsvForm(false);
             }}
-            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-blue-600 hover:bg-blue-700 text-white shadow-lg focus:ring-blue-500"
           >
             <span className="relative z-10 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1675,7 +2003,7 @@ Example with no number, category, or additional_info:
               setShowCreateCardForm(true);
               setShowUploadCsvForm(false);
             }}
-            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-blue-600 hover:bg-blue-700 text-white shadow-lg focus:ring-blue-500"
           >
             <span className="relative z-10 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1689,18 +2017,18 @@ Example with no number, category, or additional_info:
               setShowUploadCsvForm(true);
               setShowCreateCardForm(false);
             }}
-            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-blue-600 hover:bg-blue-700 text-white shadow-lg focus:ring-blue-500"
           >
             <span className="relative z-10 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
-              Upload CSV
+              Upload File
             </span>
           </button>
           <button
             onClick={handleExportCards}
-            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
+            className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-blue-600 hover:bg-blue-700 text-white shadow-lg focus:ring-blue-500"
           >
             <span className="relative z-10 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1725,18 +2053,6 @@ Example with no number, category, or additional_info:
             </button>
           )}
 
-          {/* Due Today Toggle Button - Only show when logged in */}
-          {userId && (
-            <button
-              onClick={() => setShowDueTodayOnly(!showDueTodayOnly)}
-              className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-gradient-to-r from-blue-600 to-indigo-600 text-black shadow-lg shadow-blue-500/25 focus:ring-blue-500 hover:from-blue-700 hover:to-indigo-700"
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                {showDueTodayOnly ? '📅' : '📚'}
-                {showDueTodayOnly ? 'Due Today' : 'All Cards'}
-              </span>
-            </button>
-          )}
             </div>
             
             {/* Center Section - FSRS Logo */}
@@ -1749,33 +2065,19 @@ Example with no number, category, or additional_info:
             {/* Right Section - Statistics */}
             <div className="flex items-center">
               {/* Statistics */}
-              <div className="flex flex-col space-y-2 text-right">
+              <div className="flex flex-col space-y-3 text-right">
                 {showDueTodayOnly ? (
                   <>
                     <div className="flex items-center gap-2">
                       <span className="text-lg">📅</span>
                       <div>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Due Today</p>
-                        <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsDueToday}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📚</span>
-                      <div>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Total Cards</p>
-                        <p className="text-blue-600 dark:text-blue-400 text-sm font-semibold">{flashcards.length}</p>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Today's Progress</p>
+                        <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
                       </div>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📚</span>
-                      <div>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Total Cards</p>
-                        <p className="text-blue-600 dark:text-blue-400 text-lg font-bold">{totalCardsCount}</p>
-                      </div>
-                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-lg">✅</span>
                       <div>
@@ -1802,20 +2104,20 @@ Example with no number, category, or additional_info:
               {/* Calendar Button */}
               <button
                 onClick={() => setShowCalendarModal(true)}
-                className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-blue-50/90 dark:hover:bg-blue-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="p-3 bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg border border-blue-700 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 aria-label="Show calendar"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </button>
               {/* Settings Icon Button */}
               <button
                 onClick={() => setShowSettingsModal(true)}
-                className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-slate-50/90 dark:hover:bg-slate-700/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="p-3 bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg border border-blue-700 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 aria-label="Open settings"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.942 3.33.83 2.891 2.673a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.942 1.543-.83 3.33-2.673 2.891a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.942-3.33-.83-2.891-2.673a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.942-1.543.83-3.33 2.673-2.891a1.724 1.724 0 002.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
@@ -1825,10 +2127,10 @@ Example with no number, category, or additional_info:
               {userId && (
                 <button
                   onClick={handleLogout}
-                  className="p-3 backdrop-blur-xl bg-white/90 dark:bg-slate-800/90 hover:bg-red-50/90 dark:hover:bg-red-900/90 rounded-xl shadow-lg border border-slate-200 dark:border-slate-600 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  className="p-3 bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg border border-blue-700 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                   aria-label="Logout"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-700 dark:text-slate-200 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white transition-colors duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                   </svg>
                 </button>
@@ -1937,16 +2239,16 @@ Example with no number, category, or additional_info:
       ) : showUploadCsvForm ? (
         // New CSV Upload Form
         <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-8 mb-8 transition-all duration-500 ease-in-out transform scale-100 opacity-100 dark:bg-gray-800">
-          <h2 className="text-2xl font-semibold text-gray-700 mb-6 text-center dark:text-gray-200">Upload Flashcards from CSV</h2>
+          <h2 className="text-2xl font-semibold text-gray-700 mb-6 text-center dark:text-gray-200">Upload Flashcards from File</h2>
           <div className="space-y-6">
             <div>
               <label htmlFor="csv-upload" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-300">
-                Select CSV File(s):
+                Select File(s) (CSV, Excel, Numbers):
               </label>
               <input
                 id="csv-upload"
                 type="file"
-                accept=".csv,.xlsx"
+                accept=".csv,.xlsx,.numbers"
                 ref={fileInputRef}
                 onChange={handleFileSelect}
                 multiple
@@ -1977,7 +2279,7 @@ Example with no number, category, or additional_info:
                          ${selectedUploadFiles.length === 0 || uploadMessage.startsWith('Processing') ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}
                          text-black focus:outline-none focus:ring-4 focus:ring-blue-300 active:scale-95`}
             >
-              {uploadMessage.startsWith('Processing') ? 'Uploading...' : `Upload Selected CSV${selectedUploadFiles.length > 1 ? 's' : ''}`}
+              {uploadMessage.startsWith('Processing') ? 'Uploading...' : `Upload Selected File${selectedUploadFiles.length > 1 ? 's' : ''}`}
             </button>
 
             {uploadMessage && !uploadMessage.startsWith('Processing') && (
@@ -2032,7 +2334,7 @@ Example with no number, category, or additional_info:
               <span className="block sm:inline ml-2">{authError}</span>
             </div>
           )}
-          {filteredFlashcards.length > 0 ? (
+          {filteredFlashcards.length > 0 && currentCard ? (
             <>
               <div className="flex items-center justify-center w-full md:w-3/4 flex-col"> {/* Main card wrapper and AI buttons container */}
                 <div className="flex items-center justify-center w-full"> {/* Card container */}
@@ -2089,80 +2391,207 @@ Example with no number, category, or additional_info:
                         <div className="text-3xl text-emerald-600 dark:text-emerald-400 mb-6 font-bold text-center">Answer</div>
                         <div className="prose prose-lg max-w-none dark:prose-invert">
                           <div className="text-2xl leading-relaxed font-bold text-slate-700 dark:text-slate-200">
-                            {currentCard.answer.split('\n').map((line, index) => {
-                              // Handle code blocks (lines that start with spaces or contain code-like syntax)
-                              if (line.trim().startsWith('```') || line.trim().match(/^[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=\(\{]/)) {
-                                return (
-                                  <div key={index} className="my-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg border-l-4 border-blue-500">
-                                    <code className="text-sm font-mono text-blue-700 dark:text-blue-300 whitespace-pre-wrap">
-                                      {line}
-                                    </code>
-                                  </div>
-                                );
-                              }
-                              // Handle headers (lines that start with #)
-                              else if (line.trim().startsWith('#')) {
-                                const headerLevel = line.match(/^#+/)?.[0].length || 1;
-                                const headerText = line.replace(/^#+\s*/, '');
-                                const headerClass = headerLevel === 1 ? 'text-2xl font-bold mt-4 mb-2' : 
-                                                  headerLevel === 2 ? 'text-xl font-semibold mt-3 mb-2' : 
-                                                  'text-lg font-bold mt-2 mb-1';
-                                return (
-                                  <h3 key={index} className={`${headerClass} text-blue-700 dark:text-blue-300`}>
-                                    {headerText}
-                                  </h3>
-                                );
-                              }
-                              // Handle bullet points
-                              else if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-                                return (
-                                  <div key={index} className="flex items-start my-1">
-                                    <span className="text-blue-500 font-bold mr-2 mt-1">•</span>
-                                    <span className="flex-1">{line.replace(/^[-*]\s*/, '')}</span>
-                                  </div>
-                                );
-                              }
-                              // Handle numbered lists
-                              else if (line.trim().match(/^\d+\.\s/)) {
-                                const number = line.match(/^(\d+)\./)?.[1];
-                                const text = line.replace(/^\d+\.\s*/, '');
-                                return (
-                                  <div key={index} className="flex items-start my-1">
-                                    <span className="text-blue-500 font-semibold mr-2 min-w-[1.5rem]">{number}.</span>
-                                    <span className="flex-1">{text}</span>
-                                  </div>
-                                );
-                              }
-                              // Handle inline code (text within backticks)
-                              else if (line.includes('`')) {
-                                const parts = line.split(/(`[^`]+`)/);
-                                return (
-                                  <p key={index} className="my-2 leading-relaxed">
-                                    {parts.map((part, partIndex) => 
-                                      part.startsWith('`') && part.endsWith('`') ? (
-                                        <code key={partIndex} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
-                                          {part.slice(1, -1)}
-                                        </code>
-                                      ) : (
-                                        <span key={partIndex}>{part}</span>
-                                      )
-                                    )}
-                                  </p>
-                                );
-                              }
-                              // Handle empty lines
-                              else if (line.trim() === '') {
-                                return <div key={index} className="h-3"></div>;
-                              }
-                              // Regular text paragraphs
-                              else {
-                                return (
-                                  <p key={index} className="my-2 leading-relaxed">
+                            {(() => {
+                              const lines = currentCard.answer.split('\n');
+                              const result = [];
+                              let i = 0;
+                              
+                              while (i < lines.length) {
+                                const line = lines[i];
+                                
+                                // Handle multi-line code blocks with ```
+                                if (line.trim().startsWith('```')) {
+                                  let language = line.replace('```', '').trim();
+                                  if (!language) {
+                                    // Auto-detect language based on content
+                                    const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
+                                    if (nextLine.includes('def ') || nextLine.includes('print(')) language = 'python';
+                                    else if (nextLine.includes('function') || nextLine.includes('const ') || nextLine.includes('=>')) language = 'javascript';
+                                    else if (nextLine.includes('public class') || nextLine.includes('System.out')) language = 'java';
+                                    else if (nextLine.includes('#include') || nextLine.includes('int main')) language = 'cpp';
+                                    else language = 'javascript'; // default
+                                  }
+                                  const codeLines = [];
+                                  i++; // Skip the opening ```
+                                  
+                                  while (i < lines.length && !lines[i].trim().startsWith('```')) {
+                                    codeLines.push(lines[i]);
+                                    i++;
+                                  }
+                                  
+                                  // Format code content with proper line breaks
+                                  const formatCode = (code) => {
+                                    return code
+                                      .replace(/\s*{\s*/g, ' {\n    ') // Opening braces
+                                      .replace(/\s*}\s*/g, '\n}\n') // Closing braces
+                                      .replace(/;\s*(?![}])/g, ';\n    ') // Semicolons (except before closing brace)
+                                      .replace(/\n\s*\n/g, '\n') // Remove empty lines
+                                      .replace(/^\s+/gm, (match) => '    '.repeat(Math.floor(match.length / 4))) // Normalize indentation
+                                      .trim();
+                                  };
+                                  
+                                  const rawCodeContent = codeLines.join('\n');
+                                  const codeContent = rawCodeContent.includes('\n') ? rawCodeContent : formatCode(rawCodeContent);
+                                  result.push(
+                                    <div key={`code-${i}`} className="my-4">
+                                      <SyntaxHighlighter 
+                                        language={language}
+                                        style={vscDarkPlus}
+                                        customStyle={{
+                                          borderRadius: '8px',
+                                          fontSize: '14px',
+                                          padding: '16px',
+                                          margin: '0',
+                                          whiteSpace: 'pre-wrap',
+                                          overflow: 'auto'
+                                        }}
+                                        PreTag="div"
+                                        wrapLines={true}
+                                        wrapLongLines={true}
+                                        showLineNumbers={true}
+                                      >
+                                        {codeContent}
+                                      </SyntaxHighlighter>
+                                    </div>
+                                  );
+                                  i++; // Skip the closing ```
+                                  continue;
+                                }
+                                
+                                // Handle single-line code (lines that look like code)
+                                if (line.trim().match(/^(function|const|let|var|if|for|while|class|import|export|return|console\.|def |print\(|#include|public |private |void |int |string )/) ||
+                                    line.trim().match(/^[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=\(\{]/) ||
+                                    line.trim().includes('->') || 
+                                    line.trim().includes('=>') ||
+                                    line.trim().includes('System.out') ||
+                                    line.trim().match(/^[a-zA-Z_][a-zA-Z0-9_]*\([^)]*\)\s*[{;]/) ||
+                                    (line.trim().includes('(') && line.trim().includes(')') && line.trim().includes(';'))) {
+                                  // Auto-detect language for single line
+                                  let singleLineLanguage = 'javascript';
+                                  if (line.includes('def ') || line.includes('print(')) singleLineLanguage = 'python';
+                                  else if (line.includes('System.out') || line.includes('public ')) singleLineLanguage = 'java';
+                                  else if (line.includes('#include') || line.includes('std::')) singleLineLanguage = 'cpp';
+                                  
+                                  // Format single line code if it's too long or has multiple statements
+                                  const formatSingleLine = (code) => {
+                                    if (code.length < 80 && !code.includes('{') && !code.includes('}')) {
+                                      return code; // Keep short, simple lines as-is
+                                    }
+                                    return code
+                                      .replace(/\s*{\s*/g, ' {\n    ') // Opening braces
+                                      .replace(/\s*}\s*/g, '\n}') // Closing braces
+                                      .replace(/;\s*(?![}])/g, ';\n    ') // Semicolons
+                                      .replace(/\n\s*\n/g, '\n') // Remove empty lines
+                                      .trim();
+                                  };
+                                  
+                                  const formattedLine = formatSingleLine(line);
+                                  
+                                  result.push(
+                                    <div key={i} className="my-3">
+                                      <SyntaxHighlighter 
+                                        language={singleLineLanguage}
+                                        style={vscDarkPlus}
+                                        customStyle={{
+                                          borderRadius: '6px',
+                                          fontSize: '13px',
+                                          padding: '12px',
+                                          margin: '0',
+                                          whiteSpace: 'pre-wrap',
+                                          overflow: 'auto'
+                                        }}
+                                        PreTag="div"
+                                        wrapLines={true}
+                                        wrapLongLines={true}
+                                      >
+                                        {formattedLine}
+                                      </SyntaxHighlighter>
+                                    </div>
+                                  );
+                                  i++;
+                                  continue;
+                                }
+                                
+                                // Handle headers (lines that start with #)
+                                if (line.trim().startsWith('#')) {
+                                  const headerLevel = line.match(/^#+/)?.[0].length || 1;
+                                  const headerText = line.replace(/^#+\s*/, '');
+                                  const headerClass = headerLevel === 1 ? 'text-2xl font-bold mt-4 mb-2' : 
+                                                    headerLevel === 2 ? 'text-xl font-semibold mt-3 mb-2' : 
+                                                    'text-lg font-bold mt-2 mb-1';
+                                  result.push(
+                                    <h3 key={i} className={`${headerClass} text-blue-700 dark:text-blue-300`}>
+                                      {headerText}
+                                    </h3>
+                                  );
+                                  i++;
+                                  continue;
+                                }
+                                
+                                // Handle bullet points
+                                if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+                                  result.push(
+                                    <div key={i} className="flex items-start my-1">
+                                      <span className="text-blue-500 font-bold mr-2 mt-1">•</span>
+                                      <span className="flex-1">{line.replace(/^[-*]\s*/, '')}</span>
+                                    </div>
+                                  );
+                                  i++;
+                                  continue;
+                                }
+                                
+                                // Handle numbered lists
+                                if (line.trim().match(/^\d+\.\s/)) {
+                                  const number = line.match(/^(\d+)\./)?.[1];
+                                  const text = line.replace(/^\d+\.\s*/, '');
+                                  result.push(
+                                    <div key={i} className="flex items-start my-1">
+                                      <span className="text-blue-500 font-semibold mr-2 min-w-[1.5rem]">{number}.</span>
+                                      <span className="flex-1">{text}</span>
+                                    </div>
+                                  );
+                                  i++;
+                                  continue;
+                                }
+                                
+                                // Handle inline code (text within backticks)
+                                if (line.includes('`')) {
+                                  const parts = line.split(/(`[^`]+`)/);
+                                  result.push(
+                                    <p key={i} className="my-2 leading-relaxed">
+                                      {parts.map((part, partIndex) => 
+                                        part.startsWith('`') && part.endsWith('`') ? (
+                                          <code key={partIndex} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
+                                            {part.slice(1, -1)}
+                                          </code>
+                                        ) : (
+                                          <span key={partIndex}>{part}</span>
+                                        )
+                                      )}
+                                    </p>
+                                  );
+                                  i++;
+                                  continue;
+                                }
+                                
+                                // Handle empty lines
+                                if (line.trim() === '') {
+                                  result.push(<div key={i} className="h-3"></div>);
+                                  i++;
+                                  continue;
+                                }
+                                
+                                // Regular text paragraphs
+                                result.push(
+                                  <p key={i} className="my-2 leading-relaxed">
                                     {line}
                                   </p>
                                 );
+                                i++;
                               }
-                            })}
+                              
+                              return result;
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -2316,8 +2745,33 @@ Example with no number, category, or additional_info:
               </div>
             </>
           ) : (
-            <div className="w-full max-w-lg bg-white rounded-lg shadow-xl p-8 mb-8 text-center text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-              <p className="text-xl">No flashcards available in this category. Please add some or change filter.</p>
+            <div className="flex items-center justify-center w-full">
+              <div className="w-full max-w-lg bg-white rounded-lg shadow-xl p-8 mb-8 text-center text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                {(() => {
+                  // Check if there are cards in the selected category (ignoring due date filter)
+                  const cardsInCategory = selectedCategory === 'All' 
+                    ? flashcards 
+                    : flashcards.filter(card => card.category === selectedCategory);
+                  
+                  if (cardsInCategory.length === 0) {
+                    return (
+                      <div>
+                        <p className="text-xl mb-4">No flashcards available in this category.</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Please add some cards or change the category filter.</p>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div>
+                        <div className="text-6xl mb-4">🎉</div>
+                        <p className="text-xl mb-4 font-semibold text-green-600 dark:text-green-400">Congratulations!</p>
+                        <p className="text-lg mb-2">You've completed all cards due today!</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Check back tomorrow for more cards to review.</p>
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
             </div>
           )}
         </div>
@@ -2449,7 +2903,7 @@ Example with no number, category, or additional_info:
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-[400px] max-h-[90vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-black">Review Schedule</h2>
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Review Schedule</h2>
               <button
                 onClick={() => setShowCalendarModal(false)}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -2460,8 +2914,104 @@ Example with no number, category, or additional_info:
               </button>
             </div>
             <div className="p-4">
-              <Calendar calendarDates={calendarDates} onClose={() => setShowCalendarModal(false)} />
+              <Calendar calendarDates={calendarDates} onClose={() => setShowCalendarModal(false)} isDarkMode={isDarkMode} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generated Questions Modal */}
+      {showGeneratedQuestionsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-600">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Related Questions</h2>
+              <button
+                onClick={() => {
+                  setShowGeneratedQuestionsModal(false);
+                  setGeneratedQuestions([]);
+                }}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              {isGeneratingQuestions ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                  <span className="ml-3 text-gray-600 dark:text-gray-300">Generating related questions...</span>
+                </div>
+              ) : generatedQuestions.length > 0 ? (
+                <div>
+                  <p className="text-gray-600 dark:text-gray-300 mb-4">
+                    Select the questions you'd like to create new flashcards for:
+                  </p>
+                  <div className="space-y-3">
+                    {generatedQuestions.map((question) => (
+                      <div key={question.id} className="flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <input
+                          type="checkbox"
+                          id={`question-${question.id}`}
+                          checked={question.selected || false}
+                          onChange={() => handleGeneratedQuestionCheckboxChange(question.id)}
+                          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label
+                          htmlFor={`question-${question.id}`}
+                          className="flex-1 text-gray-800 dark:text-gray-200 cursor-pointer"
+                        >
+                          {question.text}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-600 dark:text-gray-300">No questions generated yet.</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            {generatedQuestions.length > 0 && !isGeneratingQuestions && (
+              <div className="flex justify-between items-center p-6 border-t border-gray-200 dark:border-gray-600">
+                <div className="text-sm text-gray-600 dark:text-gray-300">
+                  {generatedQuestions.filter(q => q.selected).length} of {generatedQuestions.length} selected
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowGeneratedQuestionsModal(false);
+                      setGeneratedQuestions([]);
+                    }}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenerateSelectedCards}
+                    disabled={isGeneratingSelectedCards || generatedQuestions.filter(q => q.selected).length === 0}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-medium transition-colors flex items-center space-x-2"
+                  >
+                    {isGeneratingSelectedCards ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Creating Cards...</span>
+                      </>
+                    ) : (
+                      <span>Create {generatedQuestions.filter(q => q.selected).length} Card(s)</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2500,6 +3050,99 @@ Example with no number, category, or additional_info:
             {/* Scrollable Content */}
             <div className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 80px)' }}>
               <div className="p-6 space-y-5">
+              {/* User Information Section */}
+              <section className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-purple-100 dark:border-gray-600">
+                <button
+                  onClick={() => setShowUserInfo(!showUserInfo)}
+                  className="flex justify-between items-center w-full focus:outline-none group"
+                >
+                  <div className="flex items-center">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg mr-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">Your Information</h3>
+                  </div>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-5 w-5 text-gray-500 dark:text-gray-400 transition-transform duration-300 ${
+                      showUserInfo ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showUserInfo && (
+                  <div className="mt-5">
+                    <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 p-6 rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm">
+                      {userId ? (
+                        <div className="space-y-4">
+                          {/* Login Name */}
+                          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-lg border border-purple-200 dark:border-purple-600">
+                            <div className="flex items-center">
+                              <div className="p-2 bg-purple-100 dark:bg-purple-800/80 rounded-full mr-3 ring-2 ring-purple-200 dark:ring-purple-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-600 dark:text-purple-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                              </div>
+                              <span className="text-gray-700 dark:text-gray-200 font-medium">Login Name</span>
+                            </div>
+                            <span className="text-purple-700 dark:text-purple-200 font-bold text-lg">{userDisplayName}</span>
+                          </div>
+
+                          {/* Total Cards */}
+                          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 rounded-lg border border-blue-200 dark:border-blue-600">
+                            <div className="flex items-center">
+                              <div className="p-2 bg-blue-100 dark:bg-blue-800/80 rounded-full mr-3 ring-2 ring-blue-200 dark:ring-blue-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-600 dark:text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                              </div>
+                              <span className="text-gray-700 dark:text-gray-200 font-medium">Total Cards</span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="text-blue-700 dark:text-blue-200 font-bold text-2xl mr-2">{flashcards.length}</span>
+                              <div className="px-3 py-1 bg-blue-100 dark:bg-blue-800/80 rounded-full ring-1 ring-blue-200 dark:ring-blue-700">
+                                <span className="text-blue-700 dark:text-blue-200 text-xs font-medium">cards</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* User ID */}
+                          <div className="p-4 bg-gradient-to-r from-gray-50 to-slate-50 dark:from-gray-800/60 dark:to-slate-800/60 rounded-lg border border-gray-200 dark:border-gray-600">
+                            <div className="flex items-center mb-3">
+                              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full mr-3 ring-2 ring-gray-200 dark:ring-gray-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-3a1 1 0 011-1h2.586l6.243-6.243C11.978 9.927 12 9.464 12 9a6 6 0 016-6z" />
+                                </svg>
+                              </div>
+                              <span className="text-gray-700 dark:text-gray-200 font-medium text-sm">User ID</span>
+                            </div>
+                            <span className="font-mono text-xs break-all bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded-md text-gray-800 dark:text-gray-100 block border border-gray-200 dark:border-gray-600">{userId}</span>
+                            <p className="text-gray-500 text-xs mt-2 dark:text-gray-400">
+                              🔒 This unique identifier securely stores your flashcards and settings
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center p-6 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/30 dark:to-orange-900/30 rounded-lg border border-red-200 dark:border-red-600">
+                          <div className="p-3 bg-red-100 dark:bg-red-800/80 rounded-full mr-3 ring-2 ring-red-200 dark:ring-red-700">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-600 dark:text-red-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                          </div>
+                          <span className="text-red-700 dark:text-red-200 font-semibold">Not logged in</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </section>
+
               {/* API Keys Configuration Section */}
               <section className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-blue-100 dark:border-gray-600">
                 <button
@@ -2800,52 +3443,6 @@ Example with no number, category, or additional_info:
                 )}
               </section>
 
-              {/* User Information Section */}
-              <section className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-purple-100 dark:border-gray-600">
-                <button
-                  onClick={() => setShowUserInfo(!showUserInfo)}
-                  className="flex justify-between items-center w-full focus:outline-none group"
-                >
-                  <div className="flex items-center">
-                    <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg mr-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">Your Information</h3>
-                  </div>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className={`h-5 w-5 text-gray-500 dark:text-gray-400 transition-transform duration-300 ${
-                      showUserInfo ? 'rotate-180' : ''
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {showUserInfo && (
-                  <div className="mt-5">
-                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-                      {userId ? (
-                        <>
-                          <p className="text-gray-700 dark:text-gray-300 mb-3">
-                            <strong>User ID:</strong> <span className="font-mono text-sm break-all bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{userId}</span>
-                          </p>
-                          <p className="text-gray-600 text-xs mb-4 dark:text-gray-400">
-                            This unique identifier is used to store your flashcards and settings securely.
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-gray-700 dark:text-gray-300">Not logged in.</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </section>
-
               {/* CSV Upload Guide Section */}
               <section className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-600">
                 <button
@@ -2858,7 +3455,7 @@ Example with no number, category, or additional_info:
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.586l6.243-6.243C11.978 9.927 12 9.464 12 9a6 6 0 016-6z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">CSV Upload Format Guide</h3>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">File Upload Format Guide</h3>
                   </div>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
