@@ -65,6 +65,10 @@ function App() {
   const [showGenerationPrompt, setShowGenerationPrompt] = useState(false); // State for Generation Prompt dropdown
   const [showApiKeys, setShowApiKeys] = useState(false); // State for API Keys dropdown
 
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState('csv'); // 'csv' or 'excel'
+
   // API Keys state
   const [apiKeys, setApiKeys] = useState({
     gemini: process.env.REACT_APP_GEMINI_API_KEY || '',
@@ -417,6 +421,12 @@ function App() {
         const appId = "flashcard-app-3f2a3"; // Hardcoding appId
         const now = new Date();
 
+        // Additional safety check for Firestore instance
+        if (!db) {
+          console.error('Database not properly initialized');
+          return;
+        }
+
         await addDoc(collection(db, `/artifacts/${appId}/users/${userId}/flashcards`), {
           question,
           answer,
@@ -483,24 +493,47 @@ function App() {
       let daysToAdd = 0;
       
       // Get the current interval from card data, or use default if first review
+      const isFirstReview = !cardData.interval || cardData.reviewCount === 0;
       const currentInterval = cardData.interval || 1;
       
-      switch (quality) {
-        case 1: // Again
-          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.againFactor));
-          break;
-        case 2: // Hard
-          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.hardFactor));
-          break;
-        case 3: // Good
-          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.goodFactor));
-          break;
-        case 4: // Easy
-          daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.easyFactor));
-          break;
-        default:
-          console.warn("Invalid quality rating:", quality);
-          return;
+      if (isFirstReview) {
+        // For first review, use fixed intervals based on quality
+        switch (quality) {
+          case 1: // Again - review again today
+            daysToAdd = 1;
+            break;
+          case 2: // Hard - review in 1 day
+            daysToAdd = 1;
+            break;
+          case 3: // Good - review in 3 days
+            daysToAdd = 3;
+            break;
+          case 4: // Easy - review in 7 days
+            daysToAdd = 7;
+            break;
+          default:
+            console.warn("Invalid quality rating:", quality);
+            return;
+        }
+      } else {
+        // For subsequent reviews, use FSRS factors
+        switch (quality) {
+          case 1: // Again
+            daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.againFactor));
+            break;
+          case 2: // Hard
+            daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.hardFactor));
+            break;
+          case 3: // Good
+            daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.goodFactor));
+            break;
+          case 4: // Easy
+            daysToAdd = Math.max(1, Math.round(currentInterval * fsrsParams.easyFactor));
+            break;
+          default:
+            console.warn("Invalid quality rating:", quality);
+            return;
+        }
       }
 
       nextReview.setDate(now.getDate() + daysToAdd);
@@ -508,7 +541,12 @@ function App() {
       nextReview.setHours(23, 59, 59, 999);
 
       console.log("Updating card with new values:", {
-        nextReview: nextReview
+        quality: quality,
+        isFirstReview: isFirstReview,
+        currentInterval: currentInterval,
+        daysToAdd: daysToAdd,
+        nextReview: nextReview,
+        fsrsParams: fsrsParams
       });
 
       // Update card in database with new interval and review data
@@ -522,10 +560,7 @@ function App() {
 
       console.log(`Card ${card.id} reviewed with quality ${quality}. Next review in ${daysToAdd} days.`);
       
-      // Update calendar dates to reflect the new review schedule
-      if (showCalendarModal) {
-        updateCalendarDates();
-      }
+      // Calendar will be updated automatically through the flashcards state change
       
       // Always move to next card after updating
       nextCard();
@@ -538,7 +573,7 @@ function App() {
         setAuthError(`Error updating flashcard: ${error.message}`);
       }
     }
-  }, [db, userId, settingsLoaded, nextCard, setAuthError]);
+  }, [db, userId, settingsLoaded, fsrsParams, nextCard]);
 
   // Function to get cards due on a specific date
   const getCardsDueOnDate = React.useCallback(async (date) => {
@@ -576,13 +611,25 @@ function App() {
         const reviewDate = new Date(nextReviewDate);
         reviewDate.setHours(0, 0, 0, 0);
         
-        if (isToday) {
-          // For today's date: include all cards due today or earlier (overdue)
-          return reviewDate.getTime() <= specifiedDate.getTime();
-        } else {
-          // For future dates: only include cards due exactly on that date
-          return reviewDate.getTime() === specifiedDate.getTime();
+        const isDue = isToday ? 
+          reviewDate.getTime() <= specifiedDate.getTime() : 
+          reviewDate.getTime() === specifiedDate.getTime();
+        
+        // Debug logging for Easy button testing
+        if (card.lastQuality === 4) {
+          console.log(`Calendar check - Easy card (quality 4):`, {
+            cardId: doc.id,
+            lastQuality: card.lastQuality,
+            nextReview: nextReviewDate,
+            reviewDate: reviewDate,
+            specifiedDate: specifiedDate,
+            isToday: isToday,
+            isDue: isDue,
+            timeDiff: reviewDate.getTime() - specifiedDate.getTime()
+          });
         }
+        
+        return isDue;
       });
       
       return dueCards.length;
@@ -623,10 +670,10 @@ function App() {
 
   // Effect to update calendar when cards change or when calendar modal is shown
   useEffect(() => {
-    if (db && userId && showCalendarModal) {
+    if (db && userId) {
       updateCalendarDates();
     }
-  }, [db, userId, showCalendarModal, updateCalendarDates, flashcards]);
+  }, [db, userId, updateCalendarDates, flashcards]);
 
   // Keyboard shortcuts for navigation
   useEffect(() => {
@@ -769,8 +816,49 @@ function App() {
     
     // Get and process rows
     const rows = getRows(csvString);
+    console.log('Total rows found:', rows.length);
+    console.log('First few rows:', rows.slice(0, 3));
+    
+    // Analyze header row to determine column structure
+    const headerRow = rows[0];
+    const headerFields = parseRow(headerRow);
+    console.log('Header fields:', headerFields);
+    
+    // Detect if ID column is present by checking header content and column count
+    const hasIdColumn = detectIdColumn(headerFields);
+    console.log('ID column detected:', hasIdColumn);
+    
     rows.shift(); // Remove header row (first row is headers)
+    console.log('Rows after removing header:', rows.length);
     const cards = [];
+    
+    // Helper function to detect if ID column is present
+    function detectIdColumn(headers) {
+      // Method 1: Check if first column header suggests an ID
+      const firstHeader = headers[0]?.toLowerCase().trim();
+      const idKeywords = ['id', 'cardid', 'card_id', 'flashcard_id', 'uid'];
+      const isIdHeader = idKeywords.some(keyword => firstHeader?.includes(keyword));
+      
+      // Method 2: Check column count (6 columns suggests ID column, 5 suggests no ID)
+      const hasEnoughColumns = headers.length >= 6;
+      
+      // Method 3: Check if first column contains ID-like values (check first data row)
+      const firstDataRow = rows[1] ? parseRow(rows[1]) : [];
+      const firstValue = firstDataRow[0]?.trim();
+      const looksLikeId = /^[a-zA-Z0-9_-]+$/.test(firstValue) && firstValue.length > 3;
+      
+      console.log('ID detection analysis:', {
+        firstHeader,
+        isIdHeader,
+        columnCount: headers.length,
+        hasEnoughColumns,
+        firstValue,
+        looksLikeId
+      });
+      
+      // Return true if any strong indicator suggests ID column
+      return isIdHeader || (hasEnoughColumns && looksLikeId);
+    }
     
     rows.forEach((row, index) => {
       if (!row.trim()) return; // Skip empty rows
@@ -778,14 +866,29 @@ function App() {
       const fields = parseRow(row);
       while (fields.length < 6) fields.push('');
       
-      const id = fields[0].trim();
-      const csvNumber = fields[1].trim();
-      const category = fields[2].trim() || 'Uncategorized';
-      const question = fields[3]; // Don't trim to preserve formatting
-      const answer = fields[4];   // Don't trim to preserve formatting
-      const additional_info = fields[5]; // Don't trim to preserve formatting
+      // Map columns based on whether ID column is present
+      let id, csvNumber, category, question, answer, additional_info;
+      
+      if (hasIdColumn) {
+        // Format: ID, Number, Category, Question, Answer, Additional Info
+        id = fields[0]?.trim() || null;
+        csvNumber = fields[1]?.trim() || null;
+        category = fields[2]?.trim() || 'Uncategorized';
+        question = fields[3]; // Don't trim to preserve formatting
+        answer = fields[4];   // Don't trim to preserve formatting
+        additional_info = fields[5]; // Don't trim to preserve formatting
+      } else {
+        // Format: Number, Category, Question, Answer, Additional Info (no ID)
+        id = null;
+        csvNumber = fields[0]?.trim() || null;
+        category = fields[1]?.trim() || 'Uncategorized';
+        question = fields[2]; // Don't trim to preserve formatting
+        answer = fields[3];   // Don't trim to preserve formatting
+        additional_info = fields[4]; // Don't trim to preserve formatting
+      }
       
       if (question && answer) {
+        console.log(`Processing row ${index + 1}:`, { question: question.substring(0, 50), answer: answer.substring(0, 50) });
         cards.push({
           id: id || null,
           csvNumber: csvNumber || null,
@@ -795,13 +898,16 @@ function App() {
           additional_info: additional_info || null,
         });
       } else {
-        console.warn(`Skipping row ${index + 1} due to missing Question or Answer`);
+        console.warn(`Skipping row ${index + 1} due to missing Question or Answer. Question: "${question}", Answer: "${answer}"`);
       }
     });
 
     // Validate that we parsed some cards
     if (cards.length === 0) {
-      throw new Error('No valid flashcards found in CSV. Please check that your file has the correct format: id,number,category,question,answer,additional_info');
+      const formatExample = hasIdColumn 
+        ? 'id,number,category,question,answer,additional_info' 
+        : 'number,category,question,answer,additional_info';
+      throw new Error(`No valid flashcards found in CSV. Please check that your file has the correct format: ${formatExample}`);
     }
     
     return cards;
@@ -817,7 +923,7 @@ function App() {
     }
   };
 
-  // Function to parse Excel file
+  // Function to parse Excel file with rich formatting preservation
   const parseExcel = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -826,27 +932,115 @@ function App() {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { 
             type: 'array', 
-            cellText: true, 
+            cellText: false,
             cellFormula: false,
-            cellHTML: false,
-            cellStyles: true,
-            raw: false
+            cellHTML: true,    // Enable HTML to capture formatting
+            cellStyles: true,  // Enable styles
+            raw: false,
+            cellDates: true,
+            sheetStubs: true
           });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           
-          // Get the range and access cells directly to preserve exact formatting
+          // Helper function to decode HTML entities
+          const decodeHtmlEntities = (text) => {
+            if (!text) return '';
+            // Ensure text is a string
+            const str = String(text);
+            return str
+              .replace(/&nbsp;/gi, ' ')                            // Non-breaking spaces
+              .replace(/&amp;/gi, '&')                             // Ampersands
+              .replace(/&lt;/gi, '<')                              // Less than
+              .replace(/&gt;/gi, '>')                              // Greater than
+              .replace(/&quot;/gi, '"')                           // Quotes
+              .replace(/&apos;/gi, "'")                           // Apostrophes
+              .replace(/&#x000[dD];/gi, '\n')                     // Carriage return (hex)
+              .replace(/&#13;/gi, '\n')                           // Carriage return (decimal)
+              .replace(/&#x000[aA];/gi, '\n')                     // Line feed (hex)
+              .replace(/&#10;/gi, '\n')                           // Line feed (decimal)
+              .replace(/&#x0009;/gi, '\t')                        // Tab (hex)
+              .replace(/&#9;/gi, '\t');                           // Tab (decimal)
+          };
+
+          // Helper function to extract rich text content with formatting
+          const extractRichContent = (cell) => {
+            if (!cell) return '';
+            
+            try {
+              // If cell has rich text (formatted text), process it
+            if (cell.r && Array.isArray(cell.r)) {
+              let richText = '';
+              for (const run of cell.r) {
+                let text = decodeHtmlEntities(run.t || run.v || '');
+                
+                // Apply formatting based on font properties
+                if (run.rPr) {
+                  if (run.rPr.b) text = `**${text}**`; // Bold
+                  if (run.rPr.i) text = `*${text}*`;   // Italic
+                  if (run.rPr.u) text = `<u>${text}</u>`; // Underline
+                  if (run.rPr.strike) text = `~~${text}~~`; // Strikethrough
+                  
+                  // Handle colors
+                  if (run.rPr.color && run.rPr.color.rgb) {
+                    const color = run.rPr.color.rgb;
+                    text = `<span style="color: #${color}">${text}</span>`;
+                  }
+                  
+                  // Handle font size
+                  if (run.rPr.sz) {
+                    const size = run.rPr.sz;
+                    if (size > 14) text = `### ${text}`;
+                    else if (size > 12) text = `## ${text}`;
+                  }
+                }
+                
+                richText += text;
+              }
+              return richText;
+            }
+            
+            // If no rich text, check for HTML content
+            if (cell.h) {
+              // Convert HTML formatting to markdown
+              let html = cell.h;
+              
+              // Convert HTML tags to markdown
+              html = html
+                .replace(/<b\b[^>]*>(.*?)<\/b>/gi, '**$1**')         // Bold
+                .replace(/<strong\b[^>]*>(.*?)<\/strong>/gi, '**$1**') // Strong
+                .replace(/<i\b[^>]*>(.*?)<\/i>/gi, '*$1*')           // Italic
+                .replace(/<em\b[^>]*>(.*?)<\/em>/gi, '*$1*')         // Emphasis
+                .replace(/<u\b[^>]*>(.*?)<\/u>/gi, '<u>$1</u>')     // Underline
+                .replace(/<strike\b[^>]*>(.*?)<\/strike>/gi, '~~$1~~') // Strikethrough
+                .replace(/<br\s*\/?>/gi, '\n')                       // Line breaks
+                .replace(/<[^>]+>/gi, '');                           // Remove remaining HTML tags
+              
+              return decodeHtmlEntities(html);
+            }
+            
+            // Fallback to formatted text or raw value
+            return decodeHtmlEntities(cell.w || cell.v || '');
+            } catch (error) {
+              console.error('Error processing cell content:', error);
+              // Return a safe fallback
+              return String(cell.w || cell.v || '');
+            }
+          };
+          
+          // Get the range and access cells directly
           const range = XLSX.utils.decode_range(firstSheet['!ref']);
           const rawData = [];
           
           for (let row = 0; row <= range.e.r; row++) {
             const rowData = [];
-            for (let col = 0; col <= Math.min(4, range.e.c); col++) {
+            for (let col = 0; col <= Math.min(5, range.e.c); col++) { // Include up to 6 columns (0-5)
               const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
               const cell = firstSheet[cellAddress];
               
               if (cell) {
-                // Use the formatted text value (w) which preserves Excel's display formatting
-                rowData[col] = cell.w || cell.v || '';
+                // Extract rich content with formatting
+                const content = extractRichContent(cell);
+                rowData[col] = content;
               } else {
                 rowData[col] = '';
               }
@@ -854,32 +1048,86 @@ function App() {
             rawData.push(rowData);
           }
           
-          const jsonData = rawData;
+          console.log('Enhanced Excel data with formatting:', rawData); // Debug logging
           
-          console.log('Raw Excel data:', jsonData); // Debug logging
+          // Analyze header row to determine column structure
+          const headerRow = rawData[0] || [];
+          console.log('Excel header row:', headerRow);
+          
+          // Detect if ID column is present
+          const hasIdColumn = detectIdColumn(headerRow);
+          console.log('Excel ID column detected:', hasIdColumn);
+          
+          // Helper function to detect if ID column is present
+          function detectIdColumn(headers) {
+            // Method 1: Check if first column header suggests an ID
+            const firstHeader = headers[0]?.toLowerCase?.().trim() || String(headers[0] || '').toLowerCase().trim();
+            const idKeywords = ['id', 'cardid', 'card_id', 'flashcard_id', 'uid'];
+            const isIdHeader = idKeywords.some(keyword => firstHeader?.includes(keyword));
+            
+            // Method 2: Check column count (6 columns suggests ID column, 5 suggests no ID)
+            const hasEnoughColumns = headers.length >= 6;
+            
+            // Method 3: Check if first column contains ID-like values (check first data row)
+            const firstDataRow = rawData[1] || [];
+            const firstValue = String(firstDataRow[0] || '').trim();
+            const looksLikeId = /^[a-zA-Z0-9_-]+$/.test(firstValue) && firstValue.length > 3;
+            
+            console.log('Excel ID detection analysis:', {
+              firstHeader,
+              isIdHeader,
+              columnCount: headers.length,
+              hasEnoughColumns,
+              firstValue,
+              looksLikeId
+            });
+            
+            // Return true if any strong indicator suggests ID column
+            return isIdHeader || (hasEnoughColumns && looksLikeId);
+          }
           
           const cards = [];
           
-          // Helper function to get complete cell content
-          const getCompleteContent = (cellValue) => {
-            if (cellValue === null || cellValue === undefined) return '';
-            return String(cellValue);
+          // Helper function to preserve exact formatting
+          const preserveFormatting = (content) => {
+            if (!content) return '';
+            
+            // Preserve all spacing, tabs, and line breaks exactly as they are
+            return String(content)
+              .replace(/\t/g, '    ')  // Convert tabs to 4 spaces for consistency
+              .replace(/\r\n/g, '\n')  // Normalize line endings
+              .replace(/\r/g, '\n');   // Handle Mac line endings
           };
           
           // Process rows and group them into complete flashcards
           let currentCard = null;
           
-          for (let i = 1; i < jsonData.length; i++) {
-            const row = jsonData[i];
+          for (let i = 1; i < rawData.length; i++) {
+            const row = rawData[i];
             if (!row || row.length === 0) continue;
             
-            console.log(`Processing row ${i}:`, row); // Debug logging
+            console.log(`Processing enhanced row ${i}:`, row); // Debug logging
             
-            const csvNumber = getCompleteContent(row[0]);
-            const category = getCompleteContent(row[1]);
-            const question = getCompleteContent(row[2]);
-            const answer = getCompleteContent(row[3]);
-            const additional_info = getCompleteContent(row[4]);
+            // Map columns based on whether ID column is present
+            let id, csvNumber, category, question, answer, additional_info;
+            
+            if (hasIdColumn) {
+              // Format: ID, Number, Category, Question, Answer, Additional Info
+              id = preserveFormatting(row[0]);
+              csvNumber = preserveFormatting(row[1]);
+              category = preserveFormatting(row[2]);
+              question = preserveFormatting(row[3]);
+              answer = preserveFormatting(row[4]);
+              additional_info = preserveFormatting(row[5]);
+            } else {
+              // Format: Number, Category, Question, Answer, Additional Info (no ID)
+              id = null;
+              csvNumber = preserveFormatting(row[0]);
+              category = preserveFormatting(row[1]);
+              question = preserveFormatting(row[2]);
+              answer = preserveFormatting(row[3]);
+              additional_info = preserveFormatting(row[4]);
+            }
             
             // Check if this is a new flashcard (has csvNumber and question) or continuation of previous
             if (csvNumber && question) {
@@ -888,8 +1136,9 @@ function App() {
                 cards.push(currentCard);
               }
               
-              // Start new flashcard
+              // Start new flashcard with preserved formatting
               currentCard = {
+                id: id ? id.trim() : null,
                 csvNumber: csvNumber,
                 category: category ? category.trim() : 'Uncategorized',
                 question: question,
@@ -897,18 +1146,15 @@ function App() {
                 additional_info: additional_info || null,
               };
               
-              console.log(`New flashcard started: ${question.substring(0, 100)}...`);
+              console.log(`New formatted flashcard started: ${question.substring(0, 100)}...`);
             } else if (currentCard && answer) {
-              // This is a continuation row - append to current card's answer with proper spacing
-              // Preserve existing spacing and only add newline if answer doesn't start with whitespace
-              const separator = answer.match(/^\s/) ? '' : '\n';
-              currentCard.answer += separator + answer;
+              // This is a continuation row - preserve exact spacing and formatting
+              currentCard.answer += '\n' + answer;
               
               // Also append additional_info if present
               if (additional_info) {
                 if (currentCard.additional_info) {
-                  const infoSeparator = additional_info.match(/^\s/) ? '' : '\n';
-                  currentCard.additional_info += infoSeparator + additional_info;
+                  currentCard.additional_info += '\n' + additional_info;
                 } else {
                   currentCard.additional_info = additional_info;
                 }
@@ -972,7 +1218,7 @@ function App() {
           
           for (let row = 0; row <= range.e.r; row++) {
             const rowData = [];
-            for (let col = 0; col <= Math.min(4, range.e.c); col++) {
+            for (let col = 0; col <= Math.min(5, range.e.c); col++) { // Include up to 6 columns (0-5)
               const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
               const cell = firstSheet[cellAddress];
               
@@ -990,12 +1236,68 @@ function App() {
           
           console.log('Raw Numbers data:', jsonData); // Debug logging
           
+          // Analyze header row to determine column structure
+          const headerRow = jsonData[0] || [];
+          console.log('Numbers header row:', headerRow);
+          
+          // Detect if ID column is present
+          const hasIdColumn = detectIdColumn(headerRow);
+          console.log('Numbers ID column detected:', hasIdColumn);
+          
+          // Helper function to detect if ID column is present
+          function detectIdColumn(headers) {
+            // Method 1: Check if first column header suggests an ID
+            const firstHeader = String(headers[0] || '').toLowerCase().trim();
+            const idKeywords = ['id', 'cardid', 'card_id', 'flashcard_id', 'uid'];
+            const isIdHeader = idKeywords.some(keyword => firstHeader?.includes(keyword));
+            
+            // Method 2: Check column count (6 columns suggests ID column, 5 suggests no ID)
+            const hasEnoughColumns = headers.length >= 6;
+            
+            // Method 3: Check if first column contains ID-like values (check first data row)
+            const firstDataRow = jsonData[1] || [];
+            const firstValue = String(firstDataRow[0] || '').trim();
+            const looksLikeId = /^[a-zA-Z0-9_-]+$/.test(firstValue) && firstValue.length > 3;
+            
+            console.log('Numbers ID detection analysis:', {
+              firstHeader,
+              isIdHeader,
+              columnCount: headers.length,
+              hasEnoughColumns,
+              firstValue,
+              looksLikeId
+            });
+            
+            // Return true if any strong indicator suggests ID column
+            return isIdHeader || (hasEnoughColumns && looksLikeId);
+          }
+          
           const cards = [];
           
+          // Helper function to decode HTML entities
+          const decodeHtmlEntities = (text) => {
+            if (!text) return '';
+            // Ensure text is a string
+            const str = String(text);
+            return str
+              .replace(/&nbsp;/gi, ' ')                            // Non-breaking spaces
+              .replace(/&amp;/gi, '&')                             // Ampersands
+              .replace(/&lt;/gi, '<')                              // Less than
+              .replace(/&gt;/gi, '>')                              // Greater than
+              .replace(/&quot;/gi, '"')                           // Quotes
+              .replace(/&apos;/gi, "'")                           // Apostrophes
+              .replace(/&#x000[dD];/gi, '\n')                     // Carriage return (hex)
+              .replace(/&#13;/gi, '\n')                           // Carriage return (decimal)
+              .replace(/&#x000[aA];/gi, '\n')                     // Line feed (hex)
+              .replace(/&#10;/gi, '\n')                           // Line feed (decimal)
+              .replace(/&#x0009;/gi, '\t')                        // Tab (hex)
+              .replace(/&#9;/gi, '\t');                           // Tab (decimal)
+          };
+
           // Helper function to get complete cell content
           const getCompleteContent = (cellValue) => {
             if (cellValue === null || cellValue === undefined) return '';
-            return String(cellValue);
+            return decodeHtmlEntities(String(cellValue));
           };
           
           // Process rows and group them into complete flashcards
@@ -1007,11 +1309,26 @@ function App() {
             
             console.log(`Processing Numbers row ${i}:`, row); // Debug logging
             
-            const csvNumber = getCompleteContent(row[0]);
-            const category = getCompleteContent(row[1]);
-            const question = getCompleteContent(row[2]);
-            const answer = getCompleteContent(row[3]);
-            const additional_info = getCompleteContent(row[4]);
+            // Map columns based on whether ID column is present
+            let id, csvNumber, category, question, answer, additional_info;
+            
+            if (hasIdColumn) {
+              // Format: ID, Number, Category, Question, Answer, Additional Info
+              id = getCompleteContent(row[0]);
+              csvNumber = getCompleteContent(row[1]);
+              category = getCompleteContent(row[2]);
+              question = getCompleteContent(row[3]);
+              answer = getCompleteContent(row[4]);
+              additional_info = getCompleteContent(row[5]);
+            } else {
+              // Format: Number, Category, Question, Answer, Additional Info (no ID)
+              id = null;
+              csvNumber = getCompleteContent(row[0]);
+              category = getCompleteContent(row[1]);
+              question = getCompleteContent(row[2]);
+              answer = getCompleteContent(row[3]);
+              additional_info = getCompleteContent(row[4]);
+            }
             
             // Check if this is a new flashcard (has csvNumber and question) or continuation of previous
             if (csvNumber && question) {
@@ -1022,6 +1339,7 @@ function App() {
               
               // Start new flashcard
               currentCard = {
+                id: id ? id.trim() : null,
                 csvNumber: csvNumber,
                 category: category ? category.trim() : 'Uncategorized',
                 question: question,
@@ -1176,6 +1494,12 @@ function App() {
             const appId = "flashcard-app-3f2a3";
             const now = new Date();
 
+            // Additional safety check for Firestore instance
+            if (!db) {
+              console.error('Database not properly initialized during upload');
+              continue;
+            }
+
             // Sanitize the data to prevent Firestore path issues
             const sanitizedData = {
               question: sanitizeText(cardData.question),
@@ -1257,6 +1581,18 @@ function App() {
     }
     setUploadMessage(message);
     
+    // If cards were successfully added, close the upload modal and navigate to first new card
+    if (totalCardsAdded > 0 && !errorsFound) {
+      // Wait briefly to show success message
+      setTimeout(() => {
+        setShowUploadCsvForm(false); // Close upload modal
+        setCurrentCardIndex(0); // Go to first card (which should include new ones)
+        setShowAnswer(false); // Show question side first
+        setUploadMessage(''); // Clear upload message
+        setUploadError(''); // Clear any errors
+      }, 2000); // Show success message for 2 seconds
+    }
+    
     setSelectedUploadFiles([]); // Clear selected files after upload attempt
     if (fileInputRef.current) fileInputRef.current.value = ''; // Clear file input visual
   };
@@ -1269,46 +1605,20 @@ function App() {
       return;
     }
 
-    if (!checkApiKeys()) {
-      newCardAnswerRef.current.value = "Please configure your API keys in the .env file.";
-      return;
-    }
-
     setIsGeneratingAnswer(true);
     try {
-      let chatHistory = [];
-      const prompt = `Provide a concise and accurate answer for the Java flashcard question: "${question}"`;
-      chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-
-      const payload = { contents: chatHistory };
-      const apiKey = apiKeys.gemini;
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-      if (result.candidates && result.candidates.length > 0 &&
-          result.candidates[0].content && result.candidates[0].content.parts &&
-          result.candidates[0].content.parts.length > 0) {
-        const text = result.candidates[0].content.parts[0].text;
-        newCardAnswerRef.current.value = text.trim();
-      } else {
-        console.error("Gemini API response did not contain expected text:", result);
-        newCardAnswerRef.current.value = "Error generating answer. Please try again.";
-      }
+      const prompt = `Provide a concise and accurate answer for the flashcard question: "${question}"`;
+      const text = await callAI(prompt);
+      newCardAnswerRef.current.value = text.trim();
     } catch (error) {
-      console.error("Error calling Gemini API:", error);
-      newCardAnswerRef.current.value = "Error generating answer. Please check your API key and try again.";
+      console.error("Error generating answer:", error);
+      newCardAnswerRef.current.value = `Error generating answer: ${error.message}`;
     } finally {
       setIsGeneratingAnswer(false);
     }
   };
 
-  // Function to handle generating code example using Gemini API
+  // Function to handle generating code example using AI API
   const handleGenerateExample = async (question, answer) => {
     if (!question || !answer) {
       console.log("Question and Answer are required to generate an example.");
@@ -1319,47 +1629,22 @@ function App() {
     setGeneratedExample(''); // Clear previous example
 
     try {
-      let chatHistory = [];
-      const prompt = `Provide a concise Java code example or a clear real-world scenario that illustrates the concept from this flashcard. 
+      const prompt = `Provide a concise code example or a clear real-world scenario that illustrates the concept from this flashcard. 
       Question: "${question}"
       Answer: "${answer}"
       Focus on providing a direct, illustrative example. Output only the example, no conversational text.`;
-      chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-
-      const payload = { contents: chatHistory };
-      const apiKey = apiKeys.gemini;
-      if (!apiKey) {
-        console.error("Gemini API key not configured");
-        setGeneratedExample("Please configure your Gemini API key in Settings.");
-        return;
-      }
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-      if (result.candidates && result.candidates.length > 0 &&
-          result.candidates[0].content && result.candidates[0].content.parts &&
-          result.candidates[0].content.parts.length > 0) {
-        const text = result.candidates[0].content.parts[0].text;
-        setGeneratedExample(text.trim()); // Store the generated example
-      } else {
-        console.error("Gemini API response for example did not contain expected text:", result);
-        setGeneratedExample("Could not generate example. Please try again.");
-      }
+      
+      const text = await callAI(prompt);
+      setGeneratedExample(text.trim()); // Store the generated example
     } catch (error) {
-      console.error("Error calling Gemini API for example:", error);
-      setGeneratedExample("Error generating example. Check console for details.");
+      console.error("Error generating example:", error);
+      setGeneratedExample(`Error generating example: ${error.message}`);
     } finally {
       setIsGeneratingExample(false);
     }
   };
 
-  // Function to handle generating related questions using Gemini API
+  // Function to handle generating related questions using AI API
   const handleGenerateQuestions = async (question, answer) => {
     if (!question || !answer) {
       console.log("Question and Answer are required to generate related questions.");
@@ -1370,47 +1655,20 @@ function App() {
     setGeneratedQuestions([]); // Clear previous questions before generating
 
     try {
-      let chatHistory = [];
-      const prompt = `Based on the following Java flashcard:\nQuestion: "${question}"\nAnswer: "${answer}"\n\nGenerate 3-5 concise, related follow-up questions to test deeper understanding. Provide them as a numbered list.`;
-      chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-
-      const payload = { contents: chatHistory };
-      const apiKey = apiKeys.gemini;
-      if (!apiKey) {
-        console.error("Gemini API key not configured");
-        setGeneratedQuestions([{ id: 'error', text: "Please configure your Gemini API key in Settings.", selected: false }]);
-        setShowGeneratedQuestionsModal(true);
-        return;
-      }
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-      if (result.candidates && result.candidates.length > 0 &&
-          result.candidates[0].content && result.candidates[0].content.parts &&
-          result.candidates[0].content.parts.length > 0) {
-        const text = result.candidates[0].content.parts[0].text;
-        // Simple parsing for numbered list, adjust as needed for robust parsing
-        const questionsArray = text.split('\n').filter(line => line.match(/^\d+\./)).map(line => ({
-            id: crypto.randomUUID(), // Unique ID for each generated question
-            text: line.replace(/^\d+\.\s*/, '').trim(),
-            selected: true // Default to selected
-        }));
-        setGeneratedQuestions(questionsArray);
-        setShowGeneratedQuestionsModal(true); // Open the modal
-      } else {
-        console.error("Gemini API response for questions did not contain expected text:", result);
-        setGeneratedQuestions([{ id: 'error', text: "Could not generate questions. Please try again.", selected: false }]);
-        setShowGeneratedQuestionsModal(true); // Open modal even on error to show message
-      }
+      const prompt = `Based on the following flashcard:\nQuestion: "${question}"\nAnswer: "${answer}"\n\nGenerate 3-5 concise, related follow-up questions to test deeper understanding. Provide them as a numbered list.`;
+      
+      const text = await callAI(prompt);
+      // Simple parsing for numbered list, adjust as needed for robust parsing
+      const questionsArray = text.split('\n').filter(line => line.match(/^\d+\./)).map(line => ({
+          id: crypto.randomUUID(), // Unique ID for each generated question
+          text: line.replace(/^\d+\.\s*/, '').trim(),
+          selected: true // Default to selected
+      }));
+      setGeneratedQuestions(questionsArray);
+      setShowGeneratedQuestionsModal(true); // Open the modal
     } catch (error) {
-      console.error("Error calling Gemini API for questions:", error);
-      setGeneratedQuestions([{ id: 'error', text: "Error generating questions. Check console for details.", selected: false }]);
+      console.error("Error generating questions:", error);
+      setGeneratedQuestions([{ id: 'error', text: `Error generating questions: ${error.message}`, selected: false }]);
       setShowGeneratedQuestionsModal(true); // Open modal even on error to show message
     } finally {
       setIsGeneratingQuestions(false);
@@ -1442,34 +1700,23 @@ function App() {
     const now = new Date();
     const currentCategory = filteredFlashcards[currentCardIndex]?.category || 'Uncategorized';
 
+    // Additional safety check for Firestore instance
+    if (!db) {
+      console.error('Database not properly initialized during question generation');
+      setIsGeneratingSelectedCards(false);
+      return;
+    }
+
     for (const qData of selectedQ) {
       try {
         // Generate answer for the new question
         let answerText = "";
         try {
-          const currentApiKey = apiKeys[selectedApiProvider];
-          if (!currentApiKey) {
-            answerText = "API key not configured for answer generation.";
-          } else {
-            const chatHistory = [{ role: "user", parts: [{ text: `Provide a concise answer for the flashcard question: "${qData.text}"` }] }];
-            const payload = { contents: chatHistory };
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
-            const response = await fetch(apiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
-            });
-            const result = await response.json();
-            if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
-              answerText = result.candidates[0].content.parts[0].text.trim();
-            } else {
-              console.warn(`Could not generate answer for question: ${qData.text}`);
-              answerText = "Answer could not be generated.";
-            }
-          }
+          const prompt = `Provide a concise answer for the flashcard question: "${qData.text}"`;
+          answerText = await callAI(prompt);
         } catch (apiError) {
           console.error(`Error generating answer for question "${qData.text}":`, apiError);
-          answerText = "Error generating answer.";
+          answerText = `Error generating answer: ${apiError.message}`;
         }
 
         await addDoc(collection(db, `/artifacts/${appId}/users/${userId}/flashcards`), {
@@ -1507,38 +1754,13 @@ function App() {
     setGeminiExplanation(''); // Clear previous explanation
 
     try {
-      let chatHistory = [];
-      const prompt = `Explain the core concept or provide more context for the following Java flashcard:\nQuestion: "${question}"\nAnswer: "${answer}"\n\nKeep the explanation concise and beginner-friendly.`;
-      chatHistory.push({ role: "user", parts: [{ text: prompt }] });
-
-      const payload = { contents: chatHistory };
-      const apiKey = apiKeys.gemini;
-      if (!apiKey) {
-        console.error("Gemini API key not configured");
-        setGeminiExplanation("Please configure your Gemini API key in Settings.");
-        return;
-      }
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      const result = await response.json();
-      if (result.candidates && result.candidates.length > 0 &&
-          result.candidates[0].content && result.candidates[0].content.parts &&
-          result.candidates[0].content.parts.length > 0) {
-        const text = result.candidates[0].content.parts[0].text;
-        setGeminiExplanation(text.trim()); // Store the generated explanation
-      } else {
-        console.error("Gemini API response for explanation did not contain expected text:", result);
-        setGeminiExplanation("Could not generate explanation. Please try again.");
-      }
+      const prompt = `Explain the core concept or provide more context for the following flashcard:\nQuestion: "${question}"\nAnswer: "${answer}"\n\nKeep the explanation concise and beginner-friendly.`;
+      
+      const text = await callAI(prompt);
+      setGeminiExplanation(text.trim()); // Store the generated explanation
     } catch (error) {
-      console.error("Error calling Gemini API for explanation:", error);
-      setGeminiExplanation("Error generating explanation. Check console for details.");
+      console.error("Error generating explanation:", error);
+      setGeminiExplanation(`Error generating explanation: ${error.message}`);
     } finally {
       setIsExplainingConcept(false);
     }
@@ -1575,12 +1797,365 @@ function App() {
         additional_info: updatedAdditionalInfo,
       });
       console.log(`Card ${editCardData.id} updated successfully!`);
+      
+      // Find the index of the updated card in the current filtered flashcards
+      const updatedCardIndex = filteredFlashcards.findIndex(card => card.id === editCardData.id);
+      if (updatedCardIndex !== -1) {
+        setCurrentCardIndex(updatedCardIndex);
+      }
+      
+      // Reset the answer view to show the question first
+      setShowAnswer(false);
+      
       setIsEditingCard(false); // Exit edit mode
       setEditCardData(null); // Clear edit data
       setGeneratedQuestions([]); // Clear generated questions after saving
     } catch (error) {
       console.error("Error updating flashcard:", error);
     }
+  };
+
+  // Unified API calling function for different providers
+  const callAI = async (prompt, provider = selectedApiProvider) => {
+    const apiKey = apiKeys[provider];
+    if (!apiKey) {
+      throw new Error(`API key not configured for ${provider}`);
+    }
+
+    try {
+      switch (provider) {
+        case 'anthropic':
+          const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: 'claude-3-5-sonnet-20241022',
+              max_tokens: 2000,
+              messages: [
+                {
+                  role: 'user',
+                  content: prompt
+                }
+              ]
+            })
+          });
+
+          if (!anthropicResponse.ok) {
+            const error = await anthropicResponse.json();
+            throw new Error(`Anthropic API error: ${error.error?.message || anthropicResponse.statusText}`);
+          }
+
+          const anthropicResult = await anthropicResponse.json();
+          return anthropicResult.content[0].text;
+
+        case 'gemini':
+        default:
+          const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+          const payload = { contents: chatHistory };
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+          
+          const geminiResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!geminiResponse.ok) {
+            throw new Error(`Gemini API error: ${geminiResponse.statusText}`);
+          }
+
+          const geminiResult = await geminiResponse.json();
+          if (geminiResult.candidates && geminiResult.candidates.length > 0 &&
+              geminiResult.candidates[0].content && geminiResult.candidates[0].content.parts &&
+              geminiResult.candidates[0].content.parts.length > 0) {
+            return geminiResult.candidates[0].content.parts[0].text;
+          } else {
+            throw new Error('No valid response from Gemini API');
+          }
+      }
+    } catch (error) {
+      console.error(`API call failed for ${provider}:`, error);
+      throw error;
+    }
+  };
+
+  // Function to format answer for better readability
+  const handleFormatAnswer = () => {
+    if (!editAnswerRef.current) return;
+    
+    const currentAnswer = editAnswerRef.current.value;
+    if (!currentAnswer.trim()) return;
+    
+    // Enhanced formatting function
+    const formatAnswer = (text) => {
+      const lines = text.split('\n');
+      const result = [];
+      let inCodeBlock = false;
+      let codeBuffer = [];
+      let currentLanguage = '';
+      
+      // Helper function to detect programming language
+      const detectLanguage = (content) => {
+        const combined = Array.isArray(content) ? content.join('\n') : content;
+        
+        // Java detection - check for Java-specific patterns first
+        if (combined.includes('public class') || 
+            combined.includes('System.out') || 
+            combined.includes('@Override') || 
+            combined.includes('@Component') ||
+            combined.includes('@Service') ||
+            combined.includes('@Repository') ||
+            combined.includes('void ') || 
+            combined.includes('String ') ||
+            combined.includes('public static') ||
+            combined.includes('private ') ||
+            combined.includes('protected ') ||
+            combined.match(/\b(int|boolean|double|float|long|short|byte|char)\s+\w+/)) {
+          return 'java';
+        }
+        
+        // Python detection
+        if (combined.includes('def ') || 
+            combined.includes('import ') && combined.includes('from ') || 
+            combined.includes('print(') ||
+            combined.includes('if __name__') ||
+            combined.includes('self.') ||
+            combined.includes('elif ')) {
+          return 'python';
+        }
+        
+        // C++ detection
+        if (combined.includes('#include') || 
+            combined.includes('std::') || 
+            combined.includes('int main') ||
+            combined.includes('cout <<') ||
+            combined.includes('cin >>')) {
+          return 'cpp';
+        }
+        
+        // JavaScript detection
+        if (combined.includes('function ') || 
+            combined.includes('const ') || 
+            combined.includes('let ') || 
+            combined.includes('=>') ||
+            combined.includes('console.log') ||
+            combined.includes('document.') ||
+            combined.includes('window.')) {
+          return 'javascript';
+        }
+        
+        // SQL detection
+        if (combined.includes('SELECT ') || 
+            combined.includes('FROM ') || 
+            combined.includes('WHERE ') ||
+            combined.includes('INSERT ') ||
+            combined.includes('UPDATE ') ||
+            combined.includes('DELETE ')) {
+          return 'sql';
+        }
+        
+        return 'java'; // default to java since this seems to be a Java-focused app
+      };
+      
+      // Helper function to check if line looks like code
+      const isCodeLine = (line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return false;
+        
+        // Already in code block markers
+        if (trimmed.startsWith('```')) return false;
+        
+        // Enhanced code patterns for better detection
+        const codePatterns = [
+          // Java-specific patterns
+          /^(public|private|protected|static|final|abstract)\s+/,
+          /^(class|interface|enum|@interface)\s+\w+/,
+          /^@\w+/,  // Annotations like @Override, @Component
+          /\b(int|boolean|double|float|long|short|byte|char|String|void)\s+\w+/,
+          
+          // General programming patterns
+          /^(import|from|#include|using)\s+/,
+          /^(function|const|let|var|def)\s+/,
+          /^(if|for|while|do|switch|try|catch|finally)\s*[\(\{]/,
+          /^(return|throw|break|continue)\s/,
+          
+          // Method/function calls and assignments
+          /^\s*[a-zA-Z_$][\w$]*\s*[=\(\{]/,
+          /^\s*[a-zA-Z_$][\w$]*\.[a-zA-Z_$][\w$]*\s*\(/,  // Method calls like obj.method()
+          
+          // Code structure
+          /[{}\[\];]$/,
+          /^\s*}/,  // Closing braces
+          /^\s+[a-zA-Z_$]/  // Indented code
+        ];
+        
+        return codePatterns.some(pattern => pattern.test(trimmed)) ||
+               trimmed.includes('System.out') ||
+               trimmed.includes('console.log') ||
+               trimmed.includes('print(') ||
+               trimmed.includes('System.err') ||
+               trimmed.includes('new ') ||
+               trimmed.includes('this.') ||
+               trimmed.includes('super.') ||
+               (trimmed.includes('(') && trimmed.includes(')') && (trimmed.includes(';') || trimmed.includes('{')));
+      };
+      
+      // Process each line
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        
+        // Handle existing code block markers
+        if (trimmed.startsWith('```')) {
+          if (inCodeBlock) {
+            // End of code block
+            if (codeBuffer.length > 0) {
+              result.push(`\`\`\`${currentLanguage}`);
+              result.push(...codeBuffer);
+              result.push('```');
+              result.push(''); // Add spacing after code block
+            }
+            codeBuffer = [];
+            inCodeBlock = false;
+            currentLanguage = '';
+          } else {
+            // Start of code block
+            inCodeBlock = true;
+            currentLanguage = trimmed.replace('```', '').trim();
+          }
+          continue;
+        }
+        
+        // If we're in a code block, just collect the lines
+        if (inCodeBlock) {
+          codeBuffer.push(line);
+          continue;
+        }
+        
+        // Auto-detect code and start code blocks
+        if (isCodeLine(line)) {
+          // Look ahead to gather all consecutive code lines
+          let codeLines = [line];
+          let j = i + 1;
+          
+          while (j < lines.length) {
+            const nextLine = lines[j];
+            if (!nextLine.trim()) {
+              // Empty line - check if next non-empty line is also code
+              let k = j + 1;
+              while (k < lines.length && !lines[k].trim()) k++;
+              if (k < lines.length && isCodeLine(lines[k])) {
+                codeLines.push(nextLine); // Include the empty line
+                j++;
+                continue;
+              } else {
+                break; // End of code block
+              }
+            } else if (isCodeLine(nextLine)) {
+              codeLines.push(nextLine);
+              j++;
+            } else {
+              break;
+            }
+          }
+          
+          // Add the code block
+          const language = detectLanguage(codeLines);
+          result.push(`\`\`\`${language}`);
+          result.push(...codeLines);
+          result.push('```');
+          result.push(''); // Add spacing after code block
+          
+          i = j - 1; // Update main loop counter
+          continue;
+        }
+        
+        // Handle headers - improve existing ones or add structure
+        if (trimmed.startsWith('#')) {
+          result.push(line);
+          continue;
+        }
+        
+        // Auto-add headers for common content patterns
+        if (trimmed.toLowerCase().includes('overview') && !result.some(l => l.includes('## Overview'))) {
+          result.push('## Overview');
+          result.push(line);
+          continue;
+        }
+        
+        if ((trimmed.toLowerCase().includes('example') || trimmed.toLowerCase().includes('usage')) && 
+            !result.some(l => l.includes('## Example'))) {
+          result.push('## Example Usage');
+          result.push(line);
+          continue;
+        }
+        
+        if ((trimmed.toLowerCase().includes('configuration') || trimmed.toLowerCase().includes('config')) && 
+            !result.some(l => l.includes('## Configuration'))) {
+          result.push('## Configuration');
+          result.push(line);
+          continue;
+        }
+        
+        if ((trimmed.toLowerCase().includes('key point') || trimmed.toLowerCase().includes('important')) && 
+            !result.some(l => l.includes('## Key Points'))) {
+          result.push('## Key Points');
+          result.push(line);
+          continue;
+        }
+        
+        // Convert bullet-like text to proper markdown bullets
+        if (trimmed.match(/^[-*•]\s+/) || trimmed.match(/^\d+[\.)]\s+/)) {
+          result.push(line);
+          continue;
+        }
+        
+        // Regular text - convert to bullet points if it seems like a list item
+        if (trimmed && 
+            (trimmed.toLowerCase().startsWith('remember') ||
+             trimmed.toLowerCase().startsWith('note') ||
+             trimmed.toLowerCase().startsWith('important') ||
+             trimmed.toLowerCase().startsWith('tip') ||
+             trimmed.toLowerCase().startsWith('warning'))) {
+          result.push(`- ${trimmed}`);
+          continue;
+        }
+        
+        // Regular line
+        result.push(line);
+      }
+      
+      // Handle any remaining code buffer
+      if (codeBuffer.length > 0) {
+        result.push(`\`\`\`${currentLanguage || detectLanguage(codeBuffer)}`);
+        result.push(...codeBuffer);
+        result.push('```');
+      }
+      
+      // Clean up the result
+      let formatted = result.join('\n');
+      
+      // Remove excessive blank lines
+      formatted = formatted
+        .replace(/\n{4,}/g, '\n\n\n')  // Max 2 blank lines
+        .replace(/^[\n\s]+/, '')       // Remove leading whitespace
+        .replace(/[\n\s]+$/, '')       // Remove trailing whitespace
+        .replace(/```\n+/g, '```\n')   // Clean up code block spacing
+        .replace(/\n+```/g, '\n```');
+      
+      return formatted;
+    };
+    
+    const formattedAnswer = formatAnswer(currentAnswer);
+    editAnswerRef.current.value = formattedAnswer;
+    
+    // Trigger change event to update any state if needed
+    const event = new Event('input', { bubbles: true });
+    editAnswerRef.current.dispatchEvent(event);
   };
 
   // Function to delete a card
@@ -1918,32 +2493,59 @@ Example with no number, category, or additional_info:
   // Determine the current flashcard to display
   const currentCard = filteredFlashcards[currentCardIndex];
 
-  // Function to export cards as CSV
-  const handleExportCards = () => {
+  // Function to show export modal
+  const handleShowExportModal = () => {
     if (!filteredFlashcards || filteredFlashcards.length === 0) {
       alert('No cards to export!');
       return;
     }
+    setShowExportModal(true);
+  };
 
-    // Create CSV content
+  // Function to handle the actual export based on selected format
+  const handleExportConfirm = () => {
+    // Format the date for filename
+    const today = new Date();
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const formattedDate = today.toLocaleDateString('en-US', options);
+    const dateStr = formattedDate.replace(/,/g, '').replace(/ /g, '_');
+
+    if (exportFormat === 'csv') {
+      exportCSV(dateStr);
+    } else {
+      exportExcel(dateStr);
+    }
+    
+    setShowExportModal(false);
+  };
+
+  // Function to export cards as CSV
+  const exportCSV = (dateStr) => {
+    // Create CSV content matching import format: id,number,category,question,answer,additional_info
     const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
     const csvContent = [
       headers.join(','),
       ...filteredFlashcards.map((card, index) => {
-        // Function to properly escape and quote CSV fields
+        // Function to properly escape and quote CSV fields while preserving formatting
         const escapeField = (field) => {
           if (!field) return '';
-          // Replace double quotes with double double quotes and wrap in quotes
-          return `"${field.replace(/"/g, '""')}"`;
+          // Convert to string and preserve line breaks, spacing, and formatting
+          const fieldStr = String(field);
+          // Only wrap in quotes if the field contains special characters
+          if (fieldStr.includes(',') || fieldStr.includes('"') || fieldStr.includes('\n') || fieldStr.includes('\r')) {
+            // Replace double quotes with double double quotes and wrap in quotes
+            return `"${fieldStr.replace(/"/g, '""')}"`;
+          }
+          return fieldStr;
         };
 
         const row = [
-          card.id || '',
-          card.csvNumber || '',
-          card.category || '',
-          escapeField(card.question),
-          escapeField(card.answer),
-          escapeField(card.additional_info)
+          escapeField(card.id || ''),
+          escapeField(card.csvNumber || ''),
+          escapeField(card.category || 'Uncategorized'),
+          escapeField(card.question || ''),
+          escapeField(card.answer || ''),
+          escapeField(card.additional_info || '')
         ];
         return row.join(',');
       })
@@ -1954,17 +2556,48 @@ Example with no number, category, or additional_info:
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    // Format the date as 'Wednesday, June 11, 2025'
-    const today = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    const formattedDate = today.toLocaleDateString('en-US', options);
-    
-    // Use both formats in filename for clarity
-    link.setAttribute('download', `flashcards_export_${formattedDate.replace(/,/g, '').replace(/ /g, '_')}.csv`);
+    link.setAttribute('download', `flashcards_export_${dateStr}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Function to export cards as Excel file
+  const exportExcel = (dateStr) => {
+    // Create worksheet data in the same format as import
+    const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
+    const worksheetData = [
+      headers,
+      ...filteredFlashcards.map(card => [
+        card.id || '',
+        card.csvNumber || '',
+        card.category || 'Uncategorized',
+        card.question || '',
+        card.answer || '',
+        card.additional_info || ''
+      ])
+    ];
+
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    
+    // Set column widths for better readability
+    worksheet['!cols'] = [
+      { width: 10 }, // id
+      { width: 10 }, // number
+      { width: 15 }, // category
+      { width: 30 }, // question
+      { width: 50 }, // answer
+      { width: 20 }  // additional_info
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Flashcards');
+    
+    // Write and download the file
+    XLSX.writeFile(workbook, `flashcards_export_${dateStr}.xlsx`);
   };
 
   return (
@@ -2027,14 +2660,14 @@ Example with no number, category, or additional_info:
             </span>
           </button>
           <button
-            onClick={handleExportCards}
+            onClick={handleShowExportModal}
             className="group relative px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ease-out focus:outline-none focus:ring-2 focus:ring-offset-2 overflow-hidden bg-blue-600 hover:bg-blue-700 text-white shadow-lg focus:ring-blue-500"
           >
             <span className="relative z-10 flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Export CSV
+              Export
             </span>
           </button>
 
@@ -2175,7 +2808,7 @@ Example with no number, category, or additional_info:
               <textarea
                 id="question"
                 ref={newCardQuestionRef}
-                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 rows="4"
                 placeholder="Enter the question for the flashcard..."
               ></textarea>
@@ -2187,7 +2820,7 @@ Example with no number, category, or additional_info:
               <textarea
                 id="answer"
                 ref={newCardAnswerRef}
-                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 rows="4"
                 placeholder="Enter the answer for the flashcard..."
               ></textarea>
@@ -2223,7 +2856,7 @@ Example with no number, category, or additional_info:
               <textarea
                 id="additional-info"
                 ref={newCardAdditionalInfoRef}
-                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                 rows="3"
                 placeholder="Add extra notes, context, or code examples here..."
               ></textarea>
@@ -2389,208 +3022,275 @@ Example with no number, category, or additional_info:
                       {/* Display answer with improved formatting */}
                       <div className="mb-6 overflow-y-auto w-full flex-grow mt-8" style={{ maxHeight: 'calc(100% - 200px)' }}>
                         <div className="text-3xl text-emerald-600 dark:text-emerald-400 mb-6 font-bold text-center">Answer</div>
-                        <div className="prose prose-lg max-w-none dark:prose-invert">
-                          <div className="text-2xl leading-relaxed font-bold text-slate-700 dark:text-slate-200">
+                        <div className="prose prose-lg max-w-none dark:prose-invert px-8 mx-4">
+                          <div className="text-2xl leading-relaxed font-bold text-slate-700 dark:text-slate-200 text-left">
                             {(() => {
-                              const lines = currentCard.answer.split('\n');
-                              const result = [];
-                              let i = 0;
-                              
-                              while (i < lines.length) {
-                                const line = lines[i];
+                              // Enhanced processing to handle markdown formatting with syntax highlighting
+                              const processText = (text) => {
+                                if (!text) return '';
                                 
-                                // Handle multi-line code blocks with ```
-                                if (line.trim().startsWith('```')) {
-                                  let language = line.replace('```', '').trim();
-                                  if (!language) {
-                                    // Auto-detect language based on content
-                                    const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
-                                    if (nextLine.includes('def ') || nextLine.includes('print(')) language = 'python';
-                                    else if (nextLine.includes('function') || nextLine.includes('const ') || nextLine.includes('=>')) language = 'javascript';
-                                    else if (nextLine.includes('public class') || nextLine.includes('System.out')) language = 'java';
-                                    else if (nextLine.includes('#include') || nextLine.includes('int main')) language = 'cpp';
-                                    else language = 'javascript'; // default
-                                  }
-                                  const codeLines = [];
-                                  i++; // Skip the opening ```
-                                  
-                                  while (i < lines.length && !lines[i].trim().startsWith('```')) {
-                                    codeLines.push(lines[i]);
-                                    i++;
-                                  }
-                                  
-                                  // Format code content with proper line breaks
-                                  const formatCode = (code) => {
-                                    return code
-                                      .replace(/\s*{\s*/g, ' {\n    ') // Opening braces
-                                      .replace(/\s*}\s*/g, '\n}\n') // Closing braces
-                                      .replace(/;\s*(?![}])/g, ';\n    ') // Semicolons (except before closing brace)
-                                      .replace(/\n\s*\n/g, '\n') // Remove empty lines
-                                      .replace(/^\s+/gm, (match) => '    '.repeat(Math.floor(match.length / 4))) // Normalize indentation
-                                      .trim();
-                                  };
-                                  
-                                  const rawCodeContent = codeLines.join('\n');
-                                  const codeContent = rawCodeContent.includes('\n') ? rawCodeContent : formatCode(rawCodeContent);
-                                  result.push(
-                                    <div key={`code-${i}`} className="my-4">
-                                      <SyntaxHighlighter 
-                                        language={language}
-                                        style={vscDarkPlus}
-                                        customStyle={{
-                                          borderRadius: '8px',
-                                          fontSize: '14px',
-                                          padding: '16px',
-                                          margin: '0',
-                                          whiteSpace: 'pre-wrap',
-                                          overflow: 'auto'
-                                        }}
-                                        PreTag="div"
-                                        wrapLines={true}
-                                        wrapLongLines={true}
-                                        showLineNumbers={true}
-                                      >
-                                        {codeContent}
-                                      </SyntaxHighlighter>
-                                    </div>
-                                  );
-                                  i++; // Skip the closing ```
-                                  continue;
-                                }
+                                const lines = text.split('\n');
+                                const result = [];
+                                let i = 0;
                                 
-                                // Handle single-line code (lines that look like code)
-                                if (line.trim().match(/^(function|const|let|var|if|for|while|class|import|export|return|console\.|def |print\(|#include|public |private |void |int |string )/) ||
-                                    line.trim().match(/^[a-zA-Z_$][a-zA-Z0-9_$]*\s*[=\(\{]/) ||
-                                    line.trim().includes('->') || 
-                                    line.trim().includes('=>') ||
-                                    line.trim().includes('System.out') ||
-                                    line.trim().match(/^[a-zA-Z_][a-zA-Z0-9_]*\([^)]*\)\s*[{;]/) ||
-                                    (line.trim().includes('(') && line.trim().includes(')') && line.trim().includes(';'))) {
-                                  // Auto-detect language for single line
-                                  let singleLineLanguage = 'javascript';
-                                  if (line.includes('def ') || line.includes('print(')) singleLineLanguage = 'python';
-                                  else if (line.includes('System.out') || line.includes('public ')) singleLineLanguage = 'java';
-                                  else if (line.includes('#include') || line.includes('std::')) singleLineLanguage = 'cpp';
+                                while (i < lines.length) {
+                                  const line = lines[i];
                                   
-                                  // Format single line code if it's too long or has multiple statements
-                                  const formatSingleLine = (code) => {
-                                    if (code.length < 80 && !code.includes('{') && !code.includes('}')) {
-                                      return code; // Keep short, simple lines as-is
+                                  // Handle multi-line code blocks with ```
+                                  if (line.trim().startsWith('```')) {
+                                    let language = line.replace('```', '').trim();
+                                    if (!language) {
+                                      // Auto-detect language based on content
+                                      const allCodeLines = [];
+                                      let j = i + 1;
+                                      while (j < lines.length && !lines[j].trim().startsWith('```')) {
+                                        allCodeLines.push(lines[j]);
+                                        j++;
+                                      }
+                                      const codeContent = allCodeLines.join('\n');
+                                      
+                                      // Java detection (prioritized)
+                                      if (codeContent.includes('public class') || 
+                                          codeContent.includes('System.out') || 
+                                          codeContent.includes('@Override') ||
+                                          codeContent.includes('void ') ||
+                                          codeContent.includes('String ') ||
+                                          codeContent.includes('public static') ||
+                                          codeContent.match(/\b(int|boolean|double|float)\s+\w+/)) {
+                                        language = 'java';
+                                      } else if (codeContent.includes('def ') || codeContent.includes('print(')) {
+                                        language = 'python';
+                                      } else if (codeContent.includes('function') || codeContent.includes('const ') || codeContent.includes('=>')) {
+                                        language = 'javascript';
+                                      } else if (codeContent.includes('#include') || codeContent.includes('int main')) {
+                                        language = 'cpp';
+                                      } else {
+                                        language = 'java'; // default to java
+                                      }
                                     }
-                                    return code
-                                      .replace(/\s*{\s*/g, ' {\n    ') // Opening braces
-                                      .replace(/\s*}\s*/g, '\n}') // Closing braces
-                                      .replace(/;\s*(?![}])/g, ';\n    ') // Semicolons
-                                      .replace(/\n\s*\n/g, '\n') // Remove empty lines
-                                      .trim();
-                                  };
+                                    const codeLines = [];
+                                    i++; // Skip the opening ```
+                                    
+                                    while (i < lines.length && !lines[i].trim().startsWith('```')) {
+                                      codeLines.push(lines[i]);
+                                      i++;
+                                    }
+                                    
+                                    const codeContent = codeLines.join('\n');
+                                    result.push(
+                                      <div key={`code-${i}`} className="my-4" style={{backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #3e3e3e', overflow: 'hidden'}}>
+                                        <SyntaxHighlighter 
+                                          language={language}
+                                          style={vscDarkPlus}
+                                          customStyle={{
+                                            borderRadius: '8px',
+                                            fontSize: '16px',
+                                            padding: '16px',
+                                            margin: '0',
+                                            whiteSpace: 'pre',
+                                            wordWrap: 'break-word',
+                                            overflowWrap: 'break-word',
+                                            overflow: 'auto',
+                                            lineHeight: '1.5',
+                                            backgroundColor: '#1e1e1e',  // Force dark background
+                                            color: '#d4d4d4',           // Light text
+                                            border: '1px solid #3e3e3e' // Subtle border
+                                          }}
+                                          PreTag="div"
+                                          CodeTag="div"
+                                          wrapLines={true}
+                                          wrapLongLines={false}
+                                          showLineNumbers={true}
+                                          lineNumberStyle={{ 
+                                            minWidth: '3em',
+                                            paddingRight: '1em',
+                                            textAlign: 'right',
+                                            userSelect: 'none',
+                                            backgroundColor: '#1e1e1e',
+                                            color: '#858585'
+                                          }}
+                                        >
+                                          {codeContent}
+                                        </SyntaxHighlighter>
+                                      </div>
+                                    );
+                                    i++; // Skip the closing ```
+                                    continue;
+                                  }
                                   
-                                  const formattedLine = formatSingleLine(line);
+                                  // Handle headers (lines that start with #)
+                                  if (line.trim().startsWith('#')) {
+                                    const headerLevel = line.match(/^#+/)?.[0].length || 1;
+                                    const headerText = line.replace(/^#+\s*/, '');
+                                    const headerClass = headerLevel === 1 ? 'text-3xl font-bold mt-6 mb-4' : 
+                                                      headerLevel === 2 ? 'text-2xl font-semibold mt-5 mb-3' : 
+                                                      'text-xl font-bold mt-4 mb-2';
+                                    result.push(
+                                      <h3 key={i} className={`${headerClass} text-blue-700 dark:text-blue-300`}>
+                                        {headerText}
+                                      </h3>
+                                    );
+                                    i++;
+                                    continue;
+                                  }
+                                  
+                                  // Handle bullet points
+                                  if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+                                    result.push(
+                                      <div key={i} className="flex items-start my-2">
+                                        <span className="text-blue-500 font-bold mr-3 mt-1 text-lg">•</span>
+                                        <span className="flex-1 text-lg">{line.replace(/^[-*]\s*/, '')}</span>
+                                      </div>
+                                    );
+                                    i++;
+                                    continue;
+                                  }
+                                  
+                                  // Handle inline code (text within backticks)
+                                  if (line.includes('`')) {
+                                    const parts = line.split(/(`[^`]+`)/);
+                                    result.push(
+                                      <p key={i} className="my-3 leading-relaxed text-lg">
+                                        {parts.map((part, partIndex) => 
+                                          part.startsWith('`') && part.endsWith('`') ? (
+                                            <code key={partIndex} className="px-2 py-1 rounded text-base font-mono" style={{backgroundColor: '#1e1e1e', color: '#d4d4d4', border: '1px solid #3e3e3e'}}>
+                                              {part.slice(1, -1)}
+                                            </code>
+                                          ) : (
+                                            // Handle all formatting in regular text
+                                            (() => {
+                                              let processedPart = part;
+                                              
+                                              // Handle bold text (**text**)
+                                              processedPart = processedPart.replace(/\*\*([^*]+)\*\*/g, (match, content) => {
+                                                return `<BOLD>${content}</BOLD>`;
+                                              });
+                                              
+                                              // Handle italic text (*text*)
+                                              processedPart = processedPart.replace(/\*([^*]+)\*/g, (match, content) => {
+                                                return `<ITALIC>${content}</ITALIC>`;
+                                              });
+                                              
+                                              // Handle underline (<u>text</u>)
+                                              processedPart = processedPart.replace(/<u>([^<]+)<\/u>/g, (match, content) => {
+                                                return `<UNDERLINE>${content}</UNDERLINE>`;
+                                              });
+                                              
+                                              // Handle strikethrough (~~text~~)
+                                              processedPart = processedPart.replace(/~~([^~]+)~~/g, (match, content) => {
+                                                return `<STRIKE>${content}</STRIKE>`;
+                                              });
+                                              
+                                              // Handle colored text
+                                              processedPart = processedPart.replace(/<span style="color: #([^"]+)">([^<]+)<\/span>/g, (match, color, content) => {
+                                                return `<COLOR${color}>${content}</COLOR${color}>`;
+                                              });
+                                              
+                                              const segments = processedPart.split(/(<BOLD>.*?<\/BOLD>|<ITALIC>.*?<\/ITALIC>|<UNDERLINE>.*?<\/UNDERLINE>|<STRIKE>.*?<\/STRIKE>|<COLOR[^>]*>.*?<\/COLOR[^>]*>)/);
+                                              
+                                              return segments.map((segment, segmentIndex) => {
+                                                if (segment.startsWith('<BOLD>')) {
+                                                  const content = segment.replace('<BOLD>', '').replace('</BOLD>', '');
+                                                  return <strong key={`${partIndex}-${segmentIndex}`}>{content}</strong>;
+                                                } else if (segment.startsWith('<ITALIC>')) {
+                                                  const content = segment.replace('<ITALIC>', '').replace('</ITALIC>', '');
+                                                  return <em key={`${partIndex}-${segmentIndex}`}>{content}</em>;
+                                                } else if (segment.startsWith('<UNDERLINE>')) {
+                                                  const content = segment.replace('<UNDERLINE>', '').replace('</UNDERLINE>', '');
+                                                  return <u key={`${partIndex}-${segmentIndex}`}>{content}</u>;
+                                                } else if (segment.startsWith('<STRIKE>')) {
+                                                  const content = segment.replace('<STRIKE>', '').replace('</STRIKE>', '');
+                                                  return <del key={`${partIndex}-${segmentIndex}`}>{content}</del>;
+                                                } else if (segment.match(/<COLOR([^>]*)>/)) {
+                                                  const colorMatch = segment.match(/<COLOR([^>]*)>(.*?)<\/COLOR[^>]*>/);
+                                                  if (colorMatch) {
+                                                    const color = colorMatch[1];
+                                                    const content = colorMatch[2];
+                                                    return <span key={`${partIndex}-${segmentIndex}`} style={{color: `#${color}`}}>{content}</span>;
+                                                  }
+                                                }
+                                                return <span key={`${partIndex}-${segmentIndex}`}>{segment}</span>;
+                                              });
+                                            })()
+                                          )
+                                        )}
+                                      </p>
+                                    );
+                                    i++;
+                                    continue;
+                                  }
+                                  
+                                  // Handle empty lines
+                                  if (line.trim() === '') {
+                                    result.push(<div key={i} className="h-4"></div>);
+                                    i++;
+                                    continue;
+                                  }
+                                  
+                                  // Regular text paragraphs with full formatting support
+                                  let processedLine = line;
+                                  
+                                  // Handle bold text (**text**)
+                                  processedLine = processedLine.replace(/\*\*([^*]+)\*\*/g, (match, content) => {
+                                    return `<BOLD>${content}</BOLD>`;
+                                  });
+                                  
+                                  // Handle italic text (*text*)
+                                  processedLine = processedLine.replace(/\*([^*]+)\*/g, (match, content) => {
+                                    return `<ITALIC>${content}</ITALIC>`;
+                                  });
+                                  
+                                  // Handle underline (<u>text</u>)
+                                  processedLine = processedLine.replace(/<u>([^<]+)<\/u>/g, (match, content) => {
+                                    return `<UNDERLINE>${content}</UNDERLINE>`;
+                                  });
+                                  
+                                  // Handle strikethrough (~~text~~)
+                                  processedLine = processedLine.replace(/~~([^~]+)~~/g, (match, content) => {
+                                    return `<STRIKE>${content}</STRIKE>`;
+                                  });
+                                  
+                                  // Handle colored text
+                                  processedLine = processedLine.replace(/<span style="color: #([^"]+)">([^<]+)<\/span>/g, (match, color, content) => {
+                                    return `<COLOR${color}>${content}</COLOR${color}>`;
+                                  });
+                                  
+                                  const segments = processedLine.split(/(<BOLD>.*?<\/BOLD>|<ITALIC>.*?<\/ITALIC>|<UNDERLINE>.*?<\/UNDERLINE>|<STRIKE>.*?<\/STRIKE>|<COLOR[^>]*>.*?<\/COLOR[^>]*>)/);
                                   
                                   result.push(
-                                    <div key={i} className="my-3">
-                                      <SyntaxHighlighter 
-                                        language={singleLineLanguage}
-                                        style={vscDarkPlus}
-                                        customStyle={{
-                                          borderRadius: '6px',
-                                          fontSize: '13px',
-                                          padding: '12px',
-                                          margin: '0',
-                                          whiteSpace: 'pre-wrap',
-                                          overflow: 'auto'
-                                        }}
-                                        PreTag="div"
-                                        wrapLines={true}
-                                        wrapLongLines={true}
-                                      >
-                                        {formattedLine}
-                                      </SyntaxHighlighter>
-                                    </div>
-                                  );
-                                  i++;
-                                  continue;
-                                }
-                                
-                                // Handle headers (lines that start with #)
-                                if (line.trim().startsWith('#')) {
-                                  const headerLevel = line.match(/^#+/)?.[0].length || 1;
-                                  const headerText = line.replace(/^#+\s*/, '');
-                                  const headerClass = headerLevel === 1 ? 'text-2xl font-bold mt-4 mb-2' : 
-                                                    headerLevel === 2 ? 'text-xl font-semibold mt-3 mb-2' : 
-                                                    'text-lg font-bold mt-2 mb-1';
-                                  result.push(
-                                    <h3 key={i} className={`${headerClass} text-blue-700 dark:text-blue-300`}>
-                                      {headerText}
-                                    </h3>
-                                  );
-                                  i++;
-                                  continue;
-                                }
-                                
-                                // Handle bullet points
-                                if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-                                  result.push(
-                                    <div key={i} className="flex items-start my-1">
-                                      <span className="text-blue-500 font-bold mr-2 mt-1">•</span>
-                                      <span className="flex-1">{line.replace(/^[-*]\s*/, '')}</span>
-                                    </div>
-                                  );
-                                  i++;
-                                  continue;
-                                }
-                                
-                                // Handle numbered lists
-                                if (line.trim().match(/^\d+\.\s/)) {
-                                  const number = line.match(/^(\d+)\./)?.[1];
-                                  const text = line.replace(/^\d+\.\s*/, '');
-                                  result.push(
-                                    <div key={i} className="flex items-start my-1">
-                                      <span className="text-blue-500 font-semibold mr-2 min-w-[1.5rem]">{number}.</span>
-                                      <span className="flex-1">{text}</span>
-                                    </div>
-                                  );
-                                  i++;
-                                  continue;
-                                }
-                                
-                                // Handle inline code (text within backticks)
-                                if (line.includes('`')) {
-                                  const parts = line.split(/(`[^`]+`)/);
-                                  result.push(
-                                    <p key={i} className="my-2 leading-relaxed">
-                                      {parts.map((part, partIndex) => 
-                                        part.startsWith('`') && part.endsWith('`') ? (
-                                          <code key={partIndex} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-sm font-mono text-blue-600 dark:text-blue-400">
-                                            {part.slice(1, -1)}
-                                          </code>
-                                        ) : (
-                                          <span key={partIndex}>{part}</span>
-                                        )
-                                      )}
+                                    <p key={i} className="my-3 leading-relaxed text-lg">
+                                      {segments.map((segment, segmentIndex) => {
+                                        if (segment.startsWith('<BOLD>')) {
+                                          const content = segment.replace('<BOLD>', '').replace('</BOLD>', '');
+                                          return <strong key={segmentIndex}>{content}</strong>;
+                                        } else if (segment.startsWith('<ITALIC>')) {
+                                          const content = segment.replace('<ITALIC>', '').replace('</ITALIC>', '');
+                                          return <em key={segmentIndex}>{content}</em>;
+                                        } else if (segment.startsWith('<UNDERLINE>')) {
+                                          const content = segment.replace('<UNDERLINE>', '').replace('</UNDERLINE>', '');
+                                          return <u key={segmentIndex}>{content}</u>;
+                                        } else if (segment.startsWith('<STRIKE>')) {
+                                          const content = segment.replace('<STRIKE>', '').replace('</STRIKE>', '');
+                                          return <del key={segmentIndex}>{content}</del>;
+                                        } else if (segment.match(/<COLOR([^>]*)>/)) {
+                                          const colorMatch = segment.match(/<COLOR([^>]*)>(.*?)<\/COLOR[^>]*>/);
+                                          if (colorMatch) {
+                                            const color = colorMatch[1];
+                                            const content = colorMatch[2];
+                                            return <span key={segmentIndex} style={{color: `#${color}`}}>{content}</span>;
+                                          }
+                                        }
+                                        return <span key={segmentIndex}>{segment}</span>;
+                                      })}
                                     </p>
                                   );
                                   i++;
-                                  continue;
                                 }
                                 
-                                // Handle empty lines
-                                if (line.trim() === '') {
-                                  result.push(<div key={i} className="h-3"></div>);
-                                  i++;
-                                  continue;
-                                }
-                                
-                                // Regular text paragraphs
-                                result.push(
-                                  <p key={i} className="my-2 leading-relaxed">
-                                    {line}
-                                  </p>
-                                );
-                                i++;
-                              }
+                                return result;
+                              };
                               
-                              return result;
+                              return processText(currentCard.answer);
                             })()}
                           </div>
                         </div>
@@ -2782,7 +3482,7 @@ Example with no number, category, or additional_info:
       {/* Card Edit Modal */}
       {isEditingCard && editCardData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800">
+          <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800">
             <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center dark:text-gray-100">Edit Flashcard</h2>
             <div className="space-y-6">
               <div>
@@ -2794,19 +3494,28 @@ Example with no number, category, or additional_info:
                   ref={editQuestionRef}
                   defaultValue={editCardData.question}
                   className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="6"
+                  rows="4"
                 ></textarea>
               </div>
               <div>
-                <label htmlFor="edit-answer" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-300">
-                  Answer:
-                </label>
+                <div className="flex justify-between items-center mb-2">
+                  <label htmlFor="edit-answer" className="block text-gray-700 text-sm font-bold dark:text-gray-300">
+                    Answer:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleFormatAnswer}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                  >
+                    ✨ Format Answer
+                  </button>
+                </div>
                 <textarea
                   id="edit-answer"
                   ref={editAnswerRef}
                   defaultValue={editCardData.answer}
                   className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="8"
+                  rows="10"
                 ></textarea>
               </div>
               <div>
@@ -2830,7 +3539,7 @@ Example with no number, category, or additional_info:
                   ref={editAdditionalInfoRef}
                   defaultValue={editCardData.additional_info || ''}
                   className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="6"
+                  rows="3"
                 ></textarea>
               </div>
 
@@ -3016,6 +3725,120 @@ Example with no number, category, or additional_info:
         </div>
       )}
 
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-[500px] max-h-[80vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-600">
+              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Export Flashcards</h2>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="p-6">
+              <div className="mb-6">
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                  Export {filteredFlashcards.length} flashcard(s) to your preferred format.
+                </p>
+                
+                {/* Format Selection */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Choose Export Format</h3>
+                  <div className="space-y-3">
+                    <label className="flex items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        value="csv"
+                        checked={exportFormat === 'csv'}
+                        onChange={(e) => setExportFormat(e.target.value)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mr-3"
+                      />
+                      <div className="flex items-center gap-3">
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <div>
+                          <div className="font-medium text-gray-800 dark:text-gray-100">CSV Format</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">Compatible with Excel, Google Sheets, and text editors</div>
+                        </div>
+                      </div>
+                    </label>
+                    
+                    <label className="flex items-center p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        value="excel"
+                        checked={exportFormat === 'excel'}
+                        onChange={(e) => setExportFormat(e.target.value)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mr-3"
+                      />
+                      <div className="flex items-center gap-3">
+                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <div>
+                          <div className="font-medium text-gray-800 dark:text-gray-100">Excel Format (.xlsx)</div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">Native Excel format with proper column widths</div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Directory Info */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <h4 className="font-medium text-blue-800 dark:text-blue-200">Download Location</h4>
+                      <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                        The file will be downloaded to your browser's default download folder. You can change this location in your browser settings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="flex justify-between items-center p-6 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50">
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                Filename: flashcards_export_{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).replace(/,/g, '').replace(/ /g, '_')}.{exportFormat === 'csv' ? 'csv' : 'xlsx'}
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleExportConfirm}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>Export {filteredFlashcards.length} Card(s)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Settings Modal - Popout Style */}
       {showSettingsModal && (
         <>
@@ -3191,7 +4014,7 @@ Example with no number, category, or additional_info:
                         <option value="openai">⚡ OpenAI GPT</option>
                       </select>
                       <p className="text-gray-500 text-xs mt-2 dark:text-gray-400">
-                        Currently only Gemini is implemented. Other providers coming soon.
+                        Gemini and Anthropic Claude are fully supported. OpenAI support coming soon.
                       </p>
                     </div>
 
@@ -3214,7 +4037,7 @@ Example with no number, category, or additional_info:
                     </div>
 
                     {/* Anthropic API Key */}
-                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600 opacity-60">
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
                       <label htmlFor="anthropicApiKey" className="block text-gray-700 font-semibold mb-2 dark:text-gray-300">
                         🧠 Anthropic Claude API Key:
                       </label>
@@ -3223,12 +4046,11 @@ Example with no number, category, or additional_info:
                         id="anthropicApiKey"
                         value={apiKeys.anthropic}
                         onChange={(e) => updateApiKey('anthropic', e.target.value)}
-                        placeholder="Coming soon..."
-                        disabled
-                        className="w-full py-3 px-4 border border-gray-300 rounded-lg bg-gray-100 dark:bg-gray-600 dark:border-gray-500 dark:text-gray-400 cursor-not-allowed"
+                        placeholder="Enter your Anthropic API key..."
+                        className="w-full py-3 px-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-500 dark:text-gray-100 transition-all"
                       />
                       <p className="text-gray-500 text-xs mt-2 dark:text-gray-400">
-                        🚧 Integration in development
+                        Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 dark:text-blue-400 underline">Anthropic Console</a>
                       </p>
                     </div>
 
