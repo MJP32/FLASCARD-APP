@@ -6,7 +6,17 @@
       "Bash(PORT=3002 npm start)",
       "Bash(grep:*)",
       "Bash(rg:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(curl:*)",
+      "Bash(cp:*)",
+      "Bash(npm start:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npm run build:*)",
+      "Bash(node:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }

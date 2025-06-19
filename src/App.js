@@ -19,6 +19,7 @@ function App() {
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isFirebaseInitialized, setIsFirebaseInitialized] = useState(false);
   const [showCreateCardForm, setShowCreateCardForm] = useState(false); // State for toggling create card form
   const [showUploadCsvForm, setShowUploadCsvForm] = useState(false); // State for toggling CSV upload form
   const [uploadMessage, setUploadMessage] = useState(''); // Message for CSV upload success
@@ -83,6 +84,8 @@ function App() {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false); // State for delete confirmation
   const [isGeneratingSelectedCards, setIsGeneratingSelectedCards] = useState(false); // New state for batch generation loading
   const [copyFeedback, setCopyFeedback] = useState(''); // State for copy button feedback
+  const [formattedAnswerContent, setFormattedAnswerContent] = useState(''); // Store formatted content
+  const [formattedQuestionContent, setFormattedQuestionContent] = useState(''); // Store formatted content
 
   // Refs for new card input fields and file input
   const newCardQuestionRef = useRef(null);
@@ -98,10 +101,275 @@ function App() {
   const editCategoryRef = useRef(null);
   const editAdditionalInfoRef = useRef(null);
 
+  // Shared formatting function for both questions and answers
+  const formatAnswer = (text) => {
+    console.log('formatAnswer called with:', text?.substring(0, 100));
+    if (!text || !text.trim()) {
+      console.log('formatAnswer: empty text, returning empty');
+      return '';
+    }
+    
+    // First, check if this is primarily code content
+    // More specific code detection - avoid false positives with markdown formatting
+    const codeIndicators = /^[\s]*```|^[\s]*\{[\s]*$|^[\s]*public class|^[\s]*function\s*\(|^[\s]*def\s+\w+\s*\(|^[\s]*#include/.test(text);
+    const specialChars = text.match(/[{}();]/g) || [];
+    const words = text.split(/\s+/).filter(w => w.length > 0);
+    const specialCharRatio = specialChars.length / words.length;
+    const isCodeContent = codeIndicators || (specialCharRatio > 0.15 && words.length > 10);
+    
+    console.log('formatAnswer: Code detection analysis:');
+    console.log('  - codeIndicators:', codeIndicators);
+    console.log('  - specialChars count:', specialChars.length);
+    console.log('  - words count:', words.length);
+    console.log('  - specialCharRatio:', specialCharRatio);
+    console.log('  - final isCodeContent:', isCodeContent);
+    
+    if (isCodeContent) {
+      console.log('formatAnswer: treating as code, returning as-is');
+      // For code content, preserve existing code formatting logic
+      return text; // Return as-is for now, or implement existing code formatting
+    }
+    
+    console.log('formatAnswer: treating as human-readable text, applying formatting');
+    
+    // Human-readable text transformation
+    let result = [];
+    
+    // Helper function to add proper icons based on content type
+    const getTopicIcon = (content) => {
+      const lower = content.toLowerCase();
+      if (lower.includes('java') || lower.includes('thread') || lower.includes('synchronized')) return '☕';
+      if (lower.includes('lock') || lower.includes('security')) return '🔒';
+      if (lower.includes('interface') || lower.includes('api')) return '🛠️';
+      if (lower.includes('database') || lower.includes('sql')) return '🗄️';
+      if (lower.includes('network') || lower.includes('http')) return '🌐';
+      if (lower.includes('algorithm') || lower.includes('performance')) return '⚡';
+      if (lower.includes('design') || lower.includes('pattern')) return '🎨';
+      if (lower.includes('test') || lower.includes('debug')) return '🔍';
+      return '📋';
+    };
+    
+    // Split text into logical sections
+    const sections = [];
+    const sentences = text.split(/\.\s+/).filter(s => s.trim());
+    
+    let currentSection = null;
+    
+    sentences.forEach(sentence => {
+      const trimmed = sentence.trim();
+      if (!trimmed) return;
+      
+      // Detect section headers/topics
+      const isNewTopic = trimmed.match(/^[A-Z][a-z]+ (?:keyword|interface|method|class|pattern|algorithm)/i) ||
+                        trimmed.includes(':') && trimmed.split(':')[0].length < 30;
+      
+      if (isNewTopic) {
+        // Save previous section
+        if (currentSection) {
+          sections.push(currentSection);
+        }
+        
+        // Start new section
+        const topicName = trimmed.includes(':') ? trimmed.split(':')[0].trim() : trimmed;
+        const description = trimmed.includes(':') ? trimmed.split(':').slice(1).join(':').trim() : '';
+        
+        currentSection = {
+          title: topicName,
+          description: description,
+          advantages: [],
+          disadvantages: [],
+          content: []
+        };
+      } else {
+        // Add to current section or create default section
+        if (!currentSection) {
+          currentSection = {
+            title: 'Overview',
+            description: '',
+            advantages: [],
+            disadvantages: [],
+            content: []
+          };
+        }
+        
+        // Parse advantages and disadvantages
+        if (trimmed.toLowerCase().includes('advantage')) {
+          const advText = trimmed.replace(/advantages?:?\s*/gi, '').trim();
+          const advantages = advText.split(/,\s*(?=[A-Z])/).filter(adv => adv.trim());
+          currentSection.advantages.push(...advantages);
+        } else if (trimmed.toLowerCase().includes('disadvantage')) {
+          const disAdvText = trimmed.replace(/disadvantages?:?\s*/gi, '').trim();
+          const disadvantages = disAdvText.split(/,\s*(?=[A-Z])/).filter(dis => dis.trim());
+          currentSection.disadvantages.push(...disadvantages);
+        } else {
+          currentSection.content.push(trimmed);
+        }
+      }
+    });
+    
+    // Add final section
+    if (currentSection) {
+      sections.push(currentSection);
+    }
+    
+    console.log('formatAnswer: sections created =', sections.length);
+    sections.forEach((section, i) => {
+      console.log(`Section ${i}:`, {
+        title: section.title,
+        description: section.description?.substring(0, 50),
+        advantages: section.advantages.length,
+        disadvantages: section.disadvantages.length,
+        content: section.content.length
+      });
+    });
+    
+    // If no sections were created, create a simple formatted version
+    if (sections.length === 0) {
+      console.log('formatAnswer: no sections detected, creating simple format');
+      return `<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">📋 Formatted Content</div><div style="background: #f8fafc; color: #334155; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 3px solid #cbd5e1;">${text}</div>`;
+    }
+    
+    // Format each section beautifully with colors and visual separation
+    sections.forEach((section, index) => {
+      // Section header with icon and colored background
+      const icon = getTopicIcon(section.title);
+      result.push(`<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">${icon} ${section.title}</div>`);
+      
+      // Description with light blue background
+      if (section.description) {
+        const description = section.description + (section.description.endsWith('.') ? '' : '.');
+        result.push(`<div style="background: #eff6ff; color: #1e40af; padding: 12px; border-radius: 6px; margin: 8px 0; border-left: 4px solid #3b82f6; font-weight: 500;">${description}</div>`);
+      }
+      
+      // Additional content with subtle background
+      section.content.forEach(content => {
+        if (content && !content.toLowerCase().includes('advantage') && !content.toLowerCase().includes('disadvantage')) {
+          const formattedContent = content + (content.endsWith('.') ? '' : '.');
+          result.push(`<div style="background: #f8fafc; color: #334155; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 3px solid #cbd5e1;">${formattedContent}</div>`);
+        }
+      });
+      
+      result.push(''); // Spacing
+      
+      // Advantages section with green theme
+      if (section.advantages.length > 0) {
+        result.push(`<div style="background: linear-gradient(135deg, #10b981, #047857); color: white; padding: 10px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 16px;">✅ Advantages</div>`);
+        section.advantages.forEach(advantage => {
+          const cleanAdv = advantage.replace(/[,.]$/, '').trim();
+          
+          // Check if advantage has sub-points (parenthetical examples)
+          if (cleanAdv.includes('(') && cleanAdv.includes(')')) {
+            const mainPoint = cleanAdv.split('(')[0].trim();
+            const examples = cleanAdv.match(/\([^)]+\)/g) || [];
+            
+            result.push(`<div style="background: #d1fae5; color: #065f46; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid #10b981; font-weight: 600;">• ${mainPoint}</div>`);
+            examples.forEach(example => {
+              const exampleText = example.replace(/[()]/g, '').trim();
+              const examplePoints = exampleText.split(/,\s*(?=\w)/).filter(ex => ex.trim());
+              
+              if (examplePoints.length > 1) {
+                examplePoints.forEach(point => {
+                  result.push(`<div style="background: #ecfdf5; color: #047857; padding: 8px 8px 8px 24px; border-radius: 4px; margin: 4px 0 4px 20px; border-left: 2px solid #34d399;">◦ ${point.trim()}</div>`);
+                });
+              } else {
+                result.push(`<div style="background: #ecfdf5; color: #047857; padding: 8px 8px 8px 24px; border-radius: 4px; margin: 4px 0 4px 20px; border-left: 2px solid #34d399;">◦ ${exampleText}</div>`);
+              }
+            });
+          } else {
+            // Simple advantage
+            const isSimple = cleanAdv.length < 50 && !cleanAdv.includes(',');
+            if (isSimple) {
+              result.push(`<div style="background: #d1fae5; color: #065f46; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid #10b981; font-weight: 600;">• ${cleanAdv}</div>`);
+            } else {
+              // Split complex advantages
+              const parts = cleanAdv.split(',').filter(p => p.trim());
+              if (parts.length > 1) {
+                const mainPoint = parts[0].trim();
+                result.push(`<div style="background: #d1fae5; color: #065f46; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid #10b981; font-weight: 600;">• ${mainPoint}</div>`);
+                parts.slice(1).forEach(part => {
+                  result.push(`<div style="background: #ecfdf5; color: #047857; padding: 8px 8px 8px 24px; border-radius: 4px; margin: 4px 0 4px 20px; border-left: 2px solid #34d399;">◦ ${part.trim()}</div>`);
+                });
+              } else {
+                result.push(`<div style="background: #d1fae5; color: #065f46; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid #10b981;">• ${cleanAdv}</div>`);
+              }
+            }
+          }
+        });
+        result.push(''); // Spacing
+      }
+      
+      // Disadvantages section with red theme
+      if (section.disadvantages.length > 0) {
+        result.push(`<div style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; padding: 10px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 16px;">⚠️ Disadvantages</div>`);
+        section.disadvantages.forEach(disadvantage => {
+          const cleanDisAdv = disadvantage.replace(/[,.]$/, '').trim();
+          
+          // Check if disadvantage has sub-points
+          if (cleanDisAdv.includes('(') && cleanDisAdv.includes(')')) {
+            const mainPoint = cleanDisAdv.split('(')[0].trim();
+            const examples = cleanDisAdv.match(/\([^)]+\)/g) || [];
+            
+            result.push(`<div style="background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid #ef4444; font-weight: 600;">• ${mainPoint}</div>`);
+            examples.forEach(example => {
+              const exampleText = example.replace(/[()]/g, '').trim();
+              const examplePoints = exampleText.split(/,\s*(?=\w)/).filter(ex => ex.trim());
+              
+              if (examplePoints.length > 1) {
+                examplePoints.forEach(point => {
+                  result.push(`<div style="background: #fef2f2; color: #dc2626; padding: 8px 8px 8px 24px; border-radius: 4px; margin: 4px 0 4px 20px; border-left: 2px solid #f87171;">◦ ${point.trim()}</div>`);
+                });
+              } else {
+                result.push(`<div style="background: #fef2f2; color: #dc2626; padding: 8px 8px 8px 24px; border-radius: 4px; margin: 4px 0 4px 20px; border-left: 2px solid #f87171;">◦ ${exampleText}</div>`);
+              }
+            });
+          } else {
+            // Split complex disadvantages
+            const parts = cleanDisAdv.split(',').filter(p => p.trim());
+            if (parts.length > 1) {
+              const mainPoint = parts[0].trim();
+              result.push(`<div style="background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid #ef4444; font-weight: 600;">• ${mainPoint}</div>`);
+              parts.slice(1).forEach(part => {
+                result.push(`<div style="background: #fef2f2; color: #dc2626; padding: 8px 8px 8px 24px; border-radius: 4px; margin: 4px 0 4px 20px; border-left: 2px solid #f87171;">◦ ${part.trim()}</div>`);
+              });
+            } else {
+              result.push(`<div style="background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 4px solid #ef4444;">• ${cleanDisAdv}</div>`);
+            }
+          }
+        });
+        result.push(''); // Spacing
+      }
+      
+      // Add section separator between major sections
+      if (index < sections.length - 1) {
+        result.push(`<div style="height: 2px; background: linear-gradient(90deg, transparent, #cbd5e1, transparent); margin: 24px 0;"></div>`);
+      }
+    });
+    
+    // Final cleanup and enhancement for HTML formatted content
+    let formatted = result.join('\n');
+    
+    // Clean up extra spacing in HTML content
+    formatted = formatted
+      .replace(/\n{3,}/g, '\n\n')           // Limit blank lines
+      .replace(/>\s+</g, '><')              // Remove spaces between HTML tags
+      .trim();
+    
+    console.log('formatAnswer: returning formatted result, length =', formatted.length);
+    console.log('formatAnswer: result preview =', formatted.substring(0, 300));
+    return formatted;
+  };
+
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
+    // Prevent double initialization in React Strict Mode
+    if (isFirebaseInitialized) {
+      console.log("Firebase already initialized, skipping");
+      return;
+    }
+    
     try {
+      console.log("Initializing Firebase...");
       // Your web app's Firebase configuration
       const firebaseConfig = {
         apiKey: "AIzaSyC3R7pV3mXqg2-kY9xvH126BoF5KQDQDls",
@@ -119,6 +387,7 @@ function App() {
       
       setDb(firestore);
       setAuth(authentication);
+      setIsFirebaseInitialized(true);
 
       const unsubscribe = onAuthStateChanged(authentication, async (user) => {
         if (user) {
@@ -326,7 +595,7 @@ function App() {
 
   // Fetch flashcards from Firestore when DB and auth are ready
   useEffect(() => {
-    if (db && auth && userId) {
+    if (isFirebaseInitialized && db && auth && userId) {
       const appId = "flashcard-app-3f2a3"; // Hardcoding appId based on the provided config
       const flashcardsColRef = collection(db, `/artifacts/${appId}/users/${userId}/flashcards`);
       const q = query(flashcardsColRef);
@@ -352,7 +621,7 @@ function App() {
 
       return () => unsubscribe();
     }
-  }, [db, auth, userId]);
+  }, [isFirebaseInitialized, db, auth, userId]);
 
   // Effect to filter flashcards whenever `flashcards`, `selectedCategory`, or `showDueTodayOnly` changes
   useEffect(() => {
@@ -416,7 +685,7 @@ function App() {
       return;
     }
 
-    if (db && userId) {
+    if (isFirebaseInitialized && db && userId) {
       try {
         const appId = "flashcard-app-3f2a3"; // Hardcoding appId
         const now = new Date();
@@ -453,8 +722,8 @@ function App() {
         }
       }
     } else {
-      console.log("Database not initialized or user not authenticated.");
-      setAuthError("Database not initialized or user not authenticated.");
+      console.log("Firebase not initialized, database not available, or user not authenticated.");
+      setAuthError("Application is still loading or user not authenticated. Please wait and try again.");
     }
   };
 
@@ -466,8 +735,8 @@ function App() {
   const reviewCard = React.useCallback(async (quality, card) => {
     console.log("reviewCard called with:", { quality, cardId: card?.id });
     
-    if (!db || !userId || !card || !settingsLoaded) {
-      console.error("Missing dependencies:", { db: !!db, userId: !!userId, card: !!card, settingsLoaded });
+    if (!isFirebaseInitialized || !db || !userId || !card || !settingsLoaded) {
+      console.error("Missing dependencies:", { isFirebaseInitialized, db: !!db, userId: !!userId, card: !!card, settingsLoaded });
       return;
     }
 
@@ -1776,10 +2045,14 @@ function App() {
 
   // Function to save changes to a card
   const handleSaveCardChanges = async () => {
-    if (!db || !userId || !editCardData) return;
+    if (!db || !userId || !editCardData) {
+      console.log("handleSaveCardChanges: db, userId, or editCardData not available");
+      setAuthError("Cannot save changes: Database not properly initialized. Please try logging out and back in.");
+      return;
+    }
 
-    const updatedQuestion = editQuestionRef.current.value.trim();
-    const updatedAnswer = editAnswerRef.current.value.trim();
+    const updatedQuestion = (editQuestionRef.current.innerHTML || editQuestionRef.current.textContent || '').trim();
+    const updatedAnswer = (editAnswerRef.current.innerHTML || editAnswerRef.current.textContent || '').trim();
     const updatedCategory = editCategoryRef.current.value.trim() || 'Uncategorized';
     const updatedAdditionalInfo = editAdditionalInfoRef.current.value.trim() || null;
 
@@ -1790,6 +2063,11 @@ function App() {
 
     const appId = "flashcard-app-3f2a3"; // Hardcoding appId
     try {
+      // Additional validation for document reference
+      if (!editCardData.id) {
+        throw new Error("Card ID is missing - cannot update card");
+      }
+
       await updateDoc(doc(db, `/artifacts/${appId}/users/${userId}/flashcards`, editCardData.id), {
         question: updatedQuestion,
         answer: updatedAnswer,
@@ -1812,6 +2090,11 @@ function App() {
       setGeneratedQuestions([]); // Clear generated questions after saving
     } catch (error) {
       console.error("Error updating flashcard:", error);
+      if (error.code && (error.code === 'unavailable' || error.message.includes('offline'))) {
+        setAuthError("Firestore write failed: You appear to be offline or there's a network issue. Please check your internet connection.");
+      } else {
+        setAuthError(`Error updating flashcard: ${error.message}`);
+      }
     }
   };
 
@@ -1883,279 +2166,203 @@ function App() {
     }
   };
 
+  // Simple test formatting function
+  const simpleFormatTest = (text) => {
+    return `<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 18px;">📋 Test Formatting</div><div style="background: #eff6ff; color: #1e40af; padding: 12px; border-radius: 6px; margin: 8px 0; border-left: 4px solid #3b82f6; font-weight: 500;">${text}</div>`;
+  };
+
   // Function to format answer for better readability
   const handleFormatAnswer = () => {
-    if (!editAnswerRef.current) return;
+    console.log('🔥 FORMAT ANSWER BUTTON CLICKED - Starting function');
     
-    const currentAnswer = editAnswerRef.current.value;
-    if (!currentAnswer.trim()) return;
+    // Try to find the element by ID as backup if ref is stale
+    let answerElement = editAnswerRef.current;
+    if (!answerElement) {
+      console.log('⚠️ editAnswerRef.current is null, trying to find by ID...');
+      answerElement = document.getElementById('edit-answer');
+      if (answerElement) {
+        console.log('✅ Found element by ID, updating ref');
+        editAnswerRef.current = answerElement;
+      }
+    }
     
-    // Enhanced formatting function
-    const formatAnswer = (text) => {
-      const lines = text.split('\n');
-      const result = [];
-      let inCodeBlock = false;
-      let codeBuffer = [];
-      let currentLanguage = '';
+    if (!answerElement) {
+      console.log('❌ Could not find answer element');
+      alert('Error: Could not find answer field');
+      return;
+    }
+    
+    console.log('✅ Answer element found:', answerElement);
+    
+    // Clean up any existing observer before creating a new one
+    if (answerElement.formattingObserver) {
+      console.log('🧹 Cleaning up existing MutationObserver');
+      answerElement.formattingObserver.disconnect();
+      delete answerElement.formattingObserver;
+    }
+    
+    // Get the plain text content, stripping any existing HTML
+    const currentAnswer = answerElement.textContent || answerElement.innerText || '';
+    console.log('📝 Current answer text:', currentAnswer.substring(0, 100) + '...');
+    
+    if (!currentAnswer.trim()) {
+      console.log('❌ Current answer is empty');
+      alert('Error: Answer field is empty');
+      return;
+    }
+    
+    try {
+      console.log('🚀 Applying formatAnswer function directly...');
       
-      // Helper function to detect programming language
-      const detectLanguage = (content) => {
-        const combined = Array.isArray(content) ? content.join('\n') : content;
-        
-        // Java detection - check for Java-specific patterns first
-        if (combined.includes('public class') || 
-            combined.includes('System.out') || 
-            combined.includes('@Override') || 
-            combined.includes('@Component') ||
-            combined.includes('@Service') ||
-            combined.includes('@Repository') ||
-            combined.includes('void ') || 
-            combined.includes('String ') ||
-            combined.includes('public static') ||
-            combined.includes('private ') ||
-            combined.includes('protected ') ||
-            combined.match(/\b(int|boolean|double|float|long|short|byte|char)\s+\w+/)) {
-          return 'java';
-        }
-        
-        // Python detection
-        if (combined.includes('def ') || 
-            combined.includes('import ') && combined.includes('from ') || 
-            combined.includes('print(') ||
-            combined.includes('if __name__') ||
-            combined.includes('self.') ||
-            combined.includes('elif ')) {
-          return 'python';
-        }
-        
-        // C++ detection
-        if (combined.includes('#include') || 
-            combined.includes('std::') || 
-            combined.includes('int main') ||
-            combined.includes('cout <<') ||
-            combined.includes('cin >>')) {
-          return 'cpp';
-        }
-        
-        // JavaScript detection
-        if (combined.includes('function ') || 
-            combined.includes('const ') || 
-            combined.includes('let ') || 
-            combined.includes('=>') ||
-            combined.includes('console.log') ||
-            combined.includes('document.') ||
-            combined.includes('window.')) {
-          return 'javascript';
-        }
-        
-        // SQL detection
-        if (combined.includes('SELECT ') || 
-            combined.includes('FROM ') || 
-            combined.includes('WHERE ') ||
-            combined.includes('INSERT ') ||
-            combined.includes('UPDATE ') ||
-            combined.includes('DELETE ')) {
-          return 'sql';
-        }
-        
-        return 'java'; // default to java since this seems to be a Java-focused app
-      };
-      
-      // Helper function to check if line looks like code
-      const isCodeLine = (line) => {
-        const trimmed = line.trim();
-        if (!trimmed) return false;
-        
-        // Already in code block markers
-        if (trimmed.startsWith('```')) return false;
-        
-        // Enhanced code patterns for better detection
-        const codePatterns = [
-          // Java-specific patterns
-          /^(public|private|protected|static|final|abstract)\s+/,
-          /^(class|interface|enum|@interface)\s+\w+/,
-          /^@\w+/,  // Annotations like @Override, @Component
-          /\b(int|boolean|double|float|long|short|byte|char|String|void)\s+\w+/,
-          
-          // General programming patterns
-          /^(import|from|#include|using)\s+/,
-          /^(function|const|let|var|def)\s+/,
-          /^(if|for|while|do|switch|try|catch|finally)\s*[\(\{]/,
-          /^(return|throw|break|continue)\s/,
-          
-          // Method/function calls and assignments
-          /^\s*[a-zA-Z_$][\w$]*\s*[=\(\{]/,
-          /^\s*[a-zA-Z_$][\w$]*\.[a-zA-Z_$][\w$]*\s*\(/,  // Method calls like obj.method()
-          
-          // Code structure
-          /[{}\[\];]$/,
-          /^\s*}/,  // Closing braces
-          /^\s+[a-zA-Z_$]/  // Indented code
-        ];
-        
-        return codePatterns.some(pattern => pattern.test(trimmed)) ||
-               trimmed.includes('System.out') ||
-               trimmed.includes('console.log') ||
-               trimmed.includes('print(') ||
-               trimmed.includes('System.err') ||
-               trimmed.includes('new ') ||
-               trimmed.includes('this.') ||
-               trimmed.includes('super.') ||
-               (trimmed.includes('(') && trimmed.includes(')') && (trimmed.includes(';') || trimmed.includes('{')));
-      };
-      
-      // Process each line
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const trimmed = line.trim();
-        
-        // Handle existing code block markers
-        if (trimmed.startsWith('```')) {
-          if (inCodeBlock) {
-            // End of code block
-            if (codeBuffer.length > 0) {
-              result.push(`\`\`\`${currentLanguage}`);
-              result.push(...codeBuffer);
-              result.push('```');
-              result.push(''); // Add spacing after code block
-            }
-            codeBuffer = [];
-            inCodeBlock = false;
-            currentLanguage = '';
-          } else {
-            // Start of code block
-            inCodeBlock = true;
-            currentLanguage = trimmed.replace('```', '').trim();
-          }
-          continue;
-        }
-        
-        // If we're in a code block, just collect the lines
-        if (inCodeBlock) {
-          codeBuffer.push(line);
-          continue;
-        }
-        
-        // Auto-detect code and start code blocks
-        if (isCodeLine(line)) {
-          // Look ahead to gather all consecutive code lines
-          let codeLines = [line];
-          let j = i + 1;
-          
-          while (j < lines.length) {
-            const nextLine = lines[j];
-            if (!nextLine.trim()) {
-              // Empty line - check if next non-empty line is also code
-              let k = j + 1;
-              while (k < lines.length && !lines[k].trim()) k++;
-              if (k < lines.length && isCodeLine(lines[k])) {
-                codeLines.push(nextLine); // Include the empty line
-                j++;
-                continue;
-              } else {
-                break; // End of code block
-              }
-            } else if (isCodeLine(nextLine)) {
-              codeLines.push(nextLine);
-              j++;
-            } else {
-              break;
-            }
-          }
-          
-          // Add the code block
-          const language = detectLanguage(codeLines);
-          result.push(`\`\`\`${language}`);
-          result.push(...codeLines);
-          result.push('```');
-          result.push(''); // Add spacing after code block
-          
-          i = j - 1; // Update main loop counter
-          continue;
-        }
-        
-        // Handle headers - improve existing ones or add structure
-        if (trimmed.startsWith('#')) {
-          result.push(line);
-          continue;
-        }
-        
-        // Auto-add headers for common content patterns
-        if (trimmed.toLowerCase().includes('overview') && !result.some(l => l.includes('## Overview'))) {
-          result.push('## Overview');
-          result.push(line);
-          continue;
-        }
-        
-        if ((trimmed.toLowerCase().includes('example') || trimmed.toLowerCase().includes('usage')) && 
-            !result.some(l => l.includes('## Example'))) {
-          result.push('## Example Usage');
-          result.push(line);
-          continue;
-        }
-        
-        if ((trimmed.toLowerCase().includes('configuration') || trimmed.toLowerCase().includes('config')) && 
-            !result.some(l => l.includes('## Configuration'))) {
-          result.push('## Configuration');
-          result.push(line);
-          continue;
-        }
-        
-        if ((trimmed.toLowerCase().includes('key point') || trimmed.toLowerCase().includes('important')) && 
-            !result.some(l => l.includes('## Key Points'))) {
-          result.push('## Key Points');
-          result.push(line);
-          continue;
-        }
-        
-        // Convert bullet-like text to proper markdown bullets
-        if (trimmed.match(/^[-*•]\s+/) || trimmed.match(/^\d+[\.)]\s+/)) {
-          result.push(line);
-          continue;
-        }
-        
-        // Regular text - convert to bullet points if it seems like a list item
-        if (trimmed && 
-            (trimmed.toLowerCase().startsWith('remember') ||
-             trimmed.toLowerCase().startsWith('note') ||
-             trimmed.toLowerCase().startsWith('important') ||
-             trimmed.toLowerCase().startsWith('tip') ||
-             trimmed.toLowerCase().startsWith('warning'))) {
-          result.push(`- ${trimmed}`);
-          continue;
-        }
-        
-        // Regular line
-        result.push(line);
+      if (typeof formatAnswer !== 'function') {
+        console.error('formatAnswer is not a function:', typeof formatAnswer);
+        alert('formatAnswer function is not available');
+        return;
       }
       
-      // Handle any remaining code buffer
-      if (codeBuffer.length > 0) {
-        result.push(`\`\`\`${currentLanguage || detectLanguage(codeBuffer)}`);
-        result.push(...codeBuffer);
-        result.push('```');
+      const formattedResult = formatAnswer(currentAnswer);
+      console.log('✅ formatAnswer completed, result length:', formattedResult?.length);
+      
+      if (formattedResult && formattedResult.trim()) {
+        // Store in state for persistence
+        setFormattedAnswerContent(formattedResult);
+        
+        // Apply to DOM with a small delay to ensure React has finished any pending updates
+        setTimeout(() => {
+          const element = editAnswerRef.current || document.getElementById('edit-answer');
+          if (element) {
+            element.innerHTML = formattedResult;
+            element.setAttribute('data-formatted', 'true');
+            element.focus();
+            console.log('✅ Applied formatted result and stored in state');
+          }
+        }, 50);
+        
+      } else {
+        console.warn('formatAnswer returned empty, applying fallback');
+        const fallback = simpleFormatTest(currentAnswer);
+        setFormattedAnswerContent(fallback);
+        
+        setTimeout(() => {
+          const element = editAnswerRef.current || document.getElementById('edit-answer');
+          if (element) {
+            element.innerHTML = fallback;
+            element.setAttribute('data-formatted', 'true');
+          }
+        }, 50);
       }
       
-      // Clean up the result
-      let formatted = result.join('\n');
-      
-      // Remove excessive blank lines
-      formatted = formatted
-        .replace(/\n{4,}/g, '\n\n\n')  // Max 2 blank lines
-        .replace(/^[\n\s]+/, '')       // Remove leading whitespace
-        .replace(/[\n\s]+$/, '')       // Remove trailing whitespace
-        .replace(/```\n+/g, '```\n')   // Clean up code block spacing
-        .replace(/\n+```/g, '\n```');
-      
-      return formatted;
-    };
+    } catch (error) {
+      console.error('Error formatting answer:', error);
+      alert('Error formatting answer: ' + error.message);
+    }
     
-    const formattedAnswer = formatAnswer(currentAnswer);
-    editAnswerRef.current.value = formattedAnswer;
+    // Trigger change event to update any state if needed with a delay
+    setTimeout(() => {
+      const element = editAnswerRef.current || document.getElementById('edit-answer');
+      if (element) {
+        const event = new Event('input', { bubbles: true });
+        element.dispatchEvent(event);
+        console.log('Dispatched input event');
+      }
+    }, 100);
+  };
+
+  // Function to format question for better readability (same logic as answer formatting)
+  const handleFormatQuestion = () => {
+    console.log('🔥 FORMAT QUESTION BUTTON CLICKED - Starting function');
     
-    // Trigger change event to update any state if needed
-    const event = new Event('input', { bubbles: true });
-    editAnswerRef.current.dispatchEvent(event);
+    // Try to find the element by ID as backup if ref is stale
+    let questionElement = editQuestionRef.current;
+    if (!questionElement) {
+      console.log('⚠️ editQuestionRef.current is null, trying to find by ID...');
+      questionElement = document.getElementById('edit-question');
+      if (questionElement) {
+        console.log('✅ Found element by ID, updating ref');
+        editQuestionRef.current = questionElement;
+      }
+    }
+    
+    if (!questionElement) {
+      console.log('❌ Could not find question element');
+      alert('Error: Could not find question field');
+      return;
+    }
+    
+    console.log('✅ Question element found:', questionElement);
+    
+    // Clean up any existing observer before creating a new one
+    if (questionElement.formattingObserver) {
+      console.log('🧹 Cleaning up existing MutationObserver for question');
+      questionElement.formattingObserver.disconnect();
+      delete questionElement.formattingObserver;
+    }
+    
+    // Get the plain text content, stripping any existing HTML
+    const currentQuestion = questionElement.textContent || questionElement.innerText || '';
+    console.log('📝 Current question text:', currentQuestion.substring(0, 100) + '...');
+    
+    if (!currentQuestion.trim()) {
+      console.log('❌ Current question is empty');
+      alert('Error: Question field is empty');
+      return;
+    }
+    
+    try {
+      console.log('🚀 Applying formatAnswer function to question...');
+      
+      if (typeof formatAnswer !== 'function') {
+        console.error('formatAnswer is not a function:', typeof formatAnswer);
+        alert('formatAnswer function is not available');
+        return;
+      }
+      
+      const formattedResult = formatAnswer(currentQuestion);
+      console.log('✅ formatAnswer completed for question, result length:', formattedResult?.length);
+      
+      if (formattedResult && formattedResult.trim()) {
+        // Store in state for persistence
+        setFormattedQuestionContent(formattedResult);
+        
+        // Apply to DOM with a small delay to ensure React has finished any pending updates
+        setTimeout(() => {
+          const element = editQuestionRef.current || document.getElementById('edit-question');
+          if (element) {
+            element.innerHTML = formattedResult;
+            element.setAttribute('data-formatted', 'true');
+            element.focus();
+            console.log('✅ Applied formatted result to question and stored in state');
+          }
+        }, 50);
+        
+      } else {
+        console.warn('formatAnswer returned empty for question, applying fallback');
+        const fallback = simpleFormatTest(currentQuestion);
+        setFormattedQuestionContent(fallback);
+        
+        setTimeout(() => {
+          const element = editQuestionRef.current || document.getElementById('edit-question');
+          if (element) {
+            element.innerHTML = fallback;
+            element.setAttribute('data-formatted', 'true');
+          }
+        }, 50);
+      }
+      
+    } catch (error) {
+      console.error('Error formatting question:', error);
+      alert('Error formatting question: ' + error.message);
+    }
+    
+    // Trigger change event to update any state if needed with a delay
+    setTimeout(() => {
+      const element = editQuestionRef.current || document.getElementById('edit-question');
+      if (element) {
+        const event = new Event('input', { bubbles: true });
+        element.dispatchEvent(event);
+        console.log('Dispatched input event for question');
+      }
+    }, 100);
   };
 
   // Function to delete a card
@@ -3011,9 +3218,10 @@ Example with no number, category, or additional_info:
                          style={{ transform: showAnswer ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
                       <div className="text-4xl font-bold mb-8 overflow-auto max-h-full leading-relaxed text-center mt-8">
                         <div className="text-3xl text-blue-600 dark:text-blue-400 mb-4 font-bold">Question</div>
-                        <p className="text-slate-700 dark:text-slate-200 leading-relaxed text-2xl">
-                          {currentCard.question}
-                        </p>
+                        <div 
+                          className="text-slate-700 dark:text-slate-200 leading-relaxed text-2xl"
+                          dangerouslySetInnerHTML={{ __html: currentCard.question }}
+                        ></div>
                       </div>
                     </div>
 
@@ -3023,282 +3231,17 @@ Example with no number, category, or additional_info:
                       <div className="mb-6 overflow-y-auto w-full flex-grow mt-8" style={{ maxHeight: 'calc(100% - 200px)' }}>
                         <div className="text-3xl text-emerald-600 dark:text-emerald-400 mb-6 font-bold text-center">Answer</div>
                         <div className="prose prose-lg max-w-none dark:prose-invert px-8 mx-4">
-                          <div className="text-2xl leading-relaxed font-bold text-slate-700 dark:text-slate-200 text-left">
-                            {(() => {
-                              // Enhanced processing to handle markdown formatting with syntax highlighting
-                              const processText = (text) => {
-                                if (!text) return '';
-                                
-                                const lines = text.split('\n');
-                                const result = [];
-                                let i = 0;
-                                
-                                while (i < lines.length) {
-                                  const line = lines[i];
-                                  
-                                  // Handle multi-line code blocks with ```
-                                  if (line.trim().startsWith('```')) {
-                                    let language = line.replace('```', '').trim();
-                                    if (!language) {
-                                      // Auto-detect language based on content
-                                      const allCodeLines = [];
-                                      let j = i + 1;
-                                      while (j < lines.length && !lines[j].trim().startsWith('```')) {
-                                        allCodeLines.push(lines[j]);
-                                        j++;
-                                      }
-                                      const codeContent = allCodeLines.join('\n');
-                                      
-                                      // Java detection (prioritized)
-                                      if (codeContent.includes('public class') || 
-                                          codeContent.includes('System.out') || 
-                                          codeContent.includes('@Override') ||
-                                          codeContent.includes('void ') ||
-                                          codeContent.includes('String ') ||
-                                          codeContent.includes('public static') ||
-                                          codeContent.match(/\b(int|boolean|double|float)\s+\w+/)) {
-                                        language = 'java';
-                                      } else if (codeContent.includes('def ') || codeContent.includes('print(')) {
-                                        language = 'python';
-                                      } else if (codeContent.includes('function') || codeContent.includes('const ') || codeContent.includes('=>')) {
-                                        language = 'javascript';
-                                      } else if (codeContent.includes('#include') || codeContent.includes('int main')) {
-                                        language = 'cpp';
-                                      } else {
-                                        language = 'java'; // default to java
-                                      }
-                                    }
-                                    const codeLines = [];
-                                    i++; // Skip the opening ```
-                                    
-                                    while (i < lines.length && !lines[i].trim().startsWith('```')) {
-                                      codeLines.push(lines[i]);
-                                      i++;
-                                    }
-                                    
-                                    const codeContent = codeLines.join('\n');
-                                    result.push(
-                                      <div key={`code-${i}`} className="my-4" style={{backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #3e3e3e', overflow: 'hidden'}}>
-                                        <SyntaxHighlighter 
-                                          language={language}
-                                          style={vscDarkPlus}
-                                          customStyle={{
-                                            borderRadius: '8px',
-                                            fontSize: '16px',
-                                            padding: '16px',
-                                            margin: '0',
-                                            whiteSpace: 'pre',
-                                            wordWrap: 'break-word',
-                                            overflowWrap: 'break-word',
-                                            overflow: 'auto',
-                                            lineHeight: '1.5',
-                                            backgroundColor: '#1e1e1e',  // Force dark background
-                                            color: '#d4d4d4',           // Light text
-                                            border: '1px solid #3e3e3e' // Subtle border
-                                          }}
-                                          PreTag="div"
-                                          CodeTag="div"
-                                          wrapLines={true}
-                                          wrapLongLines={false}
-                                          showLineNumbers={true}
-                                          lineNumberStyle={{ 
-                                            minWidth: '3em',
-                                            paddingRight: '1em',
-                                            textAlign: 'right',
-                                            userSelect: 'none',
-                                            backgroundColor: '#1e1e1e',
-                                            color: '#858585'
-                                          }}
-                                        >
-                                          {codeContent}
-                                        </SyntaxHighlighter>
-                                      </div>
-                                    );
-                                    i++; // Skip the closing ```
-                                    continue;
-                                  }
-                                  
-                                  // Handle headers (lines that start with #)
-                                  if (line.trim().startsWith('#')) {
-                                    const headerLevel = line.match(/^#+/)?.[0].length || 1;
-                                    const headerText = line.replace(/^#+\s*/, '');
-                                    const headerClass = headerLevel === 1 ? 'text-3xl font-bold mt-6 mb-4' : 
-                                                      headerLevel === 2 ? 'text-2xl font-semibold mt-5 mb-3' : 
-                                                      'text-xl font-bold mt-4 mb-2';
-                                    result.push(
-                                      <h3 key={i} className={`${headerClass} text-blue-700 dark:text-blue-300`}>
-                                        {headerText}
-                                      </h3>
-                                    );
-                                    i++;
-                                    continue;
-                                  }
-                                  
-                                  // Handle bullet points
-                                  if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
-                                    result.push(
-                                      <div key={i} className="flex items-start my-2">
-                                        <span className="text-blue-500 font-bold mr-3 mt-1 text-lg">•</span>
-                                        <span className="flex-1 text-lg">{line.replace(/^[-*]\s*/, '')}</span>
-                                      </div>
-                                    );
-                                    i++;
-                                    continue;
-                                  }
-                                  
-                                  // Handle inline code (text within backticks)
-                                  if (line.includes('`')) {
-                                    const parts = line.split(/(`[^`]+`)/);
-                                    result.push(
-                                      <p key={i} className="my-3 leading-relaxed text-lg">
-                                        {parts.map((part, partIndex) => 
-                                          part.startsWith('`') && part.endsWith('`') ? (
-                                            <code key={partIndex} className="px-2 py-1 rounded text-base font-mono" style={{backgroundColor: '#1e1e1e', color: '#d4d4d4', border: '1px solid #3e3e3e'}}>
-                                              {part.slice(1, -1)}
-                                            </code>
-                                          ) : (
-                                            // Handle all formatting in regular text
-                                            (() => {
-                                              let processedPart = part;
-                                              
-                                              // Handle bold text (**text**)
-                                              processedPart = processedPart.replace(/\*\*([^*]+)\*\*/g, (match, content) => {
-                                                return `<BOLD>${content}</BOLD>`;
-                                              });
-                                              
-                                              // Handle italic text (*text*)
-                                              processedPart = processedPart.replace(/\*([^*]+)\*/g, (match, content) => {
-                                                return `<ITALIC>${content}</ITALIC>`;
-                                              });
-                                              
-                                              // Handle underline (<u>text</u>)
-                                              processedPart = processedPart.replace(/<u>([^<]+)<\/u>/g, (match, content) => {
-                                                return `<UNDERLINE>${content}</UNDERLINE>`;
-                                              });
-                                              
-                                              // Handle strikethrough (~~text~~)
-                                              processedPart = processedPart.replace(/~~([^~]+)~~/g, (match, content) => {
-                                                return `<STRIKE>${content}</STRIKE>`;
-                                              });
-                                              
-                                              // Handle colored text
-                                              processedPart = processedPart.replace(/<span style="color: #([^"]+)">([^<]+)<\/span>/g, (match, color, content) => {
-                                                return `<COLOR${color}>${content}</COLOR${color}>`;
-                                              });
-                                              
-                                              const segments = processedPart.split(/(<BOLD>.*?<\/BOLD>|<ITALIC>.*?<\/ITALIC>|<UNDERLINE>.*?<\/UNDERLINE>|<STRIKE>.*?<\/STRIKE>|<COLOR[^>]*>.*?<\/COLOR[^>]*>)/);
-                                              
-                                              return segments.map((segment, segmentIndex) => {
-                                                if (segment.startsWith('<BOLD>')) {
-                                                  const content = segment.replace('<BOLD>', '').replace('</BOLD>', '');
-                                                  return <strong key={`${partIndex}-${segmentIndex}`}>{content}</strong>;
-                                                } else if (segment.startsWith('<ITALIC>')) {
-                                                  const content = segment.replace('<ITALIC>', '').replace('</ITALIC>', '');
-                                                  return <em key={`${partIndex}-${segmentIndex}`}>{content}</em>;
-                                                } else if (segment.startsWith('<UNDERLINE>')) {
-                                                  const content = segment.replace('<UNDERLINE>', '').replace('</UNDERLINE>', '');
-                                                  return <u key={`${partIndex}-${segmentIndex}`}>{content}</u>;
-                                                } else if (segment.startsWith('<STRIKE>')) {
-                                                  const content = segment.replace('<STRIKE>', '').replace('</STRIKE>', '');
-                                                  return <del key={`${partIndex}-${segmentIndex}`}>{content}</del>;
-                                                } else if (segment.match(/<COLOR([^>]*)>/)) {
-                                                  const colorMatch = segment.match(/<COLOR([^>]*)>(.*?)<\/COLOR[^>]*>/);
-                                                  if (colorMatch) {
-                                                    const color = colorMatch[1];
-                                                    const content = colorMatch[2];
-                                                    return <span key={`${partIndex}-${segmentIndex}`} style={{color: `#${color}`}}>{content}</span>;
-                                                  }
-                                                }
-                                                return <span key={`${partIndex}-${segmentIndex}`}>{segment}</span>;
-                                              });
-                                            })()
-                                          )
-                                        )}
-                                      </p>
-                                    );
-                                    i++;
-                                    continue;
-                                  }
-                                  
-                                  // Handle empty lines
-                                  if (line.trim() === '') {
-                                    result.push(<div key={i} className="h-4"></div>);
-                                    i++;
-                                    continue;
-                                  }
-                                  
-                                  // Regular text paragraphs with full formatting support
-                                  let processedLine = line;
-                                  
-                                  // Handle bold text (**text**)
-                                  processedLine = processedLine.replace(/\*\*([^*]+)\*\*/g, (match, content) => {
-                                    return `<BOLD>${content}</BOLD>`;
-                                  });
-                                  
-                                  // Handle italic text (*text*)
-                                  processedLine = processedLine.replace(/\*([^*]+)\*/g, (match, content) => {
-                                    return `<ITALIC>${content}</ITALIC>`;
-                                  });
-                                  
-                                  // Handle underline (<u>text</u>)
-                                  processedLine = processedLine.replace(/<u>([^<]+)<\/u>/g, (match, content) => {
-                                    return `<UNDERLINE>${content}</UNDERLINE>`;
-                                  });
-                                  
-                                  // Handle strikethrough (~~text~~)
-                                  processedLine = processedLine.replace(/~~([^~]+)~~/g, (match, content) => {
-                                    return `<STRIKE>${content}</STRIKE>`;
-                                  });
-                                  
-                                  // Handle colored text
-                                  processedLine = processedLine.replace(/<span style="color: #([^"]+)">([^<]+)<\/span>/g, (match, color, content) => {
-                                    return `<COLOR${color}>${content}</COLOR${color}>`;
-                                  });
-                                  
-                                  const segments = processedLine.split(/(<BOLD>.*?<\/BOLD>|<ITALIC>.*?<\/ITALIC>|<UNDERLINE>.*?<\/UNDERLINE>|<STRIKE>.*?<\/STRIKE>|<COLOR[^>]*>.*?<\/COLOR[^>]*>)/);
-                                  
-                                  result.push(
-                                    <p key={i} className="my-3 leading-relaxed text-lg">
-                                      {segments.map((segment, segmentIndex) => {
-                                        if (segment.startsWith('<BOLD>')) {
-                                          const content = segment.replace('<BOLD>', '').replace('</BOLD>', '');
-                                          return <strong key={segmentIndex}>{content}</strong>;
-                                        } else if (segment.startsWith('<ITALIC>')) {
-                                          const content = segment.replace('<ITALIC>', '').replace('</ITALIC>', '');
-                                          return <em key={segmentIndex}>{content}</em>;
-                                        } else if (segment.startsWith('<UNDERLINE>')) {
-                                          const content = segment.replace('<UNDERLINE>', '').replace('</UNDERLINE>', '');
-                                          return <u key={segmentIndex}>{content}</u>;
-                                        } else if (segment.startsWith('<STRIKE>')) {
-                                          const content = segment.replace('<STRIKE>', '').replace('</STRIKE>', '');
-                                          return <del key={segmentIndex}>{content}</del>;
-                                        } else if (segment.match(/<COLOR([^>]*)>/)) {
-                                          const colorMatch = segment.match(/<COLOR([^>]*)>(.*?)<\/COLOR[^>]*>/);
-                                          if (colorMatch) {
-                                            const color = colorMatch[1];
-                                            const content = colorMatch[2];
-                                            return <span key={segmentIndex} style={{color: `#${color}`}}>{content}</span>;
-                                          }
-                                        }
-                                        return <span key={segmentIndex}>{segment}</span>;
-                                      })}
-                                    </p>
-                                  );
-                                  i++;
-                                }
-                                
-                                return result;
-                              };
-                              
-                              return processText(currentCard.answer);
-                            })()}
+                          <div 
+                            className="text-2xl leading-relaxed font-bold text-slate-700 dark:text-slate-200 text-left"
+                            dangerouslySetInnerHTML={{ __html: currentCard.answer }}
+                          ></div>
                           </div>
                         </div>
                       </div>
                       {/* Additional Info / Generated Content within the card */}
                       {currentCard.additional_info && (
                         <div className="text-sm text-gray-700 mt-2 p-2 bg-gray-100 rounded-lg max-h-20 overflow-auto w-full dark:bg-gray-600 dark:text-gray-300">
-                          **Additional Info:** {currentCard.additional_info}
+                          <strong>Additional Info:</strong> <span dangerouslySetInnerHTML={{ __html: currentCard.additional_info }}></span>
                         </div>
                       )}
                       {generatedExample && (
@@ -3351,7 +3294,6 @@ Example with no number, category, or additional_info:
                           {isExplainingConcept ? 'Explaining...' : 'Explain ✨'}
                         </button>
                       </div>
-                    </div>
                     </div>
                       </div>
 
@@ -3481,21 +3423,51 @@ Example with no number, category, or additional_info:
 
       {/* Card Edit Modal */}
       {isEditingCard && editCardData && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center dark:text-gray-100">Edit Flashcard</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center p-4 py-8 overflow-y-auto" style={{ zIndex: 10000 }}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[calc(100vh-4rem)] flex flex-col transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800 my-4">
+            {/* Fixed Header with X button */}
+            <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-200 dark:border-gray-600 flex-shrink-0">
+              <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-100">Edit Flashcard</h2>
+              <button
+                onClick={() => { setIsEditingCard(false); setGeneratedQuestions([]); }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors flex-shrink-0"
+                title="Close"
+              >
+                <svg className="w-6 h-6 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* Scrollable Content Area */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-6" style={{
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#cbd5e1 #f1f5f9',
+              scrollBehavior: 'smooth',
+              minHeight: '200px'
+            }}>
             <div className="space-y-6">
               <div>
-                <label htmlFor="edit-question" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-300">
-                  Question:
-                </label>
-                <textarea
+                <div className="flex justify-between items-center mb-2">
+                  <label htmlFor="edit-question" className="block text-gray-700 text-sm font-bold dark:text-gray-300">
+                    Question:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleFormatQuestion}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  >
+                    ✨ Format Question
+                  </button>
+                </div>
+                <div
                   id="edit-question"
                   ref={editQuestionRef}
-                  defaultValue={editCardData.question}
-                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="4"
-                ></textarea>
+                  contentEditable={true}
+                  suppressContentEditableWarning={true}
+                  dangerouslySetInnerHTML={{ __html: editCardData.question }}
+                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[100px] max-h-[200px] overflow-y-auto"
+                  style={{ minHeight: '100px' }}
+                ></div>
               </div>
               <div>
                 <div className="flex justify-between items-center mb-2">
@@ -3510,13 +3482,15 @@ Example with no number, category, or additional_info:
                     ✨ Format Answer
                   </button>
                 </div>
-                <textarea
+                <div
                   id="edit-answer"
                   ref={editAnswerRef}
-                  defaultValue={editCardData.answer}
-                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                  rows="10"
-                ></textarea>
+                  contentEditable={true}
+                  suppressContentEditableWarning={true}
+                  dangerouslySetInnerHTML={{ __html: editCardData.answer }}
+                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[250px] max-h-[400px] overflow-y-auto"
+                  style={{ minHeight: '250px' }}
+                ></div>
               </div>
               <div>
                 <label htmlFor="edit-category" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-300">
@@ -3543,22 +3517,55 @@ Example with no number, category, or additional_info:
                 ></textarea>
               </div>
 
-              {/* Display Generated Questions here */}
-              {editCardData.generatedQuestions && editCardData.generatedQuestions.length > 0 && (
-                <div className="mt-4 p-4 bg-gray-100 rounded-lg dark:bg-gray-700">
-                  <h4 className="text-lg font-semibold text-gray-800 mb-2 dark:text-gray-100">Generated Related Questions:</h4>
-                  <ul className="list-disc list-inside text-gray-700 text-sm dark:text-gray-300">
-                    {editCardData.generatedQuestions.map((q, i) => (
-                      <li key={i}>{q.text}</li> // Displaying text directly
-                    ))}
-                  </ul>
-                  <p className="text-xs text-gray-500 mt-2 italic dark:text-gray-400">
-                    Copy and paste these into Question, Answer, or Additional Information as needed.
-                  </p>
-                </div>
-              )}
+              {/* Generate Similar Questions Button */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleGenerateQuestions(editCardData.question, editCardData.answer);
+                    // The modal will open automatically when questions are generated via the existing logic
+                  }}
+                  disabled={isGeneratingQuestions}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700 dark:disabled:bg-green-600"
+                >
+                  {isGeneratingQuestions ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating Questions...
+                    </>
+                  ) : (
+                    <>🤖 Generate Similar Questions</>
+                  )}
+                </button>
+              </div>
 
-              <div className="flex justify-between space-x-4 mt-6">
+
+              {/* Scroll indicator and extra padding for scrolling */}
+              <div className="pt-8 pb-4 text-center">
+                <div className="inline-block w-8 h-1 bg-gray-300 dark:bg-gray-600 rounded-full opacity-50"></div>
+                <p className="text-xs text-gray-400 mt-2">Scroll for more content</p>
+              </div>
+              
+              {/* Test content to ensure scrolling works */}
+              <div className="mt-8 p-4 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  📝 <strong>Scrolling Test:</strong> If you can see this yellow box, the modal is scrollable! 
+                  This content should only be visible when you scroll down in the edit modal.
+                </p>
+                <div className="mt-4 space-y-2">
+                  <div className="h-4 bg-yellow-200 dark:bg-yellow-700 rounded"></div>
+                  <div className="h-4 bg-yellow-200 dark:bg-yellow-700 rounded"></div>
+                  <div className="h-4 bg-yellow-200 dark:bg-yellow-700 rounded"></div>
+                </div>
+              </div>
+            </div>
+            </div>
+            {/* Fixed Footer with Action Buttons */}
+            <div className="border-t border-gray-200 dark:border-gray-600 p-6 flex-shrink-0">
+              <div className="flex justify-between space-x-4">
                 <button
                   onClick={handleSaveCardChanges}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-black font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
@@ -3631,7 +3638,7 @@ Example with no number, category, or additional_info:
 
       {/* Generated Questions Modal */}
       {showGeneratedQuestionsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" style={{ zIndex: 10010 }}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-hidden">
             {/* Modal Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-600">

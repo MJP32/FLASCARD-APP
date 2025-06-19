@@ -1,0 +1,2290 @@
+Number,Category,Question,Answer,Additional Info
+1,Spring Boot Auto-Configuration,Explain how Spring Boot auto-configuration works and how to create custom auto-configuration,"Auto-Configuration Mechanism:
+Spring Boot uses conditional annotations to automatically configure beans based on classpath dependencies and existing configurations.
+
+Key Components:
+- @EnableAutoConfiguration: Triggers auto-configuration
+- spring.factories: Lists auto-configuration classes
+- @ConditionalOn* annotations: Control when configs apply
+
+// Custom Auto-Configuration Example
+@Configuration
+@ConditionalOnClass(RedisTemplate.class)
+@ConditionalOnProperty(name = ""app.redis.enabled"", havingValue = ""true"")
+@EnableConfigurationProperties(RedisProperties.class)
+public class RedisAutoConfiguration {
+    
+    @Bean
+    @ConditionalOnMissingBean
+    public RedisTemplate<String, Object> redisTemplate(
+            RedisConnectionFactory connectionFactory,
+            RedisProperties properties) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        template.setDefaultSerializer(new GenericJackson2JsonRedisSerializer());
+        return template;
+    }
+    
+    @Bean
+    @ConditionalOnBean(RedisTemplate.class)
+    public CacheManager redisCacheManager(RedisTemplate redisTemplate) {
+        return new RedisCacheManager(redisTemplate);
+    }
+}
+
+Configuration File (META-INF/spring.factories):
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.example.autoconfigure.RedisAutoConfiguration
+
+Configuration Properties:
+@ConfigurationProperties(prefix = ""app.redis"")
+@Data
+public class RedisProperties {
+    private boolean enabled = true;
+    private String host = ""localhost"";
+    private int port = 6379;
+    private int timeout = 2000;
+    private Pool pool = new Pool();
+    
+    @Data
+    public static class Pool {
+        private int maxActive = 8;
+        private int maxIdle = 8;
+        private int minIdle = 0;
+    }
+}
+
+Common Conditional Annotations:
+- @ConditionalOnClass: Class exists on classpath
+- @ConditionalOnBean: Bean exists in context
+- @ConditionalOnMissingBean: Bean doesn't exist
+- @ConditionalOnProperty: Property has specific value
+- @ConditionalOnWebApplication: Web application
+
+Testing Auto-Configuration:
+@SpringBootTest
+class RedisAutoConfigurationTest {
+    
+    @Test
+    @TestPropertySource(properties = ""app.redis.enabled=true"")
+    void shouldConfigureRedisWhenEnabled() {
+        assertThat(context).hasSingleBean(RedisTemplate.class);
+    }
+    
+    @Test  
+    @TestPropertySource(properties = ""app.redis.enabled=false"")
+    void shouldNotConfigureRedisWhenDisabled() {
+        assertThat(context).doesNotHaveBean(RedisTemplate.class);
+    }
+}",Auto-configuration reduces boilerplate by automatically configuring beans based on conditions and classpath
+2,Spring Boot Actuator,How do you implement custom health indicators and metrics in Spring Boot Actuator?,"Spring Boot Actuator Overview:
+Provides production-ready features like health checks, metrics, info endpoints, and application monitoring.
+
+Custom Health Indicator:
+@Component
+public class DatabaseHealthIndicator implements HealthIndicator {
+    
+    @Autowired
+    private DataSource dataSource;
+    
+    @Override
+    public Health health() {
+        try (Connection connection = dataSource.getConnection()) {
+            if (connection.isValid(1)) {
+                return Health.up()
+                    .withDetail(""database"", ""Available"")
+                    .withDetail(""validationQuery"", ""SELECT 1"")
+                    .build();
+            }
+        } catch (SQLException ex) {
+            return Health.down()
+                .withDetail(""database"", ""Unavailable"") 
+                .withDetail(""error"", ex.getMessage())
+                .build();
+        }
+        return Health.down().withDetail(""database"", ""Unknown"").build();
+    }
+}
+
+Reactive Health Indicator:
+@Component
+public class ExternalServiceHealthIndicator implements ReactiveHealthIndicator {
+    
+    @Autowired
+    private WebClient webClient;
+    
+    @Override
+    public Mono<Health> health() {
+        return webClient.get()
+            .uri(""/health"")
+            .retrieve()
+            .toBodilessEntity()
+            .map(response -> Health.up()
+                .withDetail(""externalService"", ""Available"")
+                .withDetail(""status"", response.getStatusCode())
+                .build())
+            .onErrorReturn(Health.down()
+                .withDetail(""externalService"", ""Unavailable"")
+                .build())
+            .timeout(Duration.ofSeconds(10));
+    }
+}
+
+Custom Metrics:
+@Service
+public class OrderService {
+    
+    private final Counter orderCounter;
+    private final Timer orderProcessingTimer;
+    private final Gauge activeOrdersGauge;
+    private final AtomicInteger activeOrders = new AtomicInteger(0);
+    
+    public OrderService(MeterRegistry meterRegistry) {
+        this.orderCounter = Counter.builder(""orders.created"")
+            .description(""Number of orders created"")
+            .tag(""type"", ""online"")
+            .register(meterRegistry);
+            
+        this.orderProcessingTimer = Timer.builder(""orders.processing.time"")
+            .description(""Order processing time"")
+            .register(meterRegistry);
+            
+        this.activeOrdersGauge = Gauge.builder(""orders.active"")
+            .description(""Number of active orders"")
+            .register(meterRegistry, activeOrders, AtomicInteger::get);
+    }
+    
+    @EventListener
+    public void handleOrderCreated(OrderCreatedEvent event) {
+        orderCounter.increment(Tags.of(""customer.type"", event.getCustomerType()));
+        activeOrders.incrementAndGet();
+    }
+    
+    public Order processOrder(CreateOrderRequest request) {
+        return orderProcessingTimer.recordCallable(() -> {
+            // Order processing logic
+            Order order = createOrder(request);
+            publishEvent(new OrderCreatedEvent(order));
+            return order;
+        });
+    }
+}
+
+Custom Endpoint:
+@Component
+@Endpoint(id = ""features"")
+public class FeaturesEndpoint {
+    
+    @Autowired
+    private FeatureToggleService featureService;
+    
+    @ReadOperation
+    public Map<String, Object> features() {
+        Map<String, Object> features = new HashMap<>();
+        features.put(""paymentGatewayV2"", featureService.isEnabled(""payment.v2""));
+        features.put(""newCheckoutFlow"", featureService.isEnabled(""checkout.new""));
+        features.put(""experimentalFeatures"", featureService.getExperimentalFeatures());
+        return features;
+    }
+    
+    @WriteOperation
+    public void configureFeature(@Selector String name, @Nullable Boolean enabled) {
+        featureService.setFeatureState(name, enabled);
+    }
+}
+
+Configuration:
+# application.yml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,features
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      show-components: always
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: order-service",Custom health indicators and metrics provide deep insights into application behavior and system health
+3,Spring Security,Implement JWT authentication with role-based authorization in Spring Security,"JWT Configuration:
+@Configuration
+@EnableWebSecurity
+@EnableGlobalMethodSecurity(prePostEnabled = true)
+public class SecurityConfig {
+    
+    @Autowired
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    
+    @Autowired
+    private JwtRequestFilter jwtRequestFilter;
+    
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+    
+    @Bean
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
+    }
+    
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.csrf().disable()
+            .authorizeHttpRequests(authz -> authz
+                .requestMatchers(""/api/auth/**"").permitAll()
+                .requestMatchers(""/api/public/**"").permitAll()
+                .requestMatchers(HttpMethod.GET, ""/api/products/**"").hasAnyRole(""USER"", ""ADMIN"")
+                .requestMatchers(HttpMethod.POST, ""/api/products/**"").hasRole(""ADMIN"")
+                .requestMatchers(""/api/admin/**"").hasRole(""ADMIN"")
+                .anyRequest().authenticated())
+            .exceptionHandling()
+                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+            .and()
+            .sessionManagement()
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS);
+                
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+}
+
+JWT Utility Class:
+@Component
+public class JwtTokenUtil {
+    
+    private String secret = ""mySecretKey"";
+    private int jwtExpiration = 86400; // 24 hours
+    
+    public String generateToken(UserDetails userDetails) {
+        Map<String, Object> claims = new HashMap<>();
+        Collection<? extends GrantedAuthority> authorities = userDetails.getAuthorities();
+        claims.put(""roles"", authorities.stream()
+            .map(GrantedAuthority::getAuthority)
+            .collect(Collectors.toList()));
+        return createToken(claims, userDetails.getUsername());
+    }
+    
+    private String createToken(Map<String, Object> claims, String subject) {
+        return Jwts.builder()
+            .setClaims(claims)
+            .setSubject(subject)
+            .setIssuedAt(new Date(System.currentTimeMillis()))
+            .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration * 1000))
+            .signWith(SignatureAlgorithm.HS512, secret)
+            .compact();
+    }
+    
+    public Boolean validateToken(String token, UserDetails userDetails) {
+        final String username = getUsernameFromToken(token);
+        return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    }
+    
+    public String getUsernameFromToken(String token) {
+        return getClaimFromToken(token, Claims::getSubject);
+    }
+    
+    public Date getExpirationDateFromToken(String token) {
+        return getClaimFromToken(token, Claims::getExpiration);
+    }
+    
+    public <T> T getClaimFromToken(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = getAllClaimsFromToken(token);
+        return claimsResolver.apply(claims);
+    }
+    
+    private Claims getAllClaimsFromToken(String token) {
+        return Jwts.parser().setSigningKey(secret).parseClaimsJws(token).getBody();
+    }
+}
+
+JWT Filter:
+@Component
+public class JwtRequestFilter extends OncePerRequestFilter {
+    
+    @Autowired
+    private UserDetailsService userDetailsService;
+    
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+    
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, 
+                                   HttpServletResponse response, 
+                                   FilterChain chain) throws ServletException, IOException {
+        
+        final String requestTokenHeader = request.getHeader(""Authorization"");
+        
+        String username = null;
+        String jwtToken = null;
+        
+        if (requestTokenHeader != null && requestTokenHeader.startsWith(""Bearer "")) {
+            jwtToken = requestTokenHeader.substring(7);
+            try {
+                username = jwtTokenUtil.getUsernameFromToken(jwtToken);
+            } catch (IllegalArgumentException e) {
+                logger.error(""Unable to get JWT Token"");
+            } catch (ExpiredJwtException e) {
+                logger.error(""JWT Token has expired"");
+            }
+        }
+        
+        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+            
+            if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
+                UsernamePasswordAuthenticationToken authToken = 
+                    new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities());
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+        }
+        chain.doFilter(request, response);
+    }
+}
+
+Authentication Controller:
+@RestController
+@RequestMapping(""/api/auth"")
+public class AuthController {
+    
+    @Autowired
+    private AuthenticationManager authenticationManager;
+    
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+    
+    @Autowired
+    private UserDetailsService userDetailsService;
+    
+    @PostMapping(""/login"")
+    public ResponseEntity<JwtResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+        Authentication authentication = authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(
+                loginRequest.getUsername(),
+                loginRequest.getPassword())
+        );
+        
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        String jwt = jwtTokenUtil.generateToken(userDetails);
+        
+        return ResponseEntity.ok(new JwtResponse(jwt, userDetails.getUsername(), 
+            userDetails.getAuthorities()));
+    }
+}
+
+Method-Level Security:
+@RestController
+public class ProductController {
+    
+    @PreAuthorize(""hasRole('ADMIN')"")
+    @PostMapping(""/api/products"")
+    public ResponseEntity<Product> createProduct(@RequestBody Product product) {
+        return ResponseEntity.ok(productService.create(product));
+    }
+    
+    @PreAuthorize(""hasRole('USER') or hasRole('ADMIN')"")
+    @GetMapping(""/api/products/{id}"")
+    public ResponseEntity<Product> getProduct(@PathVariable Long id) {
+        return ResponseEntity.ok(productService.findById(id));
+    }
+    
+    @PreAuthorize(""@productService.isOwner(#id, authentication.name) or hasRole('ADMIN')"")
+    @PutMapping(""/api/products/{id}"")
+    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @RequestBody Product product) {
+        return ResponseEntity.ok(productService.update(id, product));
+    }
+}",JWT provides stateless authentication with role-based authorization for secure REST APIs
+4,Spring Data JPA,Explain custom repository implementations and specification patterns in Spring Data JPA,"Custom Repository Interface:
+public interface CustomUserRepository {
+    List<User> findUsersWithComplexCriteria(UserSearchCriteria criteria);
+    Page<User> findActiveUsersWithPagination(Pageable pageable);
+    List<UserStatistics> getUserStatistics();
+}
+
+Custom Repository Implementation:
+@Repository
+public class CustomUserRepositoryImpl implements CustomUserRepository {
+    
+    @PersistenceContext
+    private EntityManager entityManager;
+    
+    @Override
+    public List<User> findUsersWithComplexCriteria(UserSearchCriteria criteria) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<User> query = cb.createQuery(User.class);
+        Root<User> user = query.from(User.class);
+        
+        List<Predicate> predicates = new ArrayList<>();
+        
+        if (criteria.getName() != null) {
+            predicates.add(cb.like(cb.lower(user.get(""name"")), 
+                ""%"" + criteria.getName().toLowerCase() + ""%""));
+        }
+        
+        if (criteria.getAgeMin() != null) {
+            predicates.add(cb.greaterThanOrEqualTo(user.get(""age""), criteria.getAgeMin()));
+        }
+        
+        if (criteria.getAgeMax() != null) {
+            predicates.add(cb.lessThanOrEqualTo(user.get(""age""), criteria.getAgeMax()));
+        }
+        
+        if (criteria.getActive() != null) {
+            predicates.add(cb.equal(user.get(""active""), criteria.getActive()));
+        }
+        
+        query.where(predicates.toArray(new Predicate[0]));
+        
+        if (criteria.getSortBy() != null) {
+            if (criteria.getSortDirection() == Sort.Direction.DESC) {
+                query.orderBy(cb.desc(user.get(criteria.getSortBy())));
+            } else {
+                query.orderBy(cb.asc(user.get(criteria.getSortBy())));
+            }
+        }
+        
+        TypedQuery<User> typedQuery = entityManager.createQuery(query);
+        
+        if (criteria.getLimit() != null) {
+            typedQuery.setMaxResults(criteria.getLimit());
+        }
+        
+        return typedQuery.getResultList();
+    }
+    
+    @Override
+    public List<UserStatistics> getUserStatistics() {
+        String jpql = """"""
+            SELECT new com.example.dto.UserStatistics(
+                u.department,
+                COUNT(u),
+                AVG(u.age),
+                MAX(u.salary),
+                MIN(u.salary)
+            )
+            FROM User u
+            WHERE u.active = true
+            GROUP BY u.department
+            HAVING COUNT(u) > 5
+            ORDER BY COUNT(u) DESC
+            """""";
+        
+        return entityManager.createQuery(jpql, UserStatistics.class)
+            .getResultList();
+    }
+}
+
+Main Repository Interface:
+public interface UserRepository extends JpaRepository<User, Long>, 
+                                              JpaSpecificationExecutor<User>,
+                                              CustomUserRepository {
+    
+    @Query(""SELECT u FROM User u WHERE u.email = ?1"")
+    Optional<User> findByEmail(String email);
+    
+    @Query(value = ""SELECT * FROM users u WHERE u.created_date > :date"", nativeQuery = true)
+    List<User> findUsersCreatedAfter(@Param(""date"") LocalDateTime date);
+    
+    @Modifying
+    @Query(""UPDATE User u SET u.active = false WHERE u.lastLoginDate < :date"")
+    int deactivateInactiveUsers(@Param(""date"") LocalDateTime date);
+}
+
+Specification Pattern:
+public class UserSpecifications {
+    
+    public static Specification<User> hasName(String name) {
+        return (root, query, criteriaBuilder) -> 
+            name == null ? null : criteriaBuilder.like(
+                criteriaBuilder.lower(root.get(""name"")), 
+                ""%"" + name.toLowerCase() + ""%"");
+    }
+    
+    public static Specification<User> hasAge(Integer minAge, Integer maxAge) {
+        return (root, query, criteriaBuilder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            if (minAge != null) {
+                predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get(""age""), minAge));
+            }
+            
+            if (maxAge != null) {
+                predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get(""age""), maxAge));
+            }
+            
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+    
+    public static Specification<User> isActive() {
+        return (root, query, criteriaBuilder) -> 
+            criteriaBuilder.equal(root.get(""active""), true);
+    }
+    
+    public static Specification<User> belongsToDepartment(String department) {
+        return (root, query, criteriaBuilder) -> 
+            department == null ? null : criteriaBuilder.equal(root.get(""department""), department);
+    }
+}
+
+Service Layer Using Specifications:
+@Service
+public class UserService {
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    public Page<User> searchUsers(UserSearchCriteria criteria, Pageable pageable) {
+        Specification<User> spec = Specification
+            .where(UserSpecifications.hasName(criteria.getName()))
+            .and(UserSpecifications.hasAge(criteria.getMinAge(), criteria.getMaxAge()))
+            .and(UserSpecifications.belongsToDepartment(criteria.getDepartment()));
+            
+        if (criteria.getActiveOnly()) {
+            spec = spec.and(UserSpecifications.isActive());
+        }
+        
+        return userRepository.findAll(spec, pageable);
+    }
+    
+    public List<User> findComplexUsers(String name, String department, boolean activeOnly) {
+        Specification<User> spec = (root, query, criteriaBuilder) -> {
+            // Join with other entities
+            Join<User, Department> deptJoin = root.join(""department"");
+            Join<User, Role> roleJoin = root.join(""roles"");
+            
+            List<Predicate> predicates = new ArrayList<>();
+            
+            if (name != null) {
+                predicates.add(criteriaBuilder.like(root.get(""name""), ""%"" + name + ""%""));
+            }
+            
+            if (department != null) {
+                predicates.add(criteriaBuilder.equal(deptJoin.get(""name""), department));
+            }
+            
+            if (activeOnly) {
+                predicates.add(criteriaBuilder.equal(root.get(""active""), true));
+            }
+            
+            // Add distinct to avoid duplicates from joins
+            query.distinct(true);
+            
+            return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
+        };
+        
+        return userRepository.findAll(spec);
+    }
+}
+
+Usage in Controller:
+@RestController
+@RequestMapping(""/api/users"")
+public class UserController {
+    
+    @Autowired
+    private UserService userService;
+    
+    @GetMapping(""/search"")
+    public ResponseEntity<Page<User>> searchUsers(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String department,
+            @RequestParam(required = false) Integer minAge,
+            @RequestParam(required = false) Integer maxAge,
+            @RequestParam(defaultValue = ""false"") boolean activeOnly,
+            Pageable pageable) {
+        
+        UserSearchCriteria criteria = UserSearchCriteria.builder()
+            .name(name)
+            .department(department)
+            .minAge(minAge)
+            .maxAge(maxAge)
+            .activeOnly(activeOnly)
+            .build();
+            
+        Page<User> users = userService.searchUsers(criteria, pageable);
+        return ResponseEntity.ok(users);
+    }
+}","Custom repositories and specifications provide flexible, type-safe dynamic queries with better reusability"
+5,Spring Boot Configuration,How do you implement environment-specific configurations and externalized configuration in Spring Boot?,"Configuration Hierarchy (Precedence Order):
+1. Command line arguments
+2. SPRING_APPLICATION_JSON properties
+3. ServletConfig init parameters
+4. ServletContext init parameters
+5. JNDI attributes
+6. Java System properties
+7. OS environment variables
+8. Profile-specific properties
+9. Application properties
+10. @PropertySource annotations
+11. Default properties
+
+Profile-Specific Configuration:
+# application.yml (default)
+server:
+  port: 8080
+  
+app:
+  name: MyApp
+  version: 1.0.0
+  
+---
+# application-dev.yml
+spring:
+  config:
+    activate:
+      on-profile: dev
+      
+server:
+  port: 8081
+  
+spring:
+  datasource:
+    url: jdbc:h2:mem:devdb
+    username: sa
+    password: 
+  
+logging:
+  level:
+    com.example: DEBUG
+    
+---
+# application-prod.yml  
+spring:
+  config:
+    activate:
+      on-profile: prod
+      
+server:
+  port: 80
+  
+spring:
+  datasource:
+    url: jdbc:postgresql://prod-db:5432/myapp
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    
+logging:
+  level:
+    root: WARN
+    com.example: INFO
+
+Custom Configuration Properties:
+@ConfigurationProperties(prefix = ""app"")
+@Data
+@Validated
+public class AppProperties {
+    
+    @NotBlank
+    private String name;
+    
+    @NotBlank
+    private String version;
+    
+    private Security security = new Security();
+    private Database database = new Database();
+    private Integration integration = new Integration();
+    
+    @Data
+    public static class Security {
+        private boolean enabled = true;
+        
+        @Min(1)
+        @Max(3600)
+        private int tokenExpirationMinutes = 60;
+        
+        private String secretKey = ""defaultSecret"";
+        private Set<String> allowedOrigins = new HashSet<>();
+    }
+    
+    @Data 
+    public static class Database {
+        @Min(1)
+        private int maxPoolSize = 10;
+        
+        @Min(1000)
+        private int connectionTimeoutMs = 5000;
+        
+        private boolean showSql = false;
+    }
+    
+    @Data
+    public static class Integration {
+        private Map<String, ServiceConfig> services = new HashMap<>();
+        
+        @Data
+        public static class ServiceConfig {
+            @NotBlank
+            private String url;
+            
+            @Min(1000)
+            private int timeoutMs = 5000;
+            
+            @Min(1)
+            private int retryAttempts = 3;
+            
+            private Map<String, String> headers = new HashMap<>();
+        }
+    }
+}
+
+Configuration Class:
+@Configuration
+@EnableConfigurationProperties({AppProperties.class, DatabaseProperties.class})
+@Profile(""!test"")
+public class AppConfig {
+    
+    @Bean
+    @ConfigurationProperties(prefix = ""app.integration.services.payment"")
+    public ServiceConfig paymentServiceConfig() {
+        return new ServiceConfig();
+    }
+    
+    @Bean
+    @ConditionalOnProperty(name = ""app.integration.services.payment.enabled"", havingValue = ""true"")
+    public PaymentService paymentService(ServiceConfig paymentServiceConfig) {
+        return new PaymentServiceImpl(paymentServiceConfig);
+    }
+    
+    @Bean
+    @Primary
+    @ConfigurationProperties(prefix = ""spring.datasource.primary"")
+    public DataSource primaryDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+    
+    @Bean
+    @ConfigurationProperties(prefix = ""spring.datasource.secondary"") 
+    public DataSource secondaryDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+}
+
+Environment-Specific Beans:
+@Configuration
+public class EnvironmentConfig {
+    
+    @Bean
+    @Profile(""dev"")
+    public EmailService devEmailService() {
+        return new MockEmailService(); // Console logging only
+    }
+    
+    @Bean
+    @Profile(""prod"")
+    public EmailService prodEmailService(AppProperties appProperties) {
+        return new SmtpEmailService(appProperties.getIntegration()
+            .getServices().get(""email""));
+    }
+    
+    @Bean
+    @Profile(""test"")
+    public EmailService testEmailService() {
+        return new InMemoryEmailService(); // For testing
+    }
+}
+
+Externalized Configuration Sources:
+@Configuration
+@PropertySource(value = {
+    ""classpath:application.properties"",
+    ""classpath:application-${spring.profiles.active}.properties"",
+    ""file:./config/application.properties""
+}, ignoreResourceNotFound = true)
+public class ExternalConfigurationSource {
+    
+    @Value(""${external.config.path:#{null}}"")
+    private String externalConfigPath;
+    
+    @Bean
+    public static PropertySourcesPlaceholderConfigurer propertySourcesPlaceholderConfigurer() {
+        PropertySourcesPlaceholderConfigurer configurer = new PropertySourcesPlaceholderConfigurer();
+        configurer.setIgnoreUnresolvablePlaceholders(true);
+        configurer.setIgnoreResourceNotFound(true);
+        return configurer;
+    }
+}
+
+Configuration Validation:
+@Component
+@Validated
+@ConfigurationProperties(prefix = ""app.security"")
+public class SecurityProperties {
+    
+    @NotNull
+    @Pattern(regexp = ""^[A-Za-z0-9+/]{32,}={0,2}$"", 
+             message = ""JWT secret must be base64 encoded and at least 32 characters"")
+    private String jwtSecret;
+    
+    @Min(value = 300, message = ""Token expiration must be at least 5 minutes"")
+    @Max(value = 86400, message = ""Token expiration must not exceed 24 hours"")
+    private int tokenExpirationSeconds = 3600;
+    
+    @Valid
+    private Cors cors = new Cors();
+    
+    @Data
+    public static class Cors {
+        @NotEmpty
+        private List<@Pattern(regexp = ""^https?://.*"", message = ""Must be valid HTTP/HTTPS URL"") String> allowedOrigins = 
+            Arrays.asList(""http://localhost:3000"");
+            
+        @NotEmpty
+        private List<String> allowedMethods = Arrays.asList(""GET"", ""POST"", ""PUT"", ""DELETE"");
+    }
+}
+
+Usage Example:
+@Service
+public class ConfigurationAwareService {
+    
+    @Value(""${app.name}"")
+    private String appName;
+    
+    @Value(""${app.database.max-pool-size:10}"")
+    private int maxPoolSize;
+    
+    @Autowired
+    private AppProperties appProperties;
+    
+    @EventListener
+    public void handleApplicationReady(ApplicationReadyEvent event) {
+        log.info(""Application {} started with configuration:"", appName);
+        log.info(""Max pool size: {}"", maxPoolSize);
+        log.info(""Security enabled: {}"", appProperties.getSecurity().isEnabled());
+        
+        appProperties.getIntegration().getServices().forEach((name, config) -> 
+            log.info(""Service {}: {} (timeout: {}ms)"", name, config.getUrl(), config.getTimeoutMs()));
+    }
+}",Externalized configuration with profiles enables different settings per environment without code changes
+6,Spring AOP,Create a comprehensive logging and performance monitoring aspect with conditional execution,"Custom Annotations:
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface Loggable {
+    LogLevel level() default LogLevel.INFO;
+    boolean logArgs() default true;
+    boolean logResult() default true;
+    boolean logExecutionTime() default false;
+    String[] excludeArgs() default {};
+    String[] sensitiveArgs() default {};
+}
+
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface PerformanceMonitored {
+    String operation() default """";
+    long slowThresholdMs() default 1000;
+    boolean alertOnSlow() default false;
+    String[] tags() default {};
+}
+
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented  
+public @interface Cacheable {
+    String value() default """";
+    long ttlMinutes() default 60;
+    boolean condition() default true;
+}
+
+Comprehensive Aspect Implementation:
+@Aspect
+@Component
+@Slf4j
+public class MonitoringAspect {
+    
+    @Autowired
+    private MeterRegistry meterRegistry;
+    
+    @Autowired
+    private NotificationService notificationService;
+    
+    private final Map<String, Object> cache = new ConcurrentHashMap<>();
+    
+    @Pointcut(""@annotation(loggable)"")
+    public void loggableMethods(Loggable loggable) {}
+    
+    @Pointcut(""@annotation(performanceMonitored)"")
+    public void performanceMonitoredMethods(PerformanceMonitored performanceMonitored) {}
+    
+    @Around(""loggableMethods(loggable)"")
+    public Object logMethodExecution(ProceedingJoinPoint joinPoint, Loggable loggable) throws Throwable {
+        String methodName = joinPoint.getSignature().toShortString();
+        
+        // Pre-execution logging
+        if (loggable.logArgs()) {
+            Object[] args = maskSensitiveArguments(joinPoint.getArgs(), loggable.sensitiveArgs());
+            log.atLevel(convertLogLevel(loggable.level()))
+                .log(""Entering method: {} with arguments: {}"", methodName, Arrays.toString(args));
+        }
+        
+        Instant start = Instant.now();
+        Object result = null;
+        Exception exception = null;
+        
+        try {
+            result = joinPoint.proceed();
+            return result;
+        } catch (Exception e) {
+            exception = e;
+            log.error(""Exception in method: {} - {}"", methodName, e.getMessage(), e);
+            throw e;
+        } finally {
+            // Post-execution logging
+            Duration duration = Duration.between(start, Instant.now());
+            
+            if (loggable.logExecutionTime()) {
+                log.atLevel(convertLogLevel(loggable.level()))
+                    .log(""Method: {} executed in: {} ms"", methodName, duration.toMillis());
+            }
+            
+            if (loggable.logResult() && exception == null) {
+                Object logResult = maskSensitiveResult(result);
+                log.atLevel(convertLogLevel(loggable.level()))
+                    .log(""Method: {} returned: {}"", methodName, logResult);
+            }
+        }
+    }
+    
+    @Around(""performanceMonitoredMethods(performanceMonitored)"")
+    public Object monitorPerformance(ProceedingJoinPoint joinPoint, 
+                                   PerformanceMonitored performanceMonitored) throws Throwable {
+        String operationName = getOperationName(joinPoint, performanceMonitored);
+        Timer.Sample sample = Timer.start(meterRegistry);
+        
+        try {
+            Object result = joinPoint.proceed();
+            
+            // Record success metrics
+            sample.stop(Timer.builder(""method.execution.time"")
+                .description(""Method execution time"")
+                .tag(""method"", joinPoint.getSignature().toShortString())
+                .tag(""operation"", operationName)
+                .tag(""status"", ""success"")
+                .tags(performanceMonitored.tags())
+                .register(meterRegistry));
+            
+            return result;
+            
+        } catch (Exception e) {
+            // Record error metrics
+            sample.stop(Timer.builder(""method.execution.time"")
+                .tag(""status"", ""error"")
+                .tag(""exception"", e.getClass().getSimpleName())
+                .register(meterRegistry));
+            
+            Counter.builder(""method.execution.errors"")
+                .description(""Method execution errors"")
+                .tag(""method"", joinPoint.getSignature().toShortString())
+                .tag(""exception"", e.getClass().getSimpleName())
+                .register(meterRegistry)
+                .increment();
+            
+            throw e;
+        }
+    }
+    
+    @Around(""@annotation(cacheable)"")
+    public Object cacheResult(ProceedingJoinPoint joinPoint, Cacheable cacheable) throws Throwable {
+        String cacheKey = generateCacheKey(joinPoint, cacheable);
+        
+        // Check cache
+        Object cachedResult = cache.get(cacheKey);
+        if (cachedResult != null) {
+            log.debug(""Cache hit for key: {}"", cacheKey);
+            Counter.builder(""cache.hits"")
+                .tag(""cache"", cacheable.value())
+                .register(meterRegistry)
+                .increment();
+            return cachedResult;
+        }
+        
+        // Execute method
+        Object result = joinPoint.proceed();
+        
+        // Cache result
+        cache.put(cacheKey, result);
+        log.debug(""Cached result for key: {}"", cacheKey);
+        
+        Counter.builder(""cache.misses"")
+            .tag(""cache"", cacheable.value())
+            .register(meterRegistry)
+            .increment();
+        
+        // Schedule cache eviction
+        scheduleCacheEviction(cacheKey, cacheable.ttlMinutes());
+        
+        return result;
+    }
+    
+    // Slow method detection
+    @AfterReturning(pointcut = ""performanceMonitoredMethods(performanceMonitored)"", returning = ""result"")
+    public void checkSlowExecution(JoinPoint joinPoint, 
+                                  PerformanceMonitored performanceMonitored, 
+                                  Object result) {
+        // This would be implemented with timing logic
+        // For brevity, assuming timing is captured elsewhere
+    }
+    
+    private Object[] maskSensitiveArguments(Object[] args, String[] sensitiveParams) {
+        if (sensitiveParams.length == 0) return args;
+        
+        Object[] maskedArgs = Arrays.copyOf(args, args.length);
+        for (int i = 0; i < maskedArgs.length; i++) {
+            if (i < sensitiveParams.length && ""true"".equals(sensitiveParams[i])) {
+                maskedArgs[i] = ""***MASKED***"";
+            }
+        }
+        return maskedArgs;
+    }
+    
+    private String generateCacheKey(ProceedingJoinPoint joinPoint, Cacheable cacheable) {
+        String methodName = joinPoint.getSignature().toShortString();
+        String argsHash = Arrays.hashCode(joinPoint.getArgs()) + """";
+        return cacheable.value() + "":"" + methodName + "":"" + argsHash;
+    }
+    
+    private void scheduleCacheEviction(String cacheKey, long ttlMinutes) {
+        // Implementation would use scheduled executor or TTL-based cache
+        // For demo purposes, simplified
+    }
+}
+
+Usage Examples:
+@Service
+public class UserService {
+    
+    @Loggable(level = LogLevel.INFO, logArgs = true, logResult = true, logExecutionTime = true)
+    @PerformanceMonitored(operation = ""user.creation"", slowThresholdMs = 500, tags = {""service"", ""user""})
+    public User createUser(CreateUserRequest request) {
+        // User creation logic
+        return userRepository.save(new User(request));
+    }
+    
+    @Loggable(sensitiveArgs = {""false"", ""true""}) // Mask password
+    @PerformanceMonitored(operation = ""user.authentication"")
+    public AuthResult authenticate(String username, String password) {
+        // Authentication logic
+        return authenticationManager.authenticate(username, password);
+    }
+    
+    @Cacheable(value = ""user-profile"", ttlMinutes = 30)
+    @Loggable(logArgs = false, logResult = false) // Don't log for cached methods
+    public UserProfile getUserProfile(Long userId) {
+        // Expensive operation to build user profile
+        return buildUserProfile(userId);
+    }
+    
+    @PerformanceMonitored(operation = ""bulk.user.update"", alertOnSlow = true)
+    public BatchResult updateUsers(List<User> users) {
+        // Bulk operation that might be slow
+        return bulkUpdateUsers(users);
+    }
+}
+
+Conditional Aspect Execution:
+@Aspect
+@Component
+@ConditionalOnProperty(name = ""app.monitoring.enabled"", havingValue = ""true"", matchIfMissing = true)
+public class ConditionalMonitoringAspect {
+    
+    @Value(""${app.monitoring.performance.enabled:true}"")
+    private boolean performanceMonitoringEnabled;
+    
+    @Value(""${app.monitoring.logging.enabled:true}"")
+    private boolean loggingEnabled;
+    
+    @Around(""@annotation(performanceMonitored)"")
+    public Object conditionalPerformanceMonitoring(ProceedingJoinPoint joinPoint, 
+                                                   PerformanceMonitored performanceMonitored) throws Throwable {
+        if (!performanceMonitoringEnabled) {
+            return joinPoint.proceed();
+        }
+        
+        // Apply performance monitoring
+        return monitorPerformance(joinPoint, performanceMonitored);
+    }
+}",Comprehensive AOP aspects provide centralized cross-cutting concerns with minimal code intrusion
+7,Spring Cloud,"Implement service discovery, circuit breaker, and configuration management in a microservices architecture","Service Registry (Eureka Server):
+@SpringBootApplication
+@EnableEurekaServer
+public class ServiceRegistryApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ServiceRegistryApplication.class, args);
+    }
+}
+
+# application.yml (Eureka Server)
+server:
+  port: 8761
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      default-zone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    enable-self-preservation: false
+
+Service Discovery Client:
+@SpringBootApplication
+@EnableEurekaClient
+@EnableCircuitBreaker
+public class UserServiceApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(UserServiceApplication.class, args);
+    }
+    
+    @Bean
+    @LoadBalanced
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
+    
+    @Bean
+    public WebClient.Builder webClientBuilder() {
+        return WebClient.builder();
+    }
+}
+
+# application.yml (Service Client)
+spring:
+  application:
+    name: user-service
+    
+eureka:
+  client:
+    service-url:
+      default-zone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 30
+    health-check-url-path: /actuator/health
+
+Circuit Breaker Implementation (Resilience4j):
+@Service
+public class OrderService {
+    
+    @Autowired
+    @LoadBalanced
+    private RestTemplate restTemplate;
+    
+    @Autowired
+    private NotificationService notificationService;
+    
+    @CircuitBreaker(name = ""payment-service"", fallbackMethod = ""fallbackPayment"")
+    @Retry(name = ""payment-service"")
+    @TimeLimiter(name = ""payment-service"")
+    public CompletableFuture<PaymentResponse> processPayment(PaymentRequest request) {
+        return CompletableFuture.supplyAsync(() -> {
+            ResponseEntity<PaymentResponse> response = restTemplate.postForEntity(
+                ""http://payment-service/api/payments"", 
+                request, 
+                PaymentResponse.class
+            );
+            return response.getBody();
+        });
+    }
+    
+    public CompletableFuture<PaymentResponse> fallbackPayment(PaymentRequest request, Exception ex) {
+        log.warn(""Payment service unavailable, using fallback. Error: {}"", ex.getMessage());
+        
+        // Store for later processing
+        paymentRepository.saveForLaterProcessing(request);
+        
+        // Notify admin
+        notificationService.notifyPaymentServiceDown(ex);
+        
+        return CompletableFuture.completedFuture(
+            PaymentResponse.builder()
+                .status(PaymentStatus.PENDING)
+                .message(""Payment queued for processing"")
+                .transactionId(UUID.randomUUID().toString())
+                .build()
+        );
+    }
+    
+    @CircuitBreaker(name = ""inventory-service"", fallbackMethod = ""fallbackInventoryCheck"")
+    @Bulkhead(name = ""inventory-service"")
+    public boolean checkInventory(String productId, int quantity) {
+        ResponseEntity<InventoryResponse> response = restTemplate.getForEntity(
+            ""http://inventory-service/api/inventory/{productId}/available?quantity={quantity}"",
+            InventoryResponse.class,
+            productId,
+            quantity
+        );
+        return response.getBody().isAvailable();
+    }
+    
+    public boolean fallbackInventoryCheck(String productId, int quantity, Exception ex) {
+        log.warn(""Inventory service unavailable, assuming product available. Error: {}"", ex.getMessage());
+        return true; // Optimistic fallback
+    }
+}
+
+Circuit Breaker Configuration:
+# application.yml
+resilience4j:
+  circuitbreaker:
+    instances:
+      payment-service:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: 5s
+        failure-rate-threshold: 50
+        event-consumer-buffer-size: 10
+        record-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+        ignore-exceptions:
+          - java.lang.IllegalArgumentException
+      inventory-service:
+        sliding-window-size: 20
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 10s
+        
+  retry:
+    instances:
+      payment-service:
+        max-attempts: 3
+        wait-duration: 2s
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - java.net.SocketTimeoutException
+          
+  timelimiter:
+    instances:
+      payment-service:
+        timeout-duration: 3s
+        cancel-running-future: true
+        
+  bulkhead:
+    instances:
+      inventory-service:
+        max-concurrent-calls: 10
+        max-wait-duration: 2s
+
+Configuration Server:
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigServerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServerApplication.class, args);
+    }
+}
+
+# application.yml (Config Server)
+server:
+  port: 8888
+  
+spring:
+  cloud:
+    config:
+      server:
+        git:
+          uri: https://github.com/myorg/config-repo
+          search-paths: '{application}'
+          default-label: main
+        health:
+          repositories:
+            myapp:
+              label: main
+              name: user-service
+              profiles: dev,prod
+
+Configuration Client:
+# bootstrap.yml (Config Client)
+spring:
+  application:
+    name: user-service
+  cloud:
+    config:
+      uri: http://localhost:8888
+      fail-fast: true
+      retry:
+        initial-interval: 1000
+        max-attempts: 6
+        max-interval: 2000
+        multiplier: 1.1
+  profiles:
+    active: dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: refresh,health,info
+
+Dynamic Configuration Refresh:
+@RestController
+@RefreshScope
+public class DynamicConfigController {
+    
+    @Value(""${app.message:Default message}"")
+    private String message;
+    
+    @Value(""${app.timeout:5000}"")
+    private int timeout;
+    
+    @Autowired
+    private AppProperties appProperties; // Also refreshable if @RefreshScope
+    
+    @GetMapping(""/config"")
+    public Map<String, Object> getCurrentConfig() {
+        Map<String, Object> config = new HashMap<>();
+        config.put(""message"", message);
+        config.put(""timeout"", timeout);
+        config.put(""timestamp"", Instant.now());
+        return config;
+    }
+}
+
+Gateway Configuration (Spring Cloud Gateway):
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: user-service
+                fallbackUri: forward:/fallback/users
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY,GATEWAY_TIMEOUT
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+                  factor: 2
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: ""#{@userKeyResolver}""
+                
+      default-filters:
+        - name: GlobalFilter
+        - name: LoggingFilter
+
+Service Communication with Load Balancing:
+@Service
+public class InterServiceCommunication {
+    
+    @Autowired
+    private WebClient.Builder webClientBuilder;
+    
+    @LoadBalanced
+    @Bean
+    public WebClient webClient() {
+        return webClientBuilder
+            .filter(ExchangeFilterFunction.ofRequestProcessor(
+                clientRequest -> {
+                    log.info(""Request: {} {}"", clientRequest.method(), clientRequest.url());
+                    return Mono.just(clientRequest);
+                }))
+            .build();
+    }
+    
+    public Mono<UserProfile> getUserProfile(String userId) {
+        return webClient
+            .get()
+            .uri(""http://user-service/api/users/{userId}/profile"", userId)
+            .retrieve()
+            .onStatus(HttpStatus::is4xxClientError, 
+                response -> Mono.error(new UserNotFoundException(userId)))
+            .onStatus(HttpStatus::is5xxServerError,
+                response -> Mono.error(new ServiceUnavailableException(""User service"")))
+            .bodyToMono(UserProfile.class)
+            .timeout(Duration.ofSeconds(5))
+            .retry(2);
+    }
+}","Spring Cloud provides comprehensive microservices patterns including service discovery, circuit breakers, and distributed configuration"
+8,Spring Testing,"Design comprehensive testing strategies including unit, integration, and contract testing in Spring Boot","Test Architecture Overview:
+- Unit Tests: Fast, isolated, mock dependencies
+- Integration Tests: Test component interactions
+- Contract Tests: API contract verification
+- End-to-End Tests: Full application flow
+
+Unit Testing with Mockito:
+@ExtendWith(MockitoExtension.class)
+class UserServiceTest {
+    
+    @Mock
+    private UserRepository userRepository;
+    
+    @Mock
+    private EmailService emailService;
+    
+    @Mock
+    private PasswordEncoder passwordEncoder;
+    
+    @InjectMocks
+    private UserService userService;
+    
+    @Captor
+    private ArgumentCaptor<User> userCaptor;
+    
+    @Test
+    @DisplayName(""Should create user successfully when valid request provided"")
+    void shouldCreateUserSuccessfully() {
+        // Given
+        CreateUserRequest request = CreateUserRequest.builder()
+            .username(""john.doe"")
+            .email(""john@example.com"")
+            .password(""password123"")
+            .build();
+            
+        User savedUser = User.builder()
+            .id(1L)
+            .username(""john.doe"")
+            .email(""john@example.com"")
+            .build();
+            
+        when(userRepository.existsByUsername(""john.doe"")).thenReturn(false);
+        when(userRepository.existsByEmail(""john@example.com"")).thenReturn(false);
+        when(passwordEncoder.encode(""password123"")).thenReturn(""encodedPassword"");
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
+        
+        // When
+        User result = userService.createUser(request);
+        
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getUsername()).isEqualTo(""john.doe"");
+        assertThat(result.getEmail()).isEqualTo(""john@example.com"");
+        
+        verify(userRepository).save(userCaptor.capture());
+        User capturedUser = userCaptor.getValue();
+        assertThat(capturedUser.getPassword()).isEqualTo(""encodedPassword"");
+        
+        verify(emailService).sendWelcomeEmail(savedUser);
+    }
+    
+    @Test
+    @DisplayName(""Should throw exception when username already exists"")
+    void shouldThrowExceptionWhenUsernameExists() {
+        // Given
+        CreateUserRequest request = CreateUserRequest.builder()
+            .username(""existing.user"")
+            .email(""new@example.com"")
+            .password(""password123"")
+            .build();
+            
+        when(userRepository.existsByUsername(""existing.user"")).thenReturn(true);
+        
+        // When & Then
+        assertThatThrownBy(() -> userService.createUser(request))
+            .isInstanceOf(UsernameAlreadyExistsException.class)
+            .hasMessage(""Username already exists: existing.user"");
+            
+        verify(userRepository, never()).save(any(User.class));
+        verify(emailService, never()).sendWelcomeEmail(any(User.class));
+    }
+}
+
+Integration Testing with TestContainers:
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Testcontainers
+@ActiveProfiles(""test"")
+class UserServiceIntegrationTest {
+    
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(""postgres:13"")
+            .withDatabaseName(""testdb"")
+            .withUsername(""test"")
+            .withPassword(""test"");
+            
+    @Container
+    static GenericContainer<?> redis = new GenericContainer<>(""redis:6-alpine"")
+            .withExposedPorts(6379);
+    
+    @Autowired
+    private TestRestTemplate restTemplate;
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+    
+    @DynamicPropertySource
+    static void configureProperties(DynamicPropertyRegistry registry) {
+        registry.add(""spring.datasource.url"", postgres::getJdbcUrl);
+        registry.add(""spring.datasource.username"", postgres::getUsername);
+        registry.add(""spring.datasource.password"", postgres::getPassword);
+        registry.add(""spring.redis.host"", redis::getHost);
+        registry.add(""spring.redis.port"", redis::getFirstMappedPort);
+    }
+    
+    @Test
+    @Sql(""/test-data/users.sql"")
+    @Transactional
+    @Rollback
+    void shouldCreateAndRetrieveUser() {
+        // Given
+        CreateUserRequest request = CreateUserRequest.builder()
+            .username(""integration.test"")
+            .email(""integration@test.com"")
+            .password(""password123"")
+            .build();
+        
+        // When - Create user
+        ResponseEntity<User> createResponse = restTemplate.postForEntity(
+            ""/api/users"", request, User.class);
+        
+        // Then - Verify creation
+        assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(createResponse.getBody()).isNotNull();
+        
+        User createdUser = createResponse.getBody();
+        assertThat(createdUser.getUsername()).isEqualTo(""integration.test"");
+        
+        // When - Retrieve user
+        ResponseEntity<User> getResponse = restTemplate.getForEntity(
+            ""/api/users/"" + createdUser.getId(), User.class);
+        
+        // Then - Verify retrieval
+        assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(getResponse.getBody().getUsername()).isEqualTo(""integration.test"");
+        
+        // Verify database state
+        Optional<User> dbUser = userRepository.findById(createdUser.getId());
+        assertThat(dbUser).isPresent();
+        assertThat(dbUser.get().getEmail()).isEqualTo(""integration@test.com"");
+    }
+}
+
+Web Layer Testing (MockMvc):
+@WebMvcTest(UserController.class)
+class UserControllerTest {
+    
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @MockBean
+    private UserService userService;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
+    
+    @Test
+    @WithMockUser(roles = ""ADMIN"")
+    void shouldCreateUserWhenValidRequest() throws Exception {
+        // Given
+        CreateUserRequest request = CreateUserRequest.builder()
+            .username(""test.user"")
+            .email(""test@example.com"")
+            .password(""password123"")
+            .build();
+            
+        User expectedUser = User.builder()
+            .id(1L)
+            .username(""test.user"")
+            .email(""test@example.com"")
+            .build();
+            
+        when(userService.createUser(any(CreateUserRequest.class))).thenReturn(expectedUser);
+        
+        // When & Then
+        mockMvc.perform(post(""/api/users"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath(""$.id"").value(1))
+            .andExpect(jsonPath(""$.username"").value(""test.user""))
+            .andExpect(jsonPath(""$.email"").value(""test@example.com""))
+            .andExpect(header().exists(""Location""));
+    }
+    
+    @Test
+    void shouldReturnBadRequestWhenInvalidInput() throws Exception {
+        // Given
+        CreateUserRequest request = CreateUserRequest.builder()
+            .username("""") // Invalid empty username
+            .email(""invalid-email"") // Invalid email format
+            .build(); // Missing password
+        
+        // When & Then
+        mockMvc.perform(post(""/api/users"")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath(""$.fieldErrors.username"").exists())
+            .andExpect(jsonPath(""$.fieldErrors.email"").exists())
+            .andExpect(jsonPath(""$.fieldErrors.password"").exists());
+    }
+}
+
+Security Testing:
+@SpringBootTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+class SecurityIntegrationTest {
+    
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+    
+    @Test
+    @WithAnonymousUser
+    void shouldDenyAccessToProtectedEndpointWithoutAuthentication() throws Exception {
+        mockMvc.perform(get(""/api/users/1""))
+            .andExpect(status().isUnauthorized());
+    }
+    
+    @Test
+    void shouldAllowAccessWithValidJwtToken() throws Exception {
+        // Given
+        UserDetails userDetails = User.builder()
+            .username(""testuser"")
+            .password(""password"")
+            .authorities(Collections.singletonList(new SimpleGrantedAuthority(""ROLE_USER"")))
+            .build();
+            
+        String token = jwtTokenUtil.generateToken(userDetails);
+        
+        // When & Then
+        mockMvc.perform(get(""/api/users/1"")
+                .header(""Authorization"", ""Bearer "" + token))
+            .andExpect(status().isOk());
+    }
+    
+    @Test
+    @WithMockUser(roles = ""USER"")
+    void shouldDenyAccessToAdminEndpointWithUserRole() throws Exception {
+        mockMvc.perform(delete(""/api/users/1""))
+            .andExpected(status().isForbidden());
+    }
+}
+
+Contract Testing (Spring Cloud Contract):
+// Contract definition (Groovy DSL)
+Contract.make {
+    description ""Should return user when valid ID provided""
+    
+    request {
+        method GET()
+        url(""/api/users/1"")
+        headers {
+            contentType(applicationJson())
+        }
+    }
+    
+    response {
+        status OK()
+        headers {
+            contentType(applicationJson())
+        }
+        body(
+            id: 1,
+            username: ""john.doe"",
+            email: ""john@example.com"",
+            active: true
+        )
+    }
+}
+
+// Base test class for contract testing
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+public abstract class BaseContractTest {
+    
+    @Autowired
+    private WebApplicationContext context;
+    
+    @MockBean
+    private UserService userService;
+    
+    @BeforeEach
+    void setup() {
+        RestAssuredMockMvc.webAppContextSetup(context);
+        
+        // Setup mocks for contract tests
+        User mockUser = User.builder()
+            .id(1L)
+            .username(""john.doe"")
+            .email(""john@example.com"")
+            .active(true)
+            .build();
+            
+        when(userService.findById(1L)).thenReturn(mockUser);
+    }
+}
+
+Performance Testing:
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+class PerformanceTest {
+    
+    @Autowired
+    private TestRestTemplate restTemplate;
+    
+    @Test
+    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    void shouldCompleteUserCreationWithinTimeLimit() {
+        CreateUserRequest request = CreateUserRequest.builder()
+            .username(""perf.test"")
+            .email(""perf@test.com"")
+            .password(""password123"")
+            .build();
+        
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        
+        ResponseEntity<User> response = restTemplate.postForEntity(
+            ""/api/users"", request, User.class);
+        
+        stopWatch.stop();
+        
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(stopWatch.getTotalTimeMillis()).isLessThan(1000); // Less than 1 second
+    }
+}",Comprehensive testing strategy ensures application reliability from unit level to full integration scenarios
+9,Spring WebMVC,"Implement advanced request/response handling with custom converters, interceptors, and exception handling","Custom Message Converters:
+@Component
+public class CustomCsvHttpMessageConverter extends AbstractHttpMessageConverter<List<Object>> {
+    
+    public CustomCsvHttpMessageConverter() {
+        super(new MediaType(""text"", ""csv""));
+    }
+    
+    @Override
+    protected boolean supports(Class<?> clazz) {
+        return List.class.isAssignableFrom(clazz);
+    }
+    
+    @Override
+    protected List<Object> readInternal(Class<? extends List<Object>> clazz, 
+                                        HttpInputMessage inputMessage) throws IOException {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(inputMessage.getBody(), StandardCharsets.UTF_8))) {
+            
+            return reader.lines()
+                .skip(1) // Skip header
+                .map(line -> parseCsvLine(line))
+                .collect(Collectors.toList());
+        }
+    }
+    
+    @Override
+    protected void writeInternal(List<Object> objects, HttpOutputMessage outputMessage) 
+            throws IOException {
+        
+        try (PrintWriter writer = new PrintWriter(
+                new OutputStreamWriter(outputMessage.getBody(), StandardCharsets.UTF_8))) {
+            
+            if (!objects.isEmpty()) {
+                // Write header
+                Object firstObject = objects.get(0);
+                String header = getFieldNames(firstObject).stream()
+                    .collect(Collectors.joining("",""));
+                writer.println(header);
+                
+                // Write data rows
+                for (Object obj : objects) {
+                    String row = getFieldValues(obj).stream()
+                        .collect(Collectors.joining("",""));
+                    writer.println(row);
+                }
+            }
+        }
+    }
+    
+    private Object parseCsvLine(String line) {
+        // Implementation for parsing CSV line to object
+        String[] values = line.split("","");
+        // Convert to appropriate object based on context
+        return values;
+    }
+}
+
+Advanced Interceptors:
+@Component
+public class RequestResponseLoggingInterceptor implements HandlerInterceptor {
+    
+    private static final Logger log = LoggerFactory.getLogger(RequestResponseLoggingInterceptor.class);
+    
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, 
+                           Object handler) throws Exception {
+        
+        // Log request details
+        String requestId = UUID.randomUUID().toString();
+        request.setAttribute(""requestId"", requestId);
+        request.setAttribute(""startTime"", System.currentTimeMillis());
+        
+        log.info(""Request [{}] {} {} from {} - User-Agent: {}"", 
+            requestId,
+            request.getMethod(),
+            request.getRequestURI(),
+            getClientIpAddress(request),
+            request.getHeader(""User-Agent""));
+        
+        // Rate limiting check
+        if (!rateLimitingService.isAllowed(getClientIpAddress(request))) {
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+            return false;
+        }
+        
+        return true;
+    }
+    
+    @Override
+    public void postHandle(HttpServletRequest request, HttpServletResponse response, 
+                          Object handler, ModelAndView modelAndView) throws Exception {
+        
+        String requestId = (String) request.getAttribute(""requestId"");
+        long startTime = (Long) request.getAttribute(""startTime"");
+        long duration = System.currentTimeMillis() - startTime;
+        
+        log.info(""Response [{}] {} - Duration: {}ms"", 
+            requestId, response.getStatus(), duration);
+        
+        // Add custom headers
+        response.setHeader(""X-Request-ID"", requestId);
+        response.setHeader(""X-Response-Time"", String.valueOf(duration));
+    }
+    
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, 
+                              Object handler, Exception ex) throws Exception {
+        if (ex != null) {
+            String requestId = (String) request.getAttribute(""requestId"");
+            log.error(""Request [{}] completed with exception: {}"", requestId, ex.getMessage(), ex);
+        }
+    }
+    
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader(""X-Forwarded-For"");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split("","")[0].trim();
+        }
+        
+        String xRealIp = request.getHeader(""X-Real-IP"");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        
+        return request.getRemoteAddr();
+    }
+}
+
+Authentication Interceptor:
+@Component
+public class AuthenticationInterceptor implements HandlerInterceptor {
+    
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+    
+    @Autowired
+    private UserDetailsService userDetailsService;
+    
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, 
+                           Object handler) throws Exception {
+        
+        // Skip authentication for public endpoints
+        if (isPublicEndpoint(request)) {
+            return true;
+        }
+        
+        String authHeader = request.getHeader(""Authorization"");
+        if (authHeader == null || !authHeader.startsWith(""Bearer "")) {
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            response.getWriter().write(""{\""error\"":\""Missing or invalid authorization header\""}"");
+            return false;
+        }
+        
+        try {
+            String token = authHeader.substring(7);
+            String username = jwtTokenUtil.getUsernameFromToken(token);
+            
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                
+                if (jwtTokenUtil.validateToken(token, userDetails)) {
+                    UsernamePasswordAuthenticationToken authToken = 
+                        new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities());
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                    
+                    // Store user info in request for easy access
+                    request.setAttribute(""currentUser"", userDetails);
+                    return true;
+                }
+            }
+            
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            return false;
+            
+        } catch (Exception e) {
+            log.error(""Authentication error: {}"", e.getMessage());
+            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+            return false;
+        }
+    }
+    
+    private boolean isPublicEndpoint(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String method = request.getMethod();
+        
+        return path.startsWith(""/api/public/"") ||
+               (path.equals(""/api/auth/login"") && ""POST"".equals(method)) ||
+               path.startsWith(""/actuator/health"");
+    }
+}
+
+Global Exception Handler:
+@ControllerAdvice
+@Slf4j
+public class GlobalExceptionHandler {
+    
+    @ExceptionHandler(ValidationException.class)
+    public ResponseEntity<ErrorResponse> handleValidation(ValidationException ex, 
+                                                          HttpServletRequest request) {
+        ErrorResponse error = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.BAD_REQUEST.value())
+            .error(""Validation Failed"")
+            .message(ex.getMessage())
+            .path(request.getRequestURI())
+            .requestId(getRequestId(request))
+            .build();
+            
+        return ResponseEntity.badRequest().body(error);
+    }
+    
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpServletRequest request) {
+        
+        Map<String, String> fieldErrors = ex.getBindingResult()
+            .getFieldErrors()
+            .stream()
+            .collect(Collectors.toMap(
+                FieldError::getField,
+                FieldError::getDefaultMessage,
+                (existing, replacement) -> existing // Keep first error for duplicate fields
+            ));
+            
+        ErrorResponse error = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.UNPROCESSABLE_ENTITY.value())
+            .error(""Validation Failed"")
+            .message(""Invalid input parameters"")
+            .path(request.getRequestURI())
+            .requestId(getRequestId(request))
+            .fieldErrors(fieldErrors)
+            .build();
+            
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(error);
+    }
+    
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex,
+                                                               HttpServletRequest request) {
+        ErrorResponse error = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.NOT_FOUND.value())
+            .error(""Resource Not Found"")
+            .message(ex.getMessage())
+            .path(request.getRequestURI())
+            .requestId(getRequestId(request))
+            .build();
+            
+        return ResponseEntity.notFound().build();
+    }
+    
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex,
+                                                           HttpServletRequest request) {
+        ErrorResponse error = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.FORBIDDEN.value())
+            .error(""Access Denied"")
+            .message(""You don't have permission to access this resource"")
+            .path(request.getRequestURI())
+            .requestId(getRequestId(request))
+            .build();
+            
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+    
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex, HttpServletRequest request) {
+        String requestId = getRequestId(request);
+        log.error(""Unexpected error for request [{}]: {}"", requestId, ex.getMessage(), ex);
+        
+        ErrorResponse error = ErrorResponse.builder()
+            .timestamp(Instant.now())
+            .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+            .error(""Internal Server Error"")
+            .message(""An unexpected error occurred"")
+            .path(request.getRequestURI())
+            .requestId(requestId)
+            .build();
+            
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+    
+    private String getRequestId(HttpServletRequest request) {
+        return (String) request.getAttribute(""requestId"");
+    }
+}
+
+Custom Argument Resolvers:
+@Component
+public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolver {
+    
+    @Override
+    public boolean supportsParameter(MethodParameter parameter) {
+        return parameter.hasParameterAnnotation(CurrentUser.class) &&
+               parameter.getParameterType().equals(UserDetails.class);
+    }
+    
+    @Override
+    public Object resolveArgument(MethodParameter parameter, 
+                                ModelAndViewContainer mavContainer,
+                                NativeWebRequest webRequest, 
+                                WebDataBinderFactory binderFactory) throws Exception {
+        
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        
+        if (authentication != null && authentication.getPrincipal() instanceof UserDetails) {
+            return authentication.getPrincipal();
+        }
+        
+        throw new IllegalStateException(""Unable to resolve current user"");
+    }
+}
+
+// Custom annotation
+@Target(ElementType.PARAMETER)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface CurrentUser {
+}
+
+WebMVC Configuration:
+@Configuration
+@EnableWebMvc
+public class WebMvcConfig implements WebMvcConfigurer {
+    
+    @Autowired
+    private RequestResponseLoggingInterceptor loggingInterceptor;
+    
+    @Autowired
+    private AuthenticationInterceptor authInterceptor;
+    
+    @Autowired
+    private CurrentUserArgumentResolver currentUserArgumentResolver;
+    
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(loggingInterceptor).addPathPatterns(""/**"");
+        registry.addInterceptor(authInterceptor)
+            .addPathPatterns(""/api/**"")
+            .excludePathPatterns(""/api/public/**"", ""/api/auth/**"");
+    }
+    
+    @Override
+    public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+        resolvers.add(currentUserArgumentResolver);
+    }
+    
+    @Override
+    public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+        converters.add(new CustomCsvHttpMessageConverter());
+        converters.add(new MappingJackson2HttpMessageConverter());
+    }
+    
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping(""/api/**"")
+            .allowedOrigins(""http://localhost:3000"", ""https://myapp.com"")
+            .allowedMethods(""GET"", ""POST"", ""PUT"", ""DELETE"", ""OPTIONS"")
+            .allowedHeaders(""*"")
+            .allowCredentials(true)
+            .maxAge(3600);
+    }
+}","Advanced MVC features provide fine-grained control over request processing, security, and response handling"
+10,Spring Transaction Management,"Implement complex transaction scenarios with multiple datasources, nested transactions, and rollback strategies","Multiple DataSource Configuration:
+@Configuration
+@EnableTransactionManagement
+@EnableJpaRepositories(
+    basePackages = ""com.example.repository.primary"",
+    entityManagerFactoryRef = ""primaryEntityManagerFactory"",
+    transactionManagerRef = ""primaryTransactionManager""
+)
+public class PrimaryDataSourceConfig {
+    
+    @Primary
+    @Bean
+    @ConfigurationProperties(""spring.datasource.primary"")
+    public DataSource primaryDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+    
+    @Primary
+    @Bean
+    public LocalContainerEntityManagerFactoryBean primaryEntityManagerFactory(
+            @Qualifier(""primaryDataSource"") DataSource dataSource) {
+        
+        LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
+        factory.setDataSource(dataSource);
+        factory.setPackagesToScan(""com.example.entity.primary"");
+        factory.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
+        
+        Properties jpaProperties = new Properties();
+        jpaProperties.setProperty(""hibernate.dialect"", ""org.hibernate.dialect.PostgreSQLDialect"");
+        jpaProperties.setProperty(""hibernate.hbm2ddl.auto"", ""validate"");
+        jpaProperties.setProperty(""hibernate.show_sql"", ""false"");
+        factory.setJpaProperties(jpaProperties);
+        
+        return factory;
+    }
+    
+    @Primary
+    @Bean
+    public PlatformTransactionManager primaryTransactionManager(
+            @Qualifier(""primaryEntityManagerFactory"") EntityManagerFactory entityManagerFactory) {
+        return new JpaTransactionManager(entityManagerFactory);
+    }
+}
+
+@Configuration
+@EnableJpaRepositories(
+    basePackages = ""com.example.repository.secondary"",
+    entityManagerFactoryRef = ""secondaryEntityManagerFactory"", 
+    transactionManagerRef = ""secondaryTransactionManager""
+)
+public class SecondaryDataSourceConfig {
+    
+    @Bean
+    @ConfigurationProperties(""spring.datasource.secondary"")
+    public DataSource secondaryDataSource() {
+        return DataSourceBuilder.create().build();
+    }
+    
+    @Bean
+    public LocalContainerEntityManagerFactoryBean secondaryEntityManagerFactory(
+            @Qualifier(""secondaryDataSource"") DataSource dataSource) {
+        
+        LocalContainerEntityManagerFactoryBean factory = new LocalContainerEntityManagerFactoryBean();
+        factory.setDataSource(dataSource);
+        factory.setPackagesToScan(""com.example.entity.secondary"");
+        factory.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
+        return factory;
+    }
+    
+    @Bean
+    public PlatformTransactionManager secondaryTransactionManager(
+            @Qualifier(""secondaryEntityManagerFactory"") EntityManagerFactory entityManagerFactory) {
+        return new JpaTransactionManager(entityManagerFactory);
+    }
+}
+
+Distributed Transaction with XA:
+@Configuration
+public class XATransactionConfig {
+    
+    @Bean
+    @Primary
+    public DataSource primaryXADataSource() {
+        AtomikosDataSourceBean dataSource = new AtomikosDataSourceBean();
+        dataSource.setUniqueResourceName(""primaryDB"");
+        dataSource.setXaDataSourceClassName(""org.postgresql.xa.PGXADataSource"");
+        
+        Properties props = new Properties();
+        props.setProperty(""serverName"", ""localhost"");
+        props.setProperty(""portNumber"", ""5432"");
+        props.setProperty(""databaseName"", ""primarydb"");
+        props.setProperty(""user"", ""dbuser"");
+        props.setProperty(""password"", ""dbpass"");
+        dataSource.setXaProperties(props);
+        
+        dataSource.setMaxPoolSize(10);
+        dataSource.setMinPoolSize(2);
+        return dataSource;
+    }
+    
+    @Bean
+    public DataSource secondaryXADataSource() {
+        AtomikosDataSourceBean dataSource = new AtomikosDataSourceBean();
+        dataSource.setUniqueResourceName(""secondaryDB"");
+        dataSource.setXaDataSourceClassName(""com.mysql.cj.jdbc.MysqlXADataSource"");
+        
+        Properties props = new Properties();
+        props.setProperty(""url"", ""jdbc:mysql://localhost:3306/secondarydb"");
+        props.setProperty(""user"", ""dbuser"");
+        props.setProperty(""password"", ""dbpass"");
+        dataSource.setXaProperties(props);
+        
+        return dataSource;
+    }
+    
+    @Bean
+    public UserTransactionManager userTransactionManager() {
+        UserTransactionManager manager = new UserTransactionManager();
+        manager.setForceShutdown(true);
+        return manager;
+    }
+    
+    @Bean
+    @Primary
+    public PlatformTransactionManager transactionManager() {
+        return new JtaTransactionManager(userTransactionManager(), userTransactionManager());
+    }
+}
+
+Complex Transaction Service:
+@Service
+@Transactional
+public class OrderProcessingService {
+    
+    @Autowired
+    private OrderRepository orderRepository;
+    
+    @Autowired
+    private InventoryService inventoryService;
+    
+    @Autowired
+    private PaymentService paymentService;
+    
+    @Autowired
+    private NotificationService notificationService;
+    
+    @Autowired
+    private AuditService auditService;",

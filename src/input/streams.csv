@@ -1,0 +1,1346 @@
+id,number,category,question,answer,notes
+SY0ej8jukU6o4YdkM9s2,1,Streams & Lambda,"What are the differences between intermediate and terminal operations in Java Streams?","**Intermediate vs Terminal Operations in Java Streams:**
+
+**Intermediate Operations - Stream Transformers:**
+• **Lazy Evaluation**: Not executed until a terminal operation is called
+• **Return Type**: Always return a new Stream (enabling method chaining)
+• **Chainable**: Multiple intermediate operations can be linked together
+• **Processing**: Transform or filter stream elements without consuming the stream
+• **Examples**: filter(), map(), sorted(), distinct(), limit(), skip(), peek()
+
+```java
+Stream<String> intermediateStream = list.stream()
+    .filter(s -> s.length() > 3)        // intermediate - lazy
+    .map(String::toUpperCase)           // intermediate - lazy  
+    .sorted()                           // intermediate - lazy
+    .distinct();                        // intermediate - lazy
+// No execution yet - just building the pipeline
+```
+
+**Terminal Operations - Stream Consumers:**
+• **Execution Trigger**: Immediately trigger processing of the entire stream pipeline
+• **Return Type**: Return non-Stream results (collections, primitives, void, Optional)
+• **Single Use**: Only one terminal operation allowed per stream pipeline
+• **Stream Consumption**: Consume and close the stream after execution
+• **Examples**: collect(), forEach(), reduce(), findFirst(), findAny(), count(), anyMatch()
+
+```java
+List<String> result = list.stream()
+    .filter(s -> s.length() > 3)
+    .map(String::toUpperCase)
+    .collect(Collectors.toList());      // terminal - triggers execution
+```
+
+**Stream Pipeline Execution:**
+1. **Pipeline Building**: Intermediate operations build a processing pipeline
+2. **Lazy Evaluation**: Nothing executes until terminal operation is called
+3. **Single Pass**: Elements flow through all operations in a single iteration
+4. **Short-Circuiting**: Operations like findFirst() can terminate early
+
+**Stream Characteristics:**
+• **One-Time Use**: Streams cannot be reused after terminal operation
+• **On-Demand Processing**: Elements processed only when needed
+• **Parallel Capability**: Can be sequential or parallel (.parallel())","**Performance Benefits:** Lazy evaluation enables optimization - the stream API can eliminate unnecessary operations, combine operations, and short-circuit when possible. **Pipeline Design:** Design streams with filtering operations early to reduce elements processed by downstream operations. **Memory Efficiency:** Streams process elements on-demand without storing intermediate collections. **Debugging Tip:** Use peek() intermediate operation to inspect elements flowing through the pipeline without affecting the stream."
+
+TiFk8k0W6Om7eSYTGqwV,2,Streams & Lambda,"What are the performance implications of parallel streams and when should you avoid them?","**Parallel Streams: Performance Analysis and Guidelines:**
+
+**How Parallel Streams Work:**
+• **ForkJoinPool**: Uses common ForkJoinPool for parallel execution
+• **Work Stealing**: Idle threads steal work from busy threads' queues
+• **Splitting Strategy**: Splits stream into chunks processed by different threads
+• **Default Pool Size**: Runtime.getRuntime().availableProcessors() - 1
+• **Merging Results**: Combines partial results from different threads
+
+**When to Use Parallel Streams:**
+
+**✅ Good Candidates:**
+• **Large Datasets**: Generally >10,000 elements (but test your specific use case)
+• **CPU-Intensive Operations**: Mathematical computations, complex transformations
+• **Independent Elements**: No shared mutable state between operations
+• **Splittable Data Sources**: ArrayList, arrays, ranges (good splitting characteristics)
+• **Associative Operations**: Operations where order doesn't matter
+
+```java
+// Good parallel stream usage
+List<Integer> numbers = IntStream.range(1, 1_000_000).boxed().collect(toList());
+double result = numbers.parallelStream()
+    .mapToDouble(n -> Math.sqrt(n * n * n))  // CPU-intensive
+    .filter(d -> d > 1000)
+    .average()
+    .orElse(0.0);
+```
+
+**❌ Avoid Parallel Streams For:**
+
+**1. Small Datasets (<1,000-10,000 elements):**
+• Overhead of thread coordination exceeds benefits
+• Context switching costs more than sequential processing
+
+**2. I/O Operations:**
+```java
+// Bad - parallel I/O can overwhelm resources
+files.parallelStream()
+    .map(file -> readFileContent(file))  // I/O bound - avoid parallel
+    .collect(toList());
+```
+
+**3. Stateful Operations:**
+• sorted(), distinct(), limit() - require coordination between threads
+• Can cause significant overhead and reduced parallelization benefits
+
+**4. Operations with Side Effects:**
+```java
+// Bad - race conditions with shared mutable state
+List<String> results = new ArrayList<>();  // Not thread-safe
+stream.parallel().forEach(item -> results.add(process(item))); // Dangerous!
+```
+
+**Custom Thread Pool Usage:**
+```java
+ForkJoinPool customThreadPool = new ForkJoinPool(4);
+try {
+    List<String> result = customThreadPool.submit(() ->
+        data.parallelStream()
+            .map(this::processData)
+            .collect(Collectors.toList())
+    ).get();
+} finally {
+    customThreadPool.shutdown();
+}
+```","**Performance Testing Essential:** Always benchmark parallel vs sequential for your specific use case - parallel streams aren't always faster. **Rule of Thumb:** Consider parallel streams when: N (elements) × Q (cost per element) is high, where Q should be >10,000 operations. **Data Source Matters:** ArrayList and arrays split well; LinkedList and Stream.iterate() split poorly. **Side Effects Warning:** Use collect() instead of forEach() with external collections to avoid race conditions. **Memory Considerations:** Parallel streams may use more memory due to additional thread overhead and intermediate storage."
+
+NEW_ID_001,3,Streams & Lambda,"What are effectively final variables and why are they required in lambda expressions?","**Effectively Final Variables in Lambda Expressions:**
+
+**Definition and Concept:**
+Effectively final variables are local variables that are not explicitly declared as final but are never modified after their initial assignment. Java requires lambda expressions to only capture effectively final or explicitly final variables from their enclosing scope.
+
+**Why This Restriction Exists:**
+
+**1. Thread Safety and Concurrency:**
+```java
+// Problem without effectively final restriction
+int counter = 0;  // Not effectively final
+List<String> items = Arrays.asList(""a"", ""b"", ""c"");
+
+// This would be dangerous if allowed
+items.stream().forEach(item -> {
+    counter++;  // Would cause race conditions in parallel streams
+    System.out.println(item + "": "" + counter);
+});
+```
+
+**2. Variable Capture Semantics:**
+• **Local Variables**: Stored on the stack, have limited lifetime
+• **Lambda Lifetime**: May outlive the method where they're created
+• **Value Capture**: Lambda captures variable values, not references
+• **Consistency**: Ensures lambda behavior is predictable and deterministic
+
+**Valid Effectively Final Usage:**
+```java
+// ✅ Effectively final - never modified after initialization
+String prefix = ""Item: "";
+int multiplier = 10;
+List<String> processed = items.stream()
+    .map(item -> prefix + item)                    // OK - prefix is effectively final
+    .map(item -> item + "" x "" + multiplier)      // OK - multiplier is effectively final
+    .collect(Collectors.toList());
+
+// ✅ Explicitly final
+final String suffix = "" (processed)"";
+items.forEach(item -> System.out.println(item + suffix));
+```
+
+**Invalid Usage Examples:**
+```java
+// ❌ Not effectively final - modified after initialization
+int total = 0;
+items.forEach(item -> {
+    total += item.length();  // Compilation error!
+});
+
+// ❌ Modified in loop
+for (int i = 0; i < items.size(); i++) {
+    items.forEach(item -> System.out.println(i + "": "" + item)); // Error - i is modified
+}
+```
+
+**Workarounds for Mutable State:**
+
+**1. Use Atomic Variables:**
+```java
+AtomicInteger counter = new AtomicInteger(0);
+items.forEach(item -> {
+    System.out.println(counter.incrementAndGet() + "": "" + item);
+});
+```
+
+**2. Use Collectors for Aggregation:**
+```java
+// Instead of external counter, use stream operations
+int totalLength = items.stream()
+    .mapToInt(String::length)
+    .sum();
+```
+
+**3. Use Mutable Objects (with caution):**
+```java
+List<String> results = new ArrayList<>();  // Mutable container
+items.forEach(item -> results.add(item.toUpperCase())); // OK - container reference is final
+```","**Memory Management:** Lambda variable capture creates copies of primitive values and references to objects - the original variables on the stack are not accessed. **Best Practice:** Design lambda expressions to be pure functions without side effects when possible. **Alternative Approaches:** Use stream reduction operations (reduce(), collect()) instead of external mutable variables for aggregations. **Debugging Note:** If you need to modify variables, consider if the operation can be redesigned using functional programming principles like map-reduce patterns."
+
+NEW_ID_002,4,Streams & Lambda,"How do method references work and what are the four types with examples?","**Method References: Concise Lambda Alternatives:**
+
+**Overview and Purpose:**
+Method references provide a shorthand syntax for lambda expressions that only call a single existing method. They improve code readability and encourage reuse of existing methods. The compiler automatically converts method references to appropriate lambda expressions.
+
+**The Four Types of Method References:**
+
+**1. Static Method References (ClassName::staticMethod):**
+```java
+// Lambda equivalent: x -> Math.abs(x)
+List<Integer> numbers = Arrays.asList(-1, -2, 3, -4);
+List<Integer> absolute = numbers.stream()
+    .map(Math::abs)                    // Static method reference
+    .collect(Collectors.toList());
+
+// More examples:
+Stream.of(""1"", ""2"", ""3"")
+    .map(Integer::parseInt)            // Integer.parseInt(String)
+    .forEach(System.out::println);     // System.out.println(Object)
+```
+
+**2. Instance Method of Particular Object (instance::instanceMethod):**
+```java
+String prefix = ""Hello, "";
+List<String> names = Arrays.asList(""Alice"", ""Bob"", ""Charlie"");
+
+// Lambda equivalent: name -> prefix.concat(name)
+List<String> greetings = names.stream()
+    .map(prefix::concat)               // Instance method of specific object
+    .collect(Collectors.toList());
+
+// Using StringBuilder instance
+StringBuilder sb = new StringBuilder();
+Stream.of(""a"", ""b"", ""c"")
+    .forEach(sb::append);              // sb.append(String)
+```
+
+**3. Instance Method of Arbitrary Object of Particular Type (ClassName::instanceMethod):**
+```java
+List<String> words = Arrays.asList(""apple"", ""banana"", ""cherry"");
+
+// Lambda equivalent: str -> str.length()
+List<Integer> lengths = words.stream()
+    .map(String::length)               // Instance method of arbitrary String
+    .collect(Collectors.toList());
+
+// Lambda equivalent: str -> str.toUpperCase()
+List<String> uppercase = words.stream()
+    .map(String::toUpperCase)          // Instance method of arbitrary String
+    .collect(Collectors.toList());
+
+// Sorting example - lambda equivalent: (a, b) -> a.compareToIgnoreCase(b)
+words.sort(String::compareToIgnoreCase);
+```
+
+**4. Constructor References (ClassName::new):**
+```java
+// Lambda equivalent: () -> new ArrayList<>()
+Supplier<List<String>> listFactory = ArrayList::new;
+List<String> newList = listFactory.get();
+
+// Lambda equivalent: size -> new ArrayList<>(size)
+Function<Integer, List<String>> listCreator = ArrayList::new;
+List<String> sizedList = listCreator.apply(10);
+
+// Converting stream to different collection types
+List<String> words = Arrays.asList(""a"", ""b"", ""c"");
+Set<String> wordSet = words.stream()
+    .collect(Collectors.toCollection(HashSet::new));
+
+// Array constructor reference
+String[] array = words.stream()
+    .toArray(String[]::new);           // Generator function for array creation
+```
+
+**Advanced Constructor Reference Examples:**
+```java
+// Creating objects from stream elements
+List<String> names = Arrays.asList(""Alice"", ""Bob"");
+List<Person> people = names.stream()
+    .map(Person::new)                  // Assumes Person(String name) constructor
+    .collect(Collectors.toList());
+
+// Two-argument constructor
+Map<String, Integer> nameAges = Map.of(""Alice"", 25, ""Bob"", 30);
+List<Person> peopleWithAge = nameAges.entrySet().stream()
+    .map(entry -> new Person(entry.getKey(), entry.getValue())) // Lambda required for multiple args
+    .collect(Collectors.toList());
+```
+
+**When Method References Cannot Be Used:**
+```java
+// Multiple statements - must use lambda
+list.stream().map(s -> {
+    String trimmed = s.trim();
+    return trimmed.toUpperCase();
+});
+
+// Additional parameters - must use lambda
+list.stream().map(s -> s.substring(1, 5));
+
+// Complex expressions - must use lambda
+list.stream().filter(s -> s.length() > 3 && s.startsWith(""A""));
+```","**Readability Trade-offs:** Method references are more concise but lambdas may be clearer for complex operations or when additional parameters are needed. **Performance:** Method references and equivalent lambdas have identical performance - the compiler generates the same bytecode. **Refactoring Benefits:** Method references encourage extracting logic into named methods, improving code organization and testability. **IDE Support:** Modern IDEs can automatically convert between lambdas and method references, suggesting the most appropriate form for each situation."
+
+NEW_ID_003,5,Streams & Lambda,"What is the difference between flatMap() and map() and when would you use each?","**map() vs flatMap(): Transformation Strategies:**
+
+**map() - One-to-One Transformation:**
+```java
+// Signature: <R> Stream<R> map(Function<? super T, ? extends R> mapper)
+```
+• **Purpose**: Transform each element to exactly one new element
+• **Result**: Same number of elements in output as input
+• **Use Case**: Simple transformations, type conversions, property extraction
+
+```java
+List<String> words = Arrays.asList(""hello"", ""world"", ""java"");
+
+// Transform each string to its length
+List<Integer> lengths = words.stream()
+    .map(String::length)               // String -> Integer (1:1)
+    .collect(Collectors.toList());     // [5, 5, 4]
+
+// Transform each string to uppercase
+List<String> uppercase = words.stream()
+    .map(String::toUpperCase)          // String -> String (1:1)
+    .collect(Collectors.toList());     // [""HELLO"", ""WORLD"", ""JAVA""]
+```
+
+**flatMap() - One-to-Many Transformation with Flattening:**
+```java
+// Signature: <R> Stream<R> flatMap(Function<? super T, ? extends Stream<? extends R>> mapper)
+```
+• **Purpose**: Transform each element to zero or more elements, then flatten the result
+• **Result**: Can have different number of elements than input
+• **Use Case**: Working with nested collections, Optional unwrapping, splitting operations
+
+```java
+List<String> sentences = Arrays.asList(
+    ""Hello world"", 
+    ""Java streams"", 
+    ""Functional programming""
+);
+
+// Split each sentence into words and flatten
+List<String> allWords = sentences.stream()
+    .flatMap(sentence -> Arrays.stream(sentence.split("" ""))) // String -> Stream<String>
+    .collect(Collectors.toList());
+// Result: [""Hello"", ""world"", ""Java"", ""streams"", ""Functional"", ""programming""]
+```
+
+**Nested Collections Example:**
+```java
+List<List<Integer>> nestedNumbers = Arrays.asList(
+    Arrays.asList(1, 2, 3),
+    Arrays.asList(4, 5),
+    Arrays.asList(6, 7, 8, 9)
+);
+
+// ❌ map() creates Stream<Stream<Integer>> - not what we want
+Stream<Stream<Integer>> streamOfStreams = nestedNumbers.stream()
+    .map(List::stream);
+
+// ✅ flatMap() flattens to Stream<Integer>
+List<Integer> flatNumbers = nestedNumbers.stream()
+    .flatMap(List::stream)             // List<Integer> -> Stream<Integer>
+    .collect(Collectors.toList());     // [1, 2, 3, 4, 5, 6, 7, 8, 9]
+```
+
+**Working with Optional:**
+```java
+List<String> possibleNumbers = Arrays.asList(""1"", ""abc"", ""3"", ""xyz"", ""5"");
+
+// Parse strings to integers, filtering out invalid ones
+List<Integer> validNumbers = possibleNumbers.stream()
+    .flatMap(s -> {
+        try {
+            return Stream.of(Integer.parseInt(s));  // Valid number
+        } catch (NumberFormatException e) {
+            return Stream.empty();                  // Invalid - empty stream
+        }
+    })
+    .collect(Collectors.toList());     // [1, 3, 5]
+
+// Alternative with Optional
+List<Integer> validNumbers2 = possibleNumbers.stream()
+    .map(s -> {
+        try {
+            return Optional.of(Integer.parseInt(s));
+        } catch (NumberFormatException e) {
+            return Optional.<Integer>empty();
+        }
+    })
+    .flatMap(Optional::stream)         // Optional<Integer> -> Stream<Integer>
+    .collect(Collectors.toList());
+```
+
+**Complex Real-World Example:**
+```java
+class Department {
+    private String name;
+    private List<Employee> employees;
+    // getters...
+}
+
+class Employee {
+    private String name;
+    private List<String> skills;
+    // getters...
+}
+
+List<Department> departments = // ... initialize
+
+// Get all unique skills across all employees in all departments
+Set<String> allSkills = departments.stream()
+    .flatMap(dept -> dept.getEmployees().stream())        // Department -> Stream<Employee>
+    .flatMap(emp -> emp.getSkills().stream())             // Employee -> Stream<String>
+    .collect(Collectors.toSet());
+
+// Compare with map() - this would be Stream<Stream<Stream<String>>>
+Stream<Stream<Stream<String>>> complexity = departments.stream()
+    .map(dept -> dept.getEmployees().stream()
+        .map(emp -> emp.getSkills().stream()));           // Too nested!
+```
+
+**Performance Considerations:**
+```java
+// flatMap() can be more expensive due to stream creation and flattening
+List<String> longSentences = // ... large list
+
+// If you only need the count, avoid creating intermediate collections
+long wordCount = longSentences.stream()
+    .flatMap(sentence -> Arrays.stream(sentence.split("" "")))
+    .count();  // More efficient than collecting then counting
+```","**Selection Rule:** Use **map()** for 1:1 transformations (changing type or value). Use **flatMap()** when your transformation produces a collection/stream/optional that needs flattening. **Memory Efficiency:** flatMap() processes elements lazily - it doesn't create intermediate collections unless terminal operation requires it. **Debugging Tip:** If you find yourself with Stream<Stream<T>> or Stream<Optional<T>>, you likely need flatMap() instead of map(). **Common Pattern:** flatMap() is essential when working with APIs that return Optional or collections, allowing you to ""unwrap"" and flatten results in a single operation."
+
+NEW_ID_004,6,Streams & Lambda,"Explain the difference between stateful and stateless operations in streams with examples.","**Stateful vs Stateless Stream Operations:**
+
+**Stateless Operations - Element Independence:**
+• **Definition**: Process each element independently without knowledge of other elements
+• **Memory**: Don't maintain internal state between element processing
+• **Parallelization**: Excellent candidates for parallel processing
+• **Performance**: Generally faster and more memory efficient
+• **Examples**: filter(), map(), flatMap(), peek(), mapToInt(), mapToObj()
+
+```java
+List<String> words = Arrays.asList(""apple"", ""banana"", ""cherry"", ""date"");
+
+// ✅ Stateless operations - each element processed independently
+List<String> result = words.stream()
+    .filter(word -> word.length() > 4)        // Each word checked independently
+    .map(String::toUpperCase)                 // Each word transformed independently
+    .peek(System.out::println)                // Each word printed independently
+    .collect(Collectors.toList());
+
+// Parallel processing works excellently with stateless operations
+List<Integer> squares = IntStream.range(1, 1000000)
+    .parallel()
+    .filter(n -> n % 2 == 0)                  // Each number checked independently
+    .map(n -> n * n)                          // Each number squared independently
+    .boxed()
+    .collect(Collectors.toList());
+```
+
+**Stateful Operations - Element Interdependence:**
+• **Definition**: Require knowledge of previously processed elements or the entire stream
+• **Memory**: Maintain internal state and may buffer elements
+• **Parallelization**: Limited parallel benefits due to coordination overhead
+• **Performance**: Can be expensive, especially with large datasets
+• **Examples**: sorted(), distinct(), limit(), skip(), takeWhile(), dropWhile()
+
+```java
+List<Integer> numbers = Arrays.asList(5, 2, 8, 1, 9, 3, 7, 4, 6);
+
+// ❌ Stateful operations - require coordination and memory
+List<Integer> processed = numbers.stream()
+    .distinct()                               // Must remember all seen elements
+    .sorted()                                 // Must see all elements before sorting
+    .limit(5)                                 // Must count processed elements
+    .collect(Collectors.toList());
+
+// In parallel streams, stateful operations can be expensive
+List<String> uniqueSorted = Stream.of(""c"", ""a"", ""b"", ""a"", ""c"", ""b"")
+    .parallel()
+    .distinct()                               // Coordination required between threads
+    .sorted()                                 // Global sorting across thread results
+    .collect(Collectors.toList());
+```
+
+**State Management Examples:**
+
+**1. sorted() - Requires All Elements:**
+```java
+// sorted() must collect all elements before producing any output
+Stream<String> names = Stream.of(""Charlie"", ""Alice"", ""Bob"");
+names.sorted().forEach(System.out::println);  // Must wait for all elements
+
+// Compare with stateless filter - can process immediately
+Stream.of(""Charlie"", ""Alice"", ""Bob"")
+    .filter(name -> name.length() > 3)        // Immediate processing possible
+    .forEach(System.out::println);
+```
+
+**2. distinct() - Memory of Seen Elements:**
+```java
+// distinct() maintains internal Set to track seen elements
+List<Integer> withDuplicates = Arrays.asList(1, 2, 2, 3, 3, 3, 4);
+List<Integer> unique = withDuplicates.stream()
+    .distinct()                               // Internal state: Set{1, 2, 3, 4}
+    .collect(Collectors.toList());
+
+// Memory usage grows with number of unique elements
+Stream.generate(() -> new Random().nextInt(1000))
+    .distinct()                               // Potentially large internal Set
+    .limit(100)
+    .collect(Collectors.toList());
+```
+
+**3. limit() and skip() - Element Counting:**
+```java
+// limit() must count elements processed
+List<String> first3 = Stream.of(""a"", ""b"", ""c"", ""d"", ""e"")
+    .limit(3)                                 // Internal counter: 0, 1, 2, 3 (stop)
+    .collect(Collectors.toList());
+
+// skip() must count elements to skip
+List<String> afterFirst2 = Stream.of(""a"", ""b"", ""c"", ""d"", ""e"")
+    .skip(2)                                  // Internal counter: skip 0, skip 1, process rest
+    .collect(Collectors.toList());
+```
+
+**Parallel Performance Impact:**
+```java
+List<Integer> largeList = IntStream.range(1, 1_000_000).boxed().collect(toList());
+
+// ✅ Good parallel performance - stateless operations
+long startTime = System.currentTimeMillis();
+List<Integer> evenSquares = largeList.parallelStream()
+    .filter(n -> n % 2 == 0)                  // Stateless
+    .map(n -> n * n)                          // Stateless
+    .collect(Collectors.toList());
+long statelessTime = System.currentTimeMillis() - startTime;
+
+// ❌ Poor parallel performance - stateful operations
+startTime = System.currentTimeMillis();
+List<Integer> sortedDistinct = largeList.parallelStream()
+    .distinct()                               // Stateful - coordination needed
+    .sorted()                                 // Stateful - global ordering needed
+    .collect(Collectors.toList());
+long statefulTime = System.currentTimeMillis() - startTime;
+// statefulTime often > statelessTime despite parallelization
+```
+
+**Optimization Strategies:**
+```java
+// ❌ Inefficient - multiple stateful operations
+List<String> result1 = words.stream()
+    .sorted()
+    .distinct()
+    .limit(10)
+    .collect(Collectors.toList());
+
+// ✅ Better - combine when possible
+List<String> result2 = words.stream()
+    .distinct()                               // Do distinct first (potentially smaller set)
+    .sorted()                                 // Then sort smaller set
+    .limit(10)                                // Finally limit
+    .collect(Collectors.toList());
+```","**Performance Guidelines:** Place stateless operations before stateful ones when possible to reduce the dataset size. **Parallel Considerations:** Stateful operations can significantly reduce parallel stream benefits due to synchronization overhead and result merging requirements. **Memory Management:** Be cautious with stateful operations on large or infinite streams - distinct() and sorted() can consume significant memory. **Design Pattern:** Consider if stateful operations can be replaced with stateless alternatives or moved to the collection phase using appropriate Collectors. **Monitoring:** Profile applications with stateful operations in parallel streams to ensure they provide actual performance benefits."
+
+NEW_ID_005,7,Streams & Lambda,"What are the main functional interfaces in Java 8 and when would you use each?","**Core Functional Interfaces in Java 8:**
+
+**1. Function<T, R> - Transformation Interface:**
+```java
+// Signature: R apply(T t)
+// Purpose: Transform input of type T to output of type R
+```
+
+```java
+Function<String, Integer> stringLength = String::length;
+Function<Integer, String> intToString = Object::toString;
+Function<String, String> toUpperCase = String::toUpperCase;
+
+// Usage in streams
+List<String> words = Arrays.asList(""hello"", ""world"");
+List<Integer> lengths = words.stream()
+    .map(stringLength)                        // Function in map()
+    .collect(Collectors.toList());
+
+// Function composition
+Function<String, String> trimAndUpper = ((Function<String, String>) String::trim)
+    .andThen(String::toUpperCase);
+
+// Real-world example: Data transformation
+Function<Employee, EmployeeDTO> toDTO = emp -> 
+    new EmployeeDTO(emp.getName(), emp.getDepartment());
+```
+
+**2. Predicate<T> - Boolean Testing Interface:**
+```java
+// Signature: boolean test(T t)
+// Purpose: Test if input matches some condition
+```
+
+```java
+Predicate<String> isLongWord = word -> word.length() > 5;
+Predicate<Integer> isEven = n -> n % 2 == 0;
+Predicate<String> startsWithA = s -> s.startsWith(""A"");
+
+// Usage in streams
+List<String> longWords = words.stream()
+    .filter(isLongWord)                       // Predicate in filter()
+    .collect(Collectors.toList());
+
+// Predicate composition
+Predicate<String> longWordStartingWithA = isLongWord.and(startsWithA);
+Predicate<String> notEmpty = ((Predicate<String>) String::isEmpty).negate();
+
+// Complex filtering
+List<Employee> filteredEmployees = employees.stream()
+    .filter(emp -> emp.getSalary() > 50000)
+    .filter(emp -> emp.getDepartment().equals(""IT""))
+    .collect(Collectors.toList());
+```
+
+**3. Consumer<T> - Action Without Return Interface:**
+```java
+// Signature: void accept(T t)
+// Purpose: Perform action on input without returning value
+```
+
+```java
+Consumer<String> printer = System.out::println;
+Consumer<Employee> updateSalary = emp -> emp.setSalary(emp.getSalary() * 1.1);
+Consumer<List<String>> clearList = List::clear;
+
+// Usage in streams
+words.stream()
+    .filter(word -> word.length() > 3)
+    .forEach(printer);                        // Consumer in forEach()
+
+// Consumer chaining
+Consumer<Employee> processEmployee = updateSalary
+    .andThen(emp -> System.out.println(""Updated: "" + emp.getName()));
+
+// Side effects (use with caution)
+List<String> processed = new ArrayList<>();
+words.stream()
+    .filter(word -> word.length() > 3)
+    .forEach(word -> processed.add(word.toUpperCase())); // Consumer for side effect
+```
+
+**4. Supplier<T> - Factory Interface:**
+```java
+// Signature: T get()
+// Purpose: Provide/generate values without input
+```
+
+```java
+Supplier<String> randomUUID = () -> UUID.randomUUID().toString();
+Supplier<LocalDateTime> currentTime = LocalDateTime::now;
+Supplier<List<String>> listFactory = ArrayList::new;
+
+// Usage in Optional
+String value = Optional.ofNullable(getValue())
+    .orElseGet(randomUUID);                   // Supplier in orElseGet()
+
+// Lazy evaluation
+Supplier<ExpensiveObject> lazyFactory = () -> new ExpensiveObject();
+ExpensiveObject obj = lazyFactory.get();      // Created only when needed
+
+// Stream generation
+Stream<Integer> randomNumbers = Stream.generate(() -> new Random().nextInt(100));
+```
+
+**Specialized Primitive Functional Interfaces:**
+
+**5. IntFunction, LongFunction, DoubleFunction:**
+```java
+// Avoid boxing/unboxing overhead
+IntFunction<String> intToString = Integer::toString;
+LongFunction<String> longToString = Long::toString;
+DoubleFunction<String> doubleToString = Double::toString;
+
+// Usage with primitive streams
+IntStream.range(1, 10)
+    .mapToObj(intToString)                    // Efficient primitive to object conversion
+    .collect(Collectors.toList());
+```
+
+**6. ToIntFunction, ToLongFunction, ToDoubleFunction:**
+```java
+ToIntFunction<String> stringToInt = Integer::parseInt;
+ToLongFunction<String> stringToLong = Long::parseLong;
+ToDoubleFunction<String> stringToDouble = Double::parseDouble;
+
+// Usage in mapToInt/Long/Double
+List<String> numbers = Arrays.asList(""1"", ""2"", ""3"");
+int sum = numbers.stream()
+    .mapToInt(stringToInt)                    // Efficient object to primitive conversion
+    .sum();
+```
+
+**7. UnaryOperator<T> and BinaryOperator<T>:**
+```java
+// UnaryOperator<T> extends Function<T, T>
+UnaryOperator<String> trim = String::trim;
+UnaryOperator<Integer> square = x -> x * x;
+
+// BinaryOperator<T> extends BiFunction<T, T, T>
+BinaryOperator<Integer> add = Integer::sum;
+BinaryOperator<String> concat = String::concat;
+
+// Usage in reduce operations
+Optional<Integer> sum = numbers.stream()
+    .reduce(add);                             // BinaryOperator in reduce()
+
+List<String> words = Arrays.asList(""hello"", ""world"");
+String combined = words.stream()
+    .reduce("""", concat);                     // BinaryOperator with identity
+```
+
+**BiFunction and BiPredicate:**
+```java
+// BiFunction<T, U, R> - two inputs, one output
+BiFunction<String, String, String> fullName = (first, last) -> first + "" "" + last;
+BiFunction<Integer, Integer, Integer> multiply = (a, b) -> a * b;
+
+// BiPredicate<T, U> - two inputs, boolean output
+BiPredicate<String, Integer> lengthCheck = (str, len) -> str.length() == len;
+
+// Usage example
+Map<String, Integer> nameAges = Map.of(""Alice"", 25, ""Bob"", 30);
+List<String> descriptions = nameAges.entrySet().stream()
+    .map(entry -> fullName.apply(entry.getKey(), ""Age: "" + entry.getValue()))
+    .collect(Collectors.toList());
+```","**Selection Guidelines:** Use **Function** for transformations (map operations), **Predicate** for filtering (filter operations), **Consumer** for side effects (forEach operations), **Supplier** for object creation and lazy evaluation. **Performance:** Prefer primitive specializations (IntFunction, LongFunction) when working with primitive types to avoid boxing overhead. **Composition:** Leverage built-in composition methods (andThen, compose for Function; and, or, negate for Predicate) for complex operations. **Method References:** When your lambda just calls an existing method, use method references for better readability (String::length instead of s -> s.length())."
+
+NEW_ID_006,8,Streams & Lambda,"What is the Optional class and how does it help prevent NullPointerException?","**Optional<T>: Null Safety and Explicit Absence Handling:**
+
+**Purpose and Philosophy:**
+Optional is a container object that may or may not contain a non-null value. It forces developers to explicitly handle the possibility of absence, making null-related bugs more visible at compile time and encouraging better API design.
+
+**Creating Optional Instances:**
+```java
+// Creating Optional instances
+Optional<String> present = Optional.of(""Hello"");           // Non-null value required
+Optional<String> absent = Optional.empty();                 // Explicitly empty
+Optional<String> nullable = Optional.ofNullable(getValue()); // May be null
+
+// ❌ This throws NullPointerException immediately
+Optional<String> wrong = Optional.of(null);
+
+// ✅ Safe way to handle potentially null values
+String possiblyNull = getName();
+Optional<String> safe = Optional.ofNullable(possiblyNull);
+```
+
+**Checking for Presence:**
+```java
+Optional<String> optName = Optional.ofNullable(getName());
+
+// ✅ Modern approach - using functional methods
+optName.ifPresent(name -> System.out.println(""Hello, "" + name));
+
+// ✅ Conditional action with alternative
+optName.ifPresentOrElse(
+    name -> System.out.println(""Hello, "" + name),
+    () -> System.out.println(""No name provided"")
+);
+
+// ❌ Anti-pattern - defeats the purpose of Optional
+if (optName.isPresent()) {
+    String name = optName.get();  // Don't use get() after isPresent()
+    System.out.println(name);
+}
+```
+
+**Safe Value Extraction:**
+```java
+Optional<String> optName = Optional.ofNullable(getName());
+
+// ✅ Provide default values
+String name1 = optName.orElse(""Unknown"");                    // Eager evaluation
+String name2 = optName.orElseGet(() -> generateDefaultName()); // Lazy evaluation
+String name3 = optName.orElseThrow();                          // Throw NoSuchElementException
+String name4 = optName.orElseThrow(() -> new CustomException(""Name required""));
+
+// ✅ Null-safe transformation chain
+String result = optName
+    .filter(name -> name.length() > 2)        // Only proceed if length > 2
+    .map(String::toUpperCase)                 // Transform to uppercase
+    .orElse(""DEFAULT"");                     // Fallback value
+```
+
+**Transforming Optional Values:**
+```java
+Optional<String> optEmail = Optional.ofNullable(getEmail());
+
+// map() - transform value if present
+Optional<String> domain = optEmail
+    .map(email -> email.substring(email.indexOf('@') + 1));
+
+// flatMap() - avoid Optional<Optional<T>>
+Optional<User> optUser = optEmail
+    .flatMap(email -> findUserByEmail(email));  // findUserByEmail returns Optional<User>
+
+// filter() - conditional presence
+Optional<String> validEmail = optEmail
+    .filter(email -> email.contains(""@""));
+
+// Complex transformation chain
+String userDisplayName = optEmail
+    .filter(email -> email.contains(""@""))
+    .flatMap(this::findUserByEmail)
+    .map(User::getDisplayName)
+    .orElse(""Anonymous User"");
+```
+
+**Stream Integration:**
+```java
+List<Optional<String>> optionalNames = Arrays.asList(
+    Optional.of(""Alice""),
+    Optional.empty(),
+    Optional.of(""Bob""),
+    Optional.empty(),
+    Optional.of(""Charlie"")
+);
+
+// Extract present values using flatMap
+List<String> presentNames = optionalNames.stream()
+    .flatMap(Optional::stream)               // Java 9+ - converts Optional to Stream
+    .collect(Collectors.toList());           // [""Alice"", ""Bob"", ""Charlie""]
+
+// Alternative for Java 8
+List<String> presentNamesJava8 = optionalNames.stream()
+    .filter(Optional::isPresent)
+    .map(Optional::get)
+    .collect(Collectors.toList());
+```
+
+**Optional in Method Design:**
+```java
+// ❌ Traditional null-returning method
+public User findUserById(Long id) {
+    // May return null - callers must remember to check
+    return database.findUser(id);
+}
+
+// ✅ Optional-returning method - explicit about possible absence
+public Optional<User> findUserById(Long id) {
+    User user = database.findUser(id);
+    return Optional.ofNullable(user);
+}
+
+// ✅ Usage becomes explicit and safe
+public void processUser(Long userId) {
+    findUserById(userId)
+        .ifPresentOrElse(
+            user -> processUser(user),
+            () -> handleUserNotFound(userId)
+        );
+}
+```
+
+**Real-World Example - Repository Pattern:**
+```java
+public class UserRepository {
+    
+    public Optional<User> findByEmail(String email) {
+        return Optional.ofNullable(database.query(email));
+    }
+    
+    public Optional<User> findActiveUserByEmail(String email) {
+        return findByEmail(email)
+            .filter(User::isActive);
+    }
+}
+
+public class UserService {
+    
+    public String getUserDisplayName(String email) {
+        return userRepository.findActiveUserByEmail(email)
+            .map(User::getDisplayName)
+            .orElse(""Guest User"");
+    }
+    
+    public void sendWelcomeEmail(String email) {
+        userRepository.findByEmail(email)
+            .filter(User::isActive)
+            .filter(user -> user.getPreferences().isEmailEnabled())
+            .ifPresent(user -> emailService.sendWelcome(user));
+    }
+}
+```
+
+**Common Anti-Patterns to Avoid:**
+```java
+// ❌ Don't use Optional for fields
+class User {
+    private Optional<String> nickname; // Wrong - just use nullable field
+}
+
+// ❌ Don't use Optional as method parameters
+public void updateUser(Optional<String> name) { } // Wrong - use overloaded methods
+
+// ❌ Don't call get() without checking
+Optional<String> opt = Optional.ofNullable(getValue());
+String value = opt.get(); // Dangerous - may throw NoSuchElementException
+
+// ❌ Don't use Optional for collections
+Optional<List<User>> users = Optional.of(new ArrayList<>()); // Wrong - use empty list instead
+```","**Design Philosophy:** Optional signals to API users that absence is a valid state that must be handled explicitly. **Performance Note:** Optional has slight overhead due to object creation - avoid in performance-critical tight loops. **API Design:** Use Optional for return types where absence is meaningful, not for method parameters or fields. **Java 9+ Features:** New methods like `stream()`, `ifPresentOrElse()`, and `or()` provide more functional programming capabilities. **Best Practice:** Chain Optional operations functionally rather than using imperative isPresent()/get() patterns for cleaner, safer code."
+
+NEW_ID_007,9,Streams & Lambda,"What are Collectors and how do you create custom collectors?","**Collectors: Advanced Stream Result Aggregation:**
+
+**Overview and Purpose:**
+Collectors provide a way to accumulate stream elements into various result containers (Lists, Sets, Maps, custom objects) or perform complex reductions. They encapsulate the logic for mutable reduction operations and are used with the collect() terminal operation.
+
+**Common Built-in Collectors:**
+
+**1. Basic Collection Collectors:**
+```java
+List<String> words = Arrays.asList(""apple"", ""banana"", ""cherry"", ""apple"");
+
+// To List
+List<String> list = words.stream()
+    .collect(Collectors.toList());
+
+// To Set (removes duplicates)
+Set<String> set = words.stream()
+    .collect(Collectors.toSet());
+
+// To specific collection types
+ArrayList<String> arrayList = words.stream()
+    .collect(Collectors.toCollection(ArrayList::new));
+
+LinkedHashSet<String> linkedSet = words.stream()
+    .collect(Collectors.toCollection(LinkedHashSet::new));
+```
+
+**2. String Collectors:**
+```java
+// Joining with delimiter
+String result = words.stream()
+    .collect(Collectors.joining("", ""));           // ""apple, banana, cherry, apple""
+
+// Joining with prefix/suffix
+String formatted = words.stream()
+    .collect(Collectors.joining("", "", ""["", ""]"")); // ""[apple, banana, cherry, apple]""
+
+// Conditional joining
+String upperWords = words.stream()
+    .filter(word -> word.length() > 5)
+    .map(String::toUpperCase)
+    .collect(Collectors.joining("" | ""));
+```
+
+**3. Mathematical Collectors:**
+```java
+List<Integer> numbers = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+
+// Basic statistics
+long count = numbers.stream().collect(Collectors.counting());
+Optional<Integer> max = numbers.stream().collect(Collectors.maxBy(Integer::compareTo));
+Optional<Integer> min = numbers.stream().collect(Collectors.minBy(Integer::compareTo));
+
+// Averaging and summing
+double average = numbers.stream().collect(Collectors.averagingInt(Integer::intValue));
+int sum = numbers.stream().collect(Collectors.summingInt(Integer::intValue));
+
+// All statistics at once
+IntSummaryStatistics stats = numbers.stream()
+    .collect(Collectors.summarizingInt(Integer::intValue));
+System.out.println(""Count: "" + stats.getCount() + "", Average: "" + stats.getAverage());
+```
+
+**4. Grouping and Partitioning:**
+```java
+List<Employee> employees = // ... initialize
+
+// Group by department
+Map<String, List<Employee>> byDepartment = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDepartment));
+
+// Group by department with counting
+Map<String, Long> departmentCounts = employees.stream()
+    .collect(Collectors.groupingBy(
+        Employee::getDepartment,
+        Collectors.counting()
+    ));
+
+// Group by department with average salary
+Map<String, Double> avgSalaryByDept = employees.stream()
+    .collect(Collectors.groupingBy(
+        Employee::getDepartment,
+        Collectors.averagingDouble(Employee::getSalary)
+    ));
+
+// Partitioning (boolean-based grouping)
+Map<Boolean, List<Employee>> partitioned = employees.stream()
+    .collect(Collectors.partitioningBy(emp -> emp.getSalary() > 50000));
+
+List<Employee> highEarners = partitioned.get(true);
+List<Employee> others = partitioned.get(false);
+```
+
+**5. Advanced Grouping with Multiple Levels:**
+```java
+// Multi-level grouping: Department -> Seniority Level -> List<Employee>
+Map<String, Map<String, List<Employee>>> multiLevel = employees.stream()
+    .collect(Collectors.groupingBy(
+        Employee::getDepartment,
+        Collectors.groupingBy(Employee::getSeniorityLevel)
+    ));
+
+// Group by department, collect names as Set
+Map<String, Set<String>> employeeNamesByDept = employees.stream()
+    .collect(Collectors.groupingBy(
+        Employee::getDepartment,
+        Collectors.mapping(Employee::getName, Collectors.toSet())
+    ));
+```
+
+**Creating Custom Collectors:**
+
+**1. Simple Custom Collector using Collector.of():**
+```java
+// Custom collector to collect elements into a custom container
+public static class StringContainer {
+    private final List<String> items = new ArrayList<>();
+    private int totalLength = 0;
+    
+    public void add(String item) {
+        items.add(item);
+        totalLength += item.length();
+    }
+    
+    public void addAll(StringContainer other) {
+        items.addAll(other.items);
+        totalLength += other.totalLength;
+    }
+    
+    // getters...
+}
+
+// Custom collector implementation
+public static Collector<String, ?, StringContainer> toStringContainer() {
+    return Collector.of(
+        StringContainer::new,                    // Supplier: create container
+        StringContainer::add,                    // Accumulator: add element
+        (container1, container2) -> {            // Combiner: merge containers
+            container1.addAll(container2);
+            return container1;
+        },
+        Function.identity(),                     // Finisher: final transformation
+        Collector.Characteristics.IDENTITY_FINISH // Characteristics
+    );
+}
+
+// Usage
+StringContainer result = words.stream()
+    .collect(toStringContainer());
+```
+
+**2. Advanced Custom Collector - Top N Elements:**
+```java
+public static <T> Collector<T, ?, List<T>> topN(int n, Comparator<T> comparator) {
+    return Collector.of(
+        () -> new PriorityQueue<>(comparator),   // Min heap for top N
+        (queue, item) -> {
+            queue.offer(item);
+            if (queue.size() > n) {
+                queue.poll();                    // Remove smallest
+            }
+        },
+        (queue1, queue2) -> {                    // Combiner for parallel streams
+            queue1.addAll(queue2);
+            return queue1.stream()
+                .sorted(comparator.reversed())
+                .limit(n)
+                .collect(Collectors.toCollection(() -> new PriorityQueue<>(comparator)));
+        },
+        queue -> queue.stream()                  // Finisher: convert to sorted list
+            .sorted(comparator.reversed())
+            .collect(Collectors.toList()),
+        Collector.Characteristics.UNORDERED
+    );
+}
+
+// Usage: Get top 3 longest words
+List<String> top3Longest = words.stream()
+    .collect(topN(3, Comparator.comparing(String::length)));
+```
+
+**3. Custom Collector with State - Running Average:**
+```java
+public static class RunningAverage {
+    private double sum = 0;
+    private long count = 0;
+    
+    public void accept(double value) {
+        sum += value;
+        count++;
+    }
+    
+    public RunningAverage combine(RunningAverage other) {
+        sum += other.sum;
+        count += other.count;
+        return this;
+    }
+    
+    public double getAverage() {
+        return count == 0 ? 0 : sum / count;
+    }
+}
+
+public static Collector<Double, RunningAverage, Double> averagingDouble() {
+    return Collector.of(
+        RunningAverage::new,
+        RunningAverage::accept,
+        RunningAverage::combine,
+        RunningAverage::getAverage
+    );
+}
+
+// Usage
+Double average = Stream.of(1.0, 2.0, 3.0, 4.0, 5.0)
+    .collect(averagingDouble());
+```
+
+**4. Collecting to Immutable Collections (Java 10+):**
+```java
+// Collect to immutable list
+List<String> immutableList = words.stream()
+    .collect(Collectors.toUnmodifiableList());
+
+// Collect to immutable set
+Set<String> immutableSet = words.stream()
+    .collect(Collectors.toUnmodifiableSet());
+
+// Collect to immutable map
+Map<String, Integer> immutableMap = words.stream()
+    .collect(Collectors.toUnmodifiableMap(
+        Function.identity(),
+        String::length
+    ));
+```","**Performance Considerations:** Built-in collectors are highly optimized - prefer them over custom implementations when possible. **Parallel Streams:** Custom collectors must handle the combiner function correctly for parallel stream support. **Memory Efficiency:** Collectors like groupingBy can consume significant memory with large datasets - consider streaming approaches for very large data. **Reusability:** Design custom collectors as utility methods for reuse across your application. **Characteristics:** Understand collector characteristics (CONCURRENT, UNORDERED, IDENTITY_FINISH) for optimal performance in different scenarios."
+
+NEW_ID_008,10,Streams & Lambda,"Explain the differences between sequential and parallel streams and their performance characteristics.","**Sequential vs Parallel Streams: Performance and Design Considerations:**
+
+**Sequential Streams - Single-Threaded Processing:**
+```java
+// Default behavior - processes elements one by one in current thread
+List<Integer> numbers = IntStream.range(1, 1_000_000).boxed().collect(toList());
+
+List<Integer> sequentialResult = numbers.stream()          // Sequential by default
+    .filter(n -> n % 2 == 0)
+    .map(n -> n * n)
+    .collect(Collectors.toList());
+```
+• **Execution**: Single thread processes all elements sequentially
+• **Order**: Maintains encounter order of source
+• **Memory**: Lower memory overhead, no thread synchronization
+• **Predictability**: Deterministic behavior, easier debugging
+
+**Parallel Streams - Multi-Threaded Processing:**
+```java
+// Parallel processing using ForkJoinPool
+List<Integer> parallelResult = numbers.parallelStream()    // or .stream().parallel()
+    .filter(n -> n % 2 == 0)
+    .map(n -> n * n)
+    .collect(Collectors.toList());
+
+// Converting between sequential and parallel
+Stream<Integer> stream = numbers.stream()
+    .parallel()                          // Make parallel
+    .filter(n -> n > 100)
+    .sequential()                        // Back to sequential
+    .map(n -> n * 2);                   // This and subsequent ops are sequential
+```
+• **Execution**: Multiple threads process chunks of data concurrently
+• **Framework**: Uses common ForkJoinPool by default
+• **Splitting**: Data split into chunks, processed independently, results merged
+• **Thread Pool**: Default size = Runtime.getRuntime().availableProcessors()
+
+**Performance Characteristics Analysis:**
+
+**1. Data Size Impact:**
+```java
+// Small dataset - overhead exceeds benefits
+List<Integer> small = IntStream.range(1, 100).boxed().collect(toList());
+
+// Sequential faster for small datasets
+long startTime = System.nanoTime();
+int sumSequential = small.stream()
+    .mapToInt(n -> expensiveComputation(n))
+    .sum();
+long sequentialTime = System.nanoTime() - startTime;
+
+// Parallel has overhead for small datasets
+startTime = System.nanoTime();
+int sumParallel = small.parallelStream()
+    .mapToInt(n -> expensiveComputation(n))
+    .sum();
+long parallelTime = System.nanoTime() - startTime;
+// Often: parallelTime > sequentialTime for small datasets
+
+// Large dataset - parallel benefits
+List<Integer> large = IntStream.range(1, 10_000_000).boxed().collect(toList());
+// Parallel likely faster for large datasets with expensive operations
+```
+
+**2. Operation Complexity:**
+```java
+List<Double> numbers = // ... large list of doubles
+
+// Simple operations - parallel overhead may not be worth it
+List<Double> squared = numbers.parallelStream()
+    .map(n -> n * n)                     // Too simple for parallel benefits
+    .collect(Collectors.toList());
+
+// Complex operations - good candidate for parallelization
+List<Double> complexResult = numbers.parallelStream()
+    .map(n -> Math.sqrt(Math.pow(n, 3) + Math.sin(n) * Math.cos(n))) // CPU-intensive
+    .filter(n -> n > someThreshold)
+    .collect(Collectors.toList());
+```
+
+**3. Data Source Splitting Efficiency:**
+```java
+// ✅ Excellent splitting - array-based, indexed access
+List<Integer> arrayList = new ArrayList<>(numbers);
+arrayList.parallelStream().map(expensiveOp).collect(toList()); // Efficient
+
+// ✅ Good splitting - arrays
+int[] array = numbers.stream().mapToInt(Integer::intValue).toArray();
+Arrays.stream(array).parallel().map(expensiveOp).sum();        // Efficient
+
+// ❌ Poor splitting - linked structure
+LinkedList<Integer> linkedList = new LinkedList<>(numbers);
+linkedList.parallelStream().map(expensiveOp).collect(toList()); // Inefficient splitting
+
+// ✅ Range-based - excellent for parallel
+IntStream.range(1, 1_000_000)
+    .parallel()
+    .map(expensiveOp)
+    .sum();                              // Very efficient splitting
+```
+
+**4. Stateful vs Stateless Operations:**
+```java
+List<String> words = // ... large list
+
+// ✅ Stateless operations - excellent for parallel
+List<String> processed = words.parallelStream()
+    .filter(word -> word.length() > 3)   // Stateless
+    .map(String::toUpperCase)            // Stateless
+    .collect(Collectors.toList());
+
+// ❌ Stateful operations - limit parallel benefits
+List<String> statefulResult = words.parallelStream()
+    .distinct()                          // Stateful - coordination needed
+    .sorted()                            // Stateful - global ordering required
+    .limit(1000)                         // Stateful - counting required
+    .collect(Collectors.toList());
+```
+
+**Custom Thread Pool Configuration:**
+```java
+// Using custom ForkJoinPool
+ForkJoinPool customThreadPool = new ForkJoinPool(8); // 8 threads
+try {
+    List<Integer> result = customThreadPool.submit(() ->
+        largeDataset.parallelStream()
+            .map(this::expensiveOperation)
+            .collect(Collectors.toList())
+    ).get();
+} catch (InterruptedException | ExecutionException e) {
+    // Handle exceptions
+} finally {
+    customThreadPool.shutdown();
+}
+
+// System property to change default ForkJoinPool size
+// -Djava.util.concurrent.ForkJoinPool.common.parallelism=8
+```
+
+**Order Preservation:**
+```java
+List<Integer> numbers = Arrays.asList(3, 1, 4, 1, 5, 9, 2, 6);
+
+// Sequential maintains order
+List<Integer> sequentialResult = numbers.stream()
+    .map(n -> n * 2)
+    .collect(Collectors.toList());       // [6, 2, 8, 2, 10, 18, 4, 12]
+
+// Parallel may not maintain order (depends on operations)
+List<Integer> parallelResult = numbers.parallelStream()
+    .map(n -> n * 2)
+    .collect(Collectors.toList());       // Order may vary
+
+// Force order preservation with forEachOrdered
+numbers.parallelStream()
+    .map(n -> n * 2)
+    .forEachOrdered(System.out::println); // Maintains encounter order
+```
+
+**Performance Measurement Example:**
+```java
+public class ParallelStreamBenchmark {
+    
+    public static void main(String[] args) {
+        List<Integer> dataset = IntStream.range(1, 10_000_000)
+            .boxed()
+            .collect(Collectors.toList());
+        
+        // Warm up JVM
+        for (int i = 0; i < 10; i++) {
+            testSequential(dataset);
+            testParallel(dataset);
+        }
+        
+        // Actual measurement
+        long seqTime = measureTime(() -> testSequential(dataset));
+        long parTime = measureTime(() -> testParallel(dataset));
+        
+        System.out.println(""Sequential: "" + seqTime + ""ms"");
+        System.out.println(""Parallel: "" + parTime + ""ms"");
+        System.out.println(""Speedup: "" + (double)seqTime / parTime + ""x"");
+    }
+    
+    private static int testSequential(List<Integer> data) {
+        return data.stream()
+            .filter(n -> n % 2 == 0)
+            .mapToInt(n -> expensiveComputation(n))
+            .sum();
+    }
+    
+    private static int testParallel(List<Integer> data) {
+        return data.parallelStream()
+            .filter(n -> n % 2 == 0)
+            .mapToInt(n -> expensiveComputation(n))
+            .sum();
+    }
+    
+    private static int expensiveComputation(int n) {
+        // Simulate CPU-intensive work
+        double result = 0;
+        for (int i = 0; i < 1000; i++) {
+            result += Math.sqrt(n * i);
+        }
+        return (int) result;
+    }
+}
+```","**Decision Matrix:** Use parallel streams when: dataset is large (>10,000 elements), operations are CPU-intensive, data source splits efficiently (ArrayList, arrays), and operations are stateless. **Performance Rules:** Parallel streams have overhead - always measure performance for your specific use case. Rule of thumb: consider parallel when N×Q > 10,000 (N=elements, Q=cost per element). **Thread Safety:** Ensure thread safety when parallel streams interact with external mutable state. **Debugging:** Sequential streams are easier to debug - consider switching to sequential during development and testing phases."
