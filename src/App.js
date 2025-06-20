@@ -2947,8 +2947,45 @@ function App() {
 
   const dailyDueCounts = getDailyDueCounts();
 
-  // Get unique categories for the dropdown
-  const uniqueCategories = ['All', ...new Set(flashcards.map(card => card.category || 'Uncategorized'))].sort();
+  // Get unique categories with due counts for the dropdown
+  const getCategoriesWithCounts = () => {
+    const today = new Date();
+    const categoryData = [];
+    
+    // Get all unique categories
+    const allCategories = [...new Set(flashcards.map(card => card.category || 'Uncategorized'))].sort();
+    
+    // Add 'All' category with count based on current filter
+    const allFilteredCards = flashcards.filter(card => {
+      if (showDueTodayOnly) {
+        if (!card.nextReview) return true; // New cards are always due
+        const nextReview = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+        return nextReview <= today;
+      }
+      return true; // Show all cards when filter is off
+    });
+    categoryData.push({ name: 'All', count: allFilteredCards.length });
+    
+    // Add each category with its count based on current filter
+    allCategories.forEach(category => {
+      const cardsInCategory = flashcards.filter(card => {
+        if ((card.category || 'Uncategorized') !== category) return false;
+        
+        if (showDueTodayOnly) {
+          if (!card.nextReview) return true; // New cards are always due
+          const nextReview = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+          return nextReview <= today;
+        }
+        return true; // Show all cards when filter is off
+      });
+      categoryData.push({ name: category, count: cardsInCategory.length });
+    });
+    
+    return categoryData;
+  };
+  
+  const categoriesWithCounts = getCategoriesWithCounts();
+  const uniqueCategories = categoriesWithCounts.map(cat => cat.name); // Keep for backward compatibility
 
   // Effect to handle keyboard events for navigation and review
   useEffect(() => {
@@ -3455,9 +3492,9 @@ Example:
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="block w-full max-w-xs py-2 px-3 border-0 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer text-slate-700 dark:text-slate-200 transition-all duration-300"
               >
-                {uniqueCategories.map(cat => (
-                  <option key={cat} value={cat} className="py-1">
-                    {cat}
+                {categoriesWithCounts.map(cat => (
+                  <option key={cat.name} value={cat.name} className="py-1">
+                    {cat.name} ({cat.count} {showDueTodayOnly ? 'due' : 'cards'})
                   </option>
                 ))}
               </select>
