@@ -3422,13 +3422,13 @@ Example:
               <div className="flex flex-col space-y-3 text-right">
                 {showDueTodayOnly ? (
                   <>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 items-end">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">📅</span>
                         <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
                           {selectedCategory === 'All' ? "Today" : selectedCategory}
                         </p>
-                        <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
+                        <p className="text-amber-600 dark:text-amber-400 text-xs font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
                       </div>
                       {selectedCategory !== 'All' && (() => {
                         // Calculate overall today progress (all categories)
@@ -3464,9 +3464,9 @@ Example:
                         }).length;
                         
                         return (
-                          <div className="flex items-center gap-2 ml-6">
+                          <div className="flex items-center gap-2">
                             <p className="text-slate-500 dark:text-slate-400 text-xs font-bold">Today</p>
-                            <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">{totalReviewedToday}/{totalDueToday}</p>
+                            <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">{totalReviewedToday}/{totalDueToday}</p>
                           </div>
                         );
                       })()}
