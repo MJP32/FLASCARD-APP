@@ -3883,14 +3883,92 @@ Example:
                       </div>
                     );
                   } else {
-                    return (
-                      <div>
-                        <div className="text-6xl mb-4">🎉</div>
-                        <p className="text-xl mb-4 font-semibold text-green-600 dark:text-green-400">Congratulations!</p>
-                        <p className="text-lg mb-2">You've completed all cards due today!</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Check back tomorrow for more cards to review.</p>
-                      </div>
-                    );
+                    // Check if there are cards due in other categories
+                    const today = new Date();
+                    const categoriesWithDueCards = [];
+                    
+                    if (selectedCategory !== 'All') {
+                      // Get all unique categories
+                      const allCategories = [...new Set(flashcards.map(card => card.category))];
+                      
+                      // Check each category for due cards
+                      allCategories.forEach(category => {
+                        if (category !== selectedCategory) {
+                          const dueCardsInCategory = flashcards.filter(card => {
+                            if (card.category !== category) return false;
+                            
+                            // Check if card is due
+                            if (!card.nextReview) return true; // New cards are always due
+                            const nextReview = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+                            return nextReview <= today;
+                          });
+                          
+                          if (dueCardsInCategory.length > 0) {
+                            categoriesWithDueCards.push({
+                              name: category,
+                              count: dueCardsInCategory.length
+                            });
+                          }
+                        }
+                      });
+                    }
+                    
+                    // If there are other categories with due cards, suggest switching
+                    if (categoriesWithDueCards.length > 0) {
+                      return (
+                        <div>
+                          <div className="text-4xl mb-4">✅</div>
+                          <p className="text-xl mb-4 font-semibold text-blue-600 dark:text-blue-400">Category Complete!</p>
+                          <p className="text-lg mb-4">You've finished all cards in the "{selectedCategory}" category.</p>
+                          <p className="text-md mb-4 text-gray-600 dark:text-gray-300">
+                            There {categoriesWithDueCards.length === 1 ? 'is' : 'are'} {categoriesWithDueCards.length} other {categoriesWithDueCards.length === 1 ? 'category' : 'categories'} with cards to review:
+                          </p>
+                          <div className="space-y-2 mb-6">
+                            {categoriesWithDueCards.slice(0, 3).map((cat, index) => (
+                              <div key={index} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-lg px-4 py-2">
+                                <span className="font-medium">{cat.name}</span>
+                                <span className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full text-sm">
+                                  {cat.count} due
+                                </span>
+                              </div>
+                            ))}
+                            {categoriesWithDueCards.length > 3 && (
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                ...and {categoriesWithDueCards.length - 3} more
+                              </p>
+                            )}
+                          </div>
+                          <div className="space-y-3">
+                            <button
+                              onClick={() => {
+                                setSelectedCategory(categoriesWithDueCards[0].name);
+                                setCurrentCardIndex(0);
+                                setShowAnswer(false);
+                              }}
+                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                            >
+                              Continue with "{categoriesWithDueCards[0].name}" ({categoriesWithDueCards[0].count} cards)
+                            </button>
+                            <button
+                              onClick={() => setSelectedCategory('All')}
+                              className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-gray-300"
+                            >
+                              View All Categories
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    } else {
+                      // No other categories with due cards, show congratulations
+                      return (
+                        <div>
+                          <div className="text-6xl mb-4">🎉</div>
+                          <p className="text-xl mb-4 font-semibold text-green-600 dark:text-green-400">Congratulations!</p>
+                          <p className="text-lg mb-2">You've completed all cards due today!</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">Check back tomorrow for more cards to review.</p>
+                        </div>
+                      );
+                    }
                   }
                 })()}
               </div>
