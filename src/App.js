@@ -3422,12 +3422,54 @@ Example:
               <div className="flex flex-col space-y-3 text-right">
                 {showDueTodayOnly ? (
                   <>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📅</span>
-                      <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
-                        {selectedCategory === 'All' ? "Today" : selectedCategory}
-                      </p>
-                      <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">📅</span>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
+                          {selectedCategory === 'All' ? "Today" : selectedCategory}
+                        </p>
+                        <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
+                      </div>
+                      {selectedCategory !== 'All' && (() => {
+                        // Calculate overall today progress (all categories)
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const tomorrow = new Date(today);
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        
+                        const totalReviewedToday = flashcards.filter(card => {
+                          if (!card.lastReview) return false;
+                          const lastReviewDate = card.lastReview.toDate ? card.lastReview.toDate() : new Date(card.lastReview);
+                          return lastReviewDate >= today && lastReviewDate < tomorrow;
+                        }).length;
+                        
+                        const totalDueToday = flashcards.filter(card => {
+                          // Check if reviewed today
+                          if (card.lastReview) {
+                            const lastReviewDate = card.lastReview.toDate ? card.lastReview.toDate() : new Date(card.lastReview);
+                            if (lastReviewDate >= today && lastReviewDate < tomorrow) {
+                              return true;
+                            }
+                          }
+                          
+                          // Check if still due
+                          if (card.nextReview) {
+                            const nextReviewDate = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+                            const endOfToday = new Date(today);
+                            endOfToday.setHours(23, 59, 59, 999);
+                            return nextReviewDate <= endOfToday;
+                          }
+                          
+                          return !card.nextReview;
+                        }).length;
+                        
+                        return (
+                          <div className="flex items-center gap-2 ml-6">
+                            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold">Today</p>
+                            <p className="text-slate-600 dark:text-slate-300 text-sm font-bold">{totalReviewedToday}/{totalDueToday}</p>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </>
                 ) : (
