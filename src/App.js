@@ -53,19 +53,34 @@ function App() {
   const [password, setPassword] = useState('');
   const [showDueTodayOnly, setShowDueTodayOnly] = useState(true); // Show only cards due today when logged in
   const [showLoginScreen, setShowLoginScreen] = useState(true); // Always show login screen first
+  
+  // Flag to prevent React re-renders during keyboard events
+  const isKeyboardEventRef = useRef(false);
 
-  // Persist theme on load
+  // Initialize theme immediately on load to prevent flash
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) setIsDarkMode(savedTheme === 'dark');
+    const isDark = savedTheme === 'dark';
+    setIsDarkMode(isDark);
+    
+    // Apply theme immediately to prevent flash
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+    }
   }, []);
 
-  // Apply/remove .dark class on body and persist theme
+  // Apply/remove .dark class on html and body for complete theme coverage
   useEffect(() => {
     if (isDarkMode) {
+      document.documentElement.classList.add('dark');
       document.body.classList.add('dark');
       localStorage.setItem('theme', 'dark');
     } else {
+      document.documentElement.classList.remove('dark');
       document.body.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
@@ -129,6 +144,9 @@ function App() {
   const editAnswerRef = useRef(null);
   const editCategoryRef = useRef(null);
   const editAdditionalInfoRef = useRef(null);
+  
+  // Ref to preserve card position after editing
+  const preservedCardIndexRef = useRef(null);
 
   // Shared formatting function for both questions and answers
   const formatAnswer = (text) => {
@@ -572,6 +590,74 @@ function App() {
     return formatted;
   };
 
+  // Utility function to save cursor position
+  const saveCursorPosition = (element) => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return null;
+    
+    const range = selection.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(element);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+    return preCaretRange.toString().length;
+  };
+
+  // Utility function to restore cursor position
+  const restoreCursorPosition = (element, pos) => {
+    if (pos === null) return;
+    
+    const selection = window.getSelection();
+    const range = document.createRange();
+    
+    let charIndex = 0;
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const nextCharIndex = charIndex + node.textContent.length;
+      if (pos <= nextCharIndex) {
+        range.setStart(node, pos - charIndex);
+        range.setEnd(node, pos - charIndex);
+        break;
+      }
+      charIndex = nextCharIndex;
+    }
+    
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
+  // Effect to update contentEditable content without using dangerouslySetInnerHTML
+  useEffect(() => {
+    if (editQuestionRef.current && isEditingCard) {
+      const element = editQuestionRef.current;
+      if (element.innerHTML !== editQuestion) {
+        const savedPos = saveCursorPosition(element);
+        element.innerHTML = editQuestion;
+        if (savedPos !== null) {
+          restoreCursorPosition(element, savedPos);
+        }
+      }
+    }
+  }, [editQuestion, isEditingCard]);
+  
+  useEffect(() => {
+    if (editAnswerRef.current && isEditingCard) {
+      const element = editAnswerRef.current;
+      if (element.innerHTML !== editAnswer) {
+        const savedPos = saveCursorPosition(element);
+        element.innerHTML = editAnswer;
+        if (savedPos !== null) {
+          restoreCursorPosition(element, savedPos);
+        }
+      }
+    }
+  }, [editAnswer, isEditingCard]);
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
@@ -810,29 +896,36 @@ function App() {
   useEffect(() => {
     if (isFirebaseInitialized && db && auth && userId) {
       const appId = "flashcard-app-3f2a3"; // Hardcoding appId based on the provided config
-      const flashcardsColRef = collection(db, `/artifacts/${appId}/users/${userId}/flashcards`);
-      const q = query(flashcardsColRef);
+      
+      // Additional validation to ensure db is a valid Firestore instance
+      try {
+        const flashcardsColRef = collection(db, `/artifacts/${appId}/users/${userId}/flashcards`);
+        const q = query(flashcardsColRef);
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const cards = [];
-        snapshot.forEach(doc => {
-          cards.push({ id: doc.id, ...doc.data() });
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const cards = [];
+          snapshot.forEach(doc => {
+            cards.push({ id: doc.id, ...doc.data() });
+          });
+          cards.sort((a, b) => (a.nextReview?.toMillis() || 0) - (b.nextReview?.toMillis() || 0));
+          setFlashcards(cards);
+          if (currentCardIndex >= cards.length && cards.length > 0) {
+            setCurrentCardIndex(0);
+          }
+        }, (error) => {
+          console.error("Error fetching flashcards:", error);
+          if (error.code && error.code === 'unavailable' || error.message.includes('offline')) {
+            setAuthError("Firestore connection failed: You appear to be offline or there's a network issue. Please check your internet connection.");
+          } else {
+            setAuthError(`Error fetching flashcards: ${error.message}`);
+          }
         });
-        cards.sort((a, b) => (a.nextReview?.toMillis() || 0) - (b.nextReview?.toMillis() || 0));
-        setFlashcards(cards);
-        if (currentCardIndex >= cards.length && cards.length > 0) {
-          setCurrentCardIndex(0);
-        }
-      }, (error) => {
-        console.error("Error fetching flashcards:", error);
-        if (error.code && error.code === 'unavailable' || error.message.includes('offline')) {
-          setAuthError("Firestore connection failed: You appear to be offline or there's a network issue. Please check your internet connection.");
-        } else {
-          setAuthError(`Error fetching flashcards: ${error.message}`);
-        }
-      });
 
-      return () => unsubscribe();
+        return () => unsubscribe();
+      } catch (error) {
+        console.error("Error setting up Firestore listener:", error);
+        setAuthError(`Failed to connect to database: ${error.message}`);
+      }
     }
   }, [isFirebaseInitialized, db, auth, userId]);
 
@@ -857,12 +950,36 @@ function App() {
       });
     }
 
+    // Check if we should preserve the current position
+    const shouldPreservePosition = preservedCardIndexRef.current !== null;
+    const currentCard = filteredFlashcards[currentCardIndex];
+    
     setFilteredFlashcards(filtered);
-    setCurrentCardIndex(0);
-    setShowAnswer(false);
-    setGeneratedExample(''); // Clear generated example when filtering cards
-    setGeminiExplanation(''); // Clear generated explanation when filtering cards
-    setGeneratedQuestions([]); // Clear generated questions when filtering cards
+    
+    if (shouldPreservePosition) {
+      // Don't reset position if we're in the middle of an edit save operation
+      console.log('Preserving card position during filter update');
+    } else if (currentCard && filtered.length > 0) {
+      // Try to maintain position by finding the same card in the new filtered array
+      const newIndex = filtered.findIndex(card => card.id === currentCard.id);
+      if (newIndex !== -1) {
+        setCurrentCardIndex(newIndex);
+      } else {
+        // Card not found in new filter, reset to beginning
+        setCurrentCardIndex(0);
+        setShowAnswer(false);
+        setGeneratedExample('');
+        setGeminiExplanation('');
+        setGeneratedQuestions([]);
+      }
+    } else {
+      // No current card or no filtered cards, reset to beginning
+      setCurrentCardIndex(0);
+      setShowAnswer(false);
+      setGeneratedExample('');
+      setGeminiExplanation('');
+      setGeneratedQuestions([]);
+    }
   }, [flashcards, selectedCategory, userId, showDueTodayOnly]);
 
   const nextCard = React.useCallback(() => {
@@ -1061,8 +1178,8 @@ function App() {
 
   // Function to get cards due on a specific date
   const getCardsDueOnDate = React.useCallback(async (date) => {
-    if (!db || !userId) {
-      console.log("getCardsDueOnDate: db or userId not available");
+    if (!db || !userId || !isFirebaseInitialized) {
+      console.log("getCardsDueOnDate: db, userId, or Firebase not available");
       return 0;
     }
 
@@ -1121,11 +1238,11 @@ function App() {
       console.error("Error getting cards due on date:", error);
       return 0;
     }
-  }, [db, userId]);
+  }, [db, userId, isFirebaseInitialized]);
 
   // Update calendar dates with correct card counts
   const updateCalendarDates = React.useCallback(async () => {
-    if (!db || !userId) return;
+    if (!db || !userId || !isFirebaseInitialized) return;
 
     try {
       // Get current date in Central Time
@@ -1164,7 +1281,8 @@ function App() {
     const handleKeyDown = (event) => {
       // Only handle keyboard shortcuts when not in input fields or modals
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || 
-          showCreateCardForm || showUploadCsvForm || showSettingsModal || showCalendarModal || showLoginModal) {
+          event.target.contentEditable === 'true' ||
+          showCreateCardForm || showUploadCsvForm || showSettingsModal || showCalendarModal || showLoginModal || isEditingCard) {
         return;
       }
 
@@ -1194,7 +1312,7 @@ function App() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showAnswer, showCreateCardForm, showUploadCsvForm, showSettingsModal, showCalendarModal, showLoginModal, filteredFlashcards.length]);
+  }, [showAnswer, showCreateCardForm, showUploadCsvForm, showSettingsModal, showCalendarModal, showLoginModal, isEditingCard, filteredFlashcards.length]);
 
   // Helper function to calculate estimated next review days based on FSRS factors
   const calculateEstimatedReviewDays = (factor, baseInterval = 3) => {
@@ -2088,7 +2206,7 @@ function App() {
     
     const subject = encodeURIComponent('Flashcard App Feedback');
     const body = encodeURIComponent(`Hi,\n\nHere's my feedback for the Flashcard App:\n\n${feedbackText}\n\nBest regards`);
-    const mailtoLink = `mailto:support@flashcardapp.com?subject=${subject}&body=${body}`;
+    const mailtoLink = `mailto:admin@fsrslearn.com?subject=${subject}&body=${body}`;
     
     window.open(mailtoLink, '_blank');
     
@@ -2344,15 +2462,35 @@ function App() {
     }
   };
 
-
   // Event handlers for contentEditable synchronization
   const handleQuestionInput = (e) => {
     try {
       const content = e.target.innerHTML || '';
       setEditQuestion(content);
-      console.log("🔍 Question content updated:", content?.substring(0, 50));
     } catch (error) {
       console.error("Error in handleQuestionInput:", error);
+    }
+  };
+
+  const handleQuestionKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      // Insert line break using execCommand for better browser compatibility
+      document.execCommand('insertHTML', false, '<br>');
+      
+      // Update state to keep React in sync
+      const content = e.target.innerHTML;
+      setEditQuestion(content);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      
+      // Insert tab spaces using execCommand
+      document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+      
+      // Update state to keep React in sync
+      const content = e.target.innerHTML;
+      setEditQuestion(content);
     }
   };
 
@@ -2360,154 +2498,86 @@ function App() {
     try {
       const content = e.target.innerHTML || '';
       setEditAnswer(content);
-      console.log("🔍 Answer content updated:", content?.substring(0, 50));
     } catch (error) {
       console.error("Error in handleAnswerInput:", error);
     }
   };
 
-  // Robust format answer handler with comprehensive debugging
+  const handleAnswerKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      // Insert line break using execCommand for better browser compatibility
+      document.execCommand('insertHTML', false, '<br>');
+      
+      // Update state to keep React in sync
+      const content = e.target.innerHTML;
+      setEditAnswer(content);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      
+      // Insert tab spaces using execCommand
+      document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+      
+      // Update state to keep React in sync
+      const content = e.target.innerHTML;
+      setEditAnswer(content);
+    }
+  };
+
+  // Simple and direct format answer handler
   const handleFormatAnswer = () => {
-    console.log('🔥 FORMAT ANSWER - Starting');
-    
-    // Get current content from the DOM element
-    const element = editAnswerRef.current || document.getElementById('edit-answer');
-    if (!element) {
-      console.error('❌ Element not found');
-      alert('Error: Could not find answer field');
-      return;
-    }
-    console.log('✅ Element found:', element);
-    
-    // Try multiple methods to get content
-    let currentContent = '';
-    const methods = [];
-    
-    // Method 1: React state
-    if (editAnswer && editAnswer.trim()) {
-      currentContent = editAnswer;
-      // Strip HTML tags to get plain text for processing
-      const stripped = currentContent.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').trim();
-      if (stripped) {
-        currentContent = stripped;
-        methods.push('React state (HTML stripped)');
-      }
-    }
-    
-    // Method 2: DOM textContent
-    if (!currentContent) {
-      const textContent = element.textContent || '';
-      if (textContent.trim()) {
-        currentContent = textContent.trim();
-        methods.push('DOM textContent');
-      }
-    }
-    
-    // Method 3: DOM innerText
-    if (!currentContent) {
-      const innerText = element.innerText || '';
-      if (innerText.trim()) {
-        currentContent = innerText.trim();
-        methods.push('DOM innerText');
-      }
-    }
-    
-    // Method 4: DOM innerHTML stripped
-    if (!currentContent) {
-      const innerHTML = element.innerHTML || '';
-      if (innerHTML.trim()) {
-        currentContent = innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').trim();
-        methods.push('DOM innerHTML (stripped)');
-      }
-    }
-    
-    console.log('📄 Content extraction methods tried:', methods);
-    console.log('📏 Content length:', currentContent?.length);
-    console.log('📝 Content preview:', currentContent?.substring(0, 100));
-    
-    if (!currentContent || !currentContent.trim()) {
-      console.log('❌ No content found to format');
-      alert('Please enter some text first.');
-      return;
-    }
+    console.log('🔥 FORMAT ANSWER CLICKED');
     
     try {
-      let formatted = currentContent.trim();
-      const originalLength = formatted.length;
-      
-      console.log('🧹 Starting formatting process...');
-      
-      // Enhanced formatting rules that work with any text
-      
-      // 1. Clean up excessive whitespace first
-      formatted = formatted.replace(/\s+/g, ' ');
-      
-      // 2. Add line breaks before numbered lists (1. 2. 3.)
-      formatted = formatted.replace(/(\w)\s*(\d+\.\s)/g, '$1\n\n$2');
-      
-      // 3. Add line breaks before bullet points
-      formatted = formatted.replace(/(\w)\s*([•▪▫◦*-]\s)/g, '$1\n$2');
-      
-      // 4. Add line breaks before section headers (Title: or TITLE:)
-      formatted = formatted.replace(/(\w)\s*([A-Z][A-Za-z\s]*:)/g, '$1\n\n$2');
-      
-      // 5. Add line breaks after periods followed by capital letters (new sentences)
-      formatted = formatted.replace(/(\.)(\s*)([A-Z])/g, '$1\n\n$3');
-      
-      // 6. Add line breaks around parenthetical explanations
-      formatted = formatted.replace(/(\w)\s*(\([^)]+\))/g, '$1\n$2');
-      
-      // 7. Add line breaks before key programming terms and concepts
-      formatted = formatted.replace(/(\w)\s*(while|however|therefore|additionally|furthermore|moreover|conversely|in contrast)\s/gi, '$1\n\n$2 ');
-      
-      // 8. Break up long sentences at commas when they're getting too long
-      const sentences = formatted.split(/\n+/);
-      formatted = sentences.map(sentence => {
-        if (sentence.length > 100) {
-          return sentence.replace(/,\s+/g, ',\n');
-        }
-        return sentence;
-      }).join('\n\n');
-      
-      // 9. Convert markdown and add emphasis
-      formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      formatted = formatted.replace(/`([^`]+)`/g, '<code style="background-color: #f3f4f6; padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>');
-      
-      // 10. Highlight technical terms and method names
-      formatted = formatted.replace(/(\w+)\(\)/g, '<code style="background-color: #e0f2fe; padding: 1px 3px; border-radius: 2px; font-family: monospace; color: #0277bd;">$1()</code>');
-      
-      // 11. Clean up excessive line breaks and convert to HTML
-      formatted = formatted.replace(/\n\s*\n\s*\n/g, '\n\n');
-      formatted = formatted.replace(/\n/g, '<br>');
-      
-      console.log('✨ Formatted length:', formatted.length);
-      console.log('🎨 Formatted preview:', formatted.substring(0, 100));
-      
-      if (formatted === currentContent.replace(/\n/g, '<br>')) {
-        console.log('⚠️ No changes made during formatting');
+      // Get the element directly
+      const element = editAnswerRef.current;
+      if (!element) {
+        alert('Could not find answer field');
+        return;
       }
       
-      // Force update both DOM and state
-      console.log('🔄 Updating DOM and state...');
+      // Get text content
+      let text = element.textContent || element.innerText || '';
+      console.log('📝 Original text:', text.substring(0, 100));
+      
+      if (!text.trim()) {
+        alert('Please enter some text first');
+        return;
+      }
+      
+      // Simple formatting
+      let formatted = text.trim();
+      
+      // Add line breaks at periods followed by capital letters
+      formatted = formatted.replace(/\.\s*([A-Z])/g, '.\n\n$1');
+      
+      // Add line breaks before numbered lists
+      formatted = formatted.replace(/(\w)\s*(\d+\.\s)/g, '$1\n\n$2');
+      
+      // Add line breaks around parentheses
+      formatted = formatted.replace(/(\w)\s*(\([^)]+\))/g, '$1\n$2');
+      
+      // Bold words in **text**
+      formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      
+      // Method names like map()
+      formatted = formatted.replace(/(\w+)\(\)/g, '<code style="background: #e3f2fd; padding: 2px 4px; border-radius: 3px;">$1()</code>');
+      
+      // Convert newlines to HTML
+      formatted = formatted.replace(/\n/g, '<br>');
+      
+      console.log('🎨 Formatted text:', formatted.substring(0, 100));
+      
+      // Update the element
       element.innerHTML = formatted;
       setEditAnswer(formatted);
       
-      // Trigger a re-render by focusing the element
-      setTimeout(() => {
-        if (element) {
-          element.focus();
-          element.blur();
-        }
-      }, 100);
-      
-      console.log('✅ Format Answer completed successfully');
-      console.log('📊 Original length:', originalLength, '→ New length:', formatted.length);
+      console.log('✅ Format complete!');
       
     } catch (error) {
-      console.error('❌ Error during formatting:', error);
-      console.error('❌ Error stack:', error.stack);
-      alert('Error during formatting: ' + error.message);
+      console.error('❌ Format error:', error);
+      alert('Formatting failed: ' + error.message);
     }
   };
 
@@ -2703,6 +2773,18 @@ function App() {
     }
 
     const appId = "flashcard-app-3f2a3"; // Hardcoding appId
+    
+    // Save the current card ID and index to preserve position
+    const currentEditedCardId = editCardData.id;
+    const currentPosition = currentCardIndex;
+    
+    // Store position info in ref to survive re-renders
+    preservedCardIndexRef.current = {
+      cardId: currentEditedCardId,
+      index: currentPosition,
+      timestamp: Date.now()
+    };
+    
     try {
       const updatedCard = {
         ...editCardData,
@@ -2713,6 +2795,15 @@ function App() {
       
       await updateDoc(doc(db, `/artifacts/${appId}/users/${userId}/flashcards`, editCardData.id), updatedCard);
       
+      // Update the current card data in state immediately to show the new formatting
+      setFlashcards(prevFlashcards => 
+        prevFlashcards.map(card => 
+          card.id === currentEditedCardId 
+            ? { ...card, question: editQuestion.trim(), answer: editAnswer.trim() }
+            : card
+        )
+      );
+      
       // Close edit modal and reset state
       setIsEditingCard(false);
       setEditCardData(null);
@@ -2721,7 +2812,7 @@ function App() {
       setGeneratedQuestions([]);
       setShowGeneratedQuestionsModal(false);
       
-      console.log('Card updated successfully');
+      console.log('Card updated successfully, position preserved in ref');
     } catch (error) {
       console.error('Error updating card:', error);
       alert('Failed to update card: ' + error.message);
@@ -2862,6 +2953,12 @@ function App() {
   // Effect to handle keyboard events for navigation and review
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Don't trigger if user is typing in input fields
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || 
+          event.target.contentEditable === 'true') {
+        return;
+      }
+      
       // Only trigger if no modals or forms are open and there are filtered flashcards
       const isStudyViewActive = !showCreateCardForm && !showUploadCsvForm && !showCalendarModal && !showSettingsModal && !isEditingCard && !showGeneratedQuestionsModal;
       if (!isStudyViewActive || filteredFlashcards.length === 0) {
@@ -2906,6 +3003,35 @@ function App() {
     currentCardIndex,
     reviewCard
   ]);
+
+  // Effect to restore card position after editing
+  useEffect(() => {
+    // Check if we have a preserved card position and the filtered flashcards have been updated
+    if (preservedCardIndexRef.current && filteredFlashcards.length > 0) {
+      const { cardId, index, timestamp } = preservedCardIndexRef.current;
+      
+      // Only restore position if this is recent (within 5 seconds) to avoid stale restores
+      if (Date.now() - timestamp < 5000) {
+        // Try to find the card by ID first (most accurate)
+        const cardIndex = filteredFlashcards.findIndex(card => card.id === cardId);
+        
+        if (cardIndex !== -1) {
+          // Found the card, set to its current position
+          setCurrentCardIndex(cardIndex);
+          setShowAnswer(true); // Show the answer to display the formatted content
+          console.log('Restored card position by ID:', cardIndex);
+        } else {
+          // Card not found, fallback to the saved index if it's valid
+          const fallbackIndex = Math.min(index, filteredFlashcards.length - 1);
+          setCurrentCardIndex(fallbackIndex);
+          console.log('Restored card position by index fallback:', fallbackIndex);
+        }
+        
+        // Clear the preserved position after restoring
+        preservedCardIndexRef.current = null;
+      }
+    }
+  }, [filteredFlashcards]);
 
   // Content for the File Upload Guide in Settings
   const csvUploadGuideContent = `
@@ -3140,13 +3266,14 @@ Example:
 
   return (
     <>
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 font-inter bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-gray-900 dark:to-indigo-950 text-slate-800 dark:text-slate-100 transition-all duration-700 ease-out backdrop-blur-sm"
+    <div className="min-h-screen flex flex-col items-center p-6 font-inter bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-gray-900 dark:to-indigo-950 text-slate-800 dark:text-slate-100 transition-all duration-700 ease-out backdrop-blur-sm"
          style={{
            background: 'linear-gradient(135deg, #ffffff 0%, #fefeff 25%, #fdfdff 50%, #fefffe 75%, #ffffff 100%)',
            backgroundSize: '400% 400%',
            animation: 'gradientShift 15s ease infinite',
-           paddingTop: '250px',
-paddingBottom: '50px'
+           paddingTop: '280px',
+           paddingBottom: '50px',
+           scrollPaddingTop: '280px'
          }}>
       {/* Combined Header Panel */}
       <div className="fixed top-6 left-6 right-6 z-50" style={{ position: 'fixed', top: '24px', left: '24px', right: '24px', zIndex: 9999 }}>
@@ -3195,7 +3322,7 @@ paddingBottom: '50px'
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
-              Upload File
+              Import File
             </span>
           </button>
           <button
@@ -3206,7 +3333,7 @@ paddingBottom: '50px'
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Export
+              Export File
             </span>
           </button>
 
@@ -3687,7 +3814,7 @@ paddingBottom: '50px'
                   </p>
                 )}
 
-                <div className="flex mt-4 space-x-4">
+                <div className="flex flex-wrap sm:flex-nowrap mt-4 gap-2 sm:gap-4 justify-center">
                   <button
                     onClick={(e) => {
                       e.preventDefault();
@@ -3696,7 +3823,7 @@ paddingBottom: '50px'
                         reviewCard(1, currentCard);
                       }
                     }}
-                    className="bg-red-600 hover:bg-red-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700"
+                    className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-sm sm:text-base"
                   >
                     Again (1)
                   </button>
@@ -3708,7 +3835,7 @@ paddingBottom: '50px'
                         reviewCard(2, currentCard);
                       }
                     }}
-                    className="bg-yellow-600 hover:bg-yellow-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:bg-yellow-800 dark:hover:bg-yellow-700"
+                    className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:bg-yellow-800 dark:hover:bg-yellow-700 text-sm sm:text-base"
                   >
                     Hard (2)
                   </button>
@@ -3720,7 +3847,7 @@ paddingBottom: '50px'
                         reviewCard(3, currentCard);
                       }
                     }}
-                    className="bg-green-600 hover:bg-green-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700"
+                    className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700 text-sm sm:text-base"
                   >
                     Good (3)
                   </button>
@@ -3732,7 +3859,7 @@ paddingBottom: '50px'
                         reviewCard(4, currentCard);
                       }
                     }}
-                    className="bg-blue-600 hover:bg-blue-700 text-black font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
+                    className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700 text-sm sm:text-base"
                   >
                     Easy (4)
                   </button>
@@ -3818,7 +3945,7 @@ paddingBottom: '50px'
                   contentEditable={true}
                   suppressContentEditableWarning={true}
                   onInput={handleQuestionInput}
-                  dangerouslySetInnerHTML={{ __html: editQuestion }}
+                  onKeyDown={handleQuestionKeyDown}
                   className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[100px] max-h-[200px] overflow-y-auto"
                   style={{ minHeight: '100px' }}
                 ></div>
@@ -3842,7 +3969,7 @@ paddingBottom: '50px'
                   contentEditable={true}
                   suppressContentEditableWarning={true}
                   onInput={handleAnswerInput}
-                  dangerouslySetInnerHTML={{ __html: editAnswer }}
+                  onKeyDown={handleAnswerKeyDown}
                   className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[250px] max-h-[400px] overflow-y-auto"
                   style={{ minHeight: '250px' }}
                 ></div>
@@ -4218,7 +4345,7 @@ paddingBottom: '50px'
             <div className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 80px)' }}>
               <div className="p-6 space-y-5">
               {/* User Information Section */}
-              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600 border-txb-2 border-txb-black">
                 <button
                   onClick={() => setShowUserInfo(!showUserInfo)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -4311,7 +4438,7 @@ paddingBottom: '50px'
               </section>
 
               {/* API Keys Configuration Section */}
-              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600 border-tx-2 border-tx-black">
                 <button
                   onClick={() => setShowApiKeys(!showApiKeys)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -4432,7 +4559,7 @@ paddingBottom: '50px'
               </section>
 
               {/* FSRS Configuration Section */}
-              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600 border-tx-2 border-tx-black">
                 <button
                   onClick={() => setShowFsrsFactors(!showFsrsFactors)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -4610,7 +4737,7 @@ paddingBottom: '50px'
               </section>
 
               {/* CSV Upload Guide Section */}
-              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600 border-tx-2 border-tx-black">
                 <button
                   onClick={() => setShowCsvGuide(!showCsvGuide)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -4646,7 +4773,7 @@ paddingBottom: '50px'
                 )}
               </section>
                             {/* Feedback Section */}
-                            <section className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-blue-700">
+                            <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600 border-tx-2 border-tx-black">
                 <button
                   onClick={() => setShowFeedback(!showFeedback)}
                   className="flex items-center justify-between w-full text-left"
@@ -4695,7 +4822,7 @@ paddingBottom: '50px'
               </section>
 
               {/* Theme Section - Moved to bottom */}
-              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600 border-txb-2 border-txb-black">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center">
                     <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded-lg mr-3">
