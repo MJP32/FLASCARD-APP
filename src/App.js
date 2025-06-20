@@ -3424,12 +3424,10 @@ Example:
                   <>
                     <div className="flex items-center gap-2">
                       <span className="text-lg">📅</span>
-                      <div>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
-                          {selectedCategory === 'All' ? "Today" : selectedCategory}
-                        </p>
-                        <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
-                      </div>
+                      <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
+                        {selectedCategory === 'All' ? "Today" : selectedCategory}
+                      </p>
+                      <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
                     </div>
                   </>
                 ) : (
