@@ -16,7 +16,9 @@
       "Bash(npm run build:*)",
       "Bash(node:*)",
       "Bash(cat:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(/bin/bash -c \"rg -n -C 3 'Scroll for more content' src/App.js\")",
+      "Bash(awk:*)"
     ],
     "deny": []
   }
