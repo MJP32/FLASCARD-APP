@@ -56,6 +56,9 @@ function App() {
   
   // Flag to prevent React re-renders during keyboard events
   const isKeyboardEventRef = useRef(false);
+  
+  // State to prevent double-clicking review buttons
+  const [isReviewing, setIsReviewing] = useState(false);
 
   // Initialize theme immediately on load to prevent flash
   useEffect(() => {
@@ -1065,10 +1068,19 @@ function App() {
   const reviewCard = React.useCallback(async (quality, card) => {
     console.log("reviewCard called with:", { quality, cardId: card?.id });
     
+    // Prevent double-clicking
+    if (isReviewing) {
+      console.log("Review already in progress, ignoring click");
+      return;
+    }
+    
     if (!isFirebaseInitialized || !db || !userId || !card || !settingsLoaded) {
       console.error("Missing dependencies:", { isFirebaseInitialized, db: !!db, userId: !!userId, card: !!card, settingsLoaded });
       return;
     }
+    
+    // Set reviewing state to prevent double-clicks
+    setIsReviewing(true);
 
     try {
       const appId = "flashcard-app-3f2a3";
@@ -1173,8 +1185,11 @@ function App() {
       } else {
         setAuthError(`Error updating flashcard: ${error.message}`);
       }
+    } finally {
+      // Reset reviewing state to allow next review
+      setIsReviewing(false);
     }
-  }, [db, userId, settingsLoaded, fsrsParams, nextCard]);
+  }, [db, userId, settingsLoaded, fsrsParams, nextCard, isReviewing]);
 
   // Function to get cards due on a specific date
   const getCardsDueOnDate = React.useCallback(async (date) => {
@@ -3926,11 +3941,12 @@ Example:
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (currentCard) {
+                      if (currentCard && !isReviewing) {
                         reviewCard(1, currentCard);
                       }
                     }}
-                    className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-sm sm:text-base"
+                    disabled={isReviewing}
+                    className={`flex-1 sm:flex-none ${isReviewing ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'} text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform ${isReviewing ? '' : 'hover:scale-105 active:scale-95'} focus:outline-none focus:ring-4 focus:ring-red-300 dark:bg-red-800 dark:hover:bg-red-700 text-sm sm:text-base`}
                   >
                     Again (1)
                   </button>
@@ -3938,11 +3954,12 @@ Example:
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (currentCard) {
+                      if (currentCard && !isReviewing) {
                         reviewCard(2, currentCard);
                       }
                     }}
-                    className="flex-1 sm:flex-none bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:bg-yellow-800 dark:hover:bg-yellow-700 text-sm sm:text-base"
+                    disabled={isReviewing}
+                    className={`flex-1 sm:flex-none ${isReviewing ? 'bg-gray-400 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-700'} text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform ${isReviewing ? '' : 'hover:scale-105 active:scale-95'} focus:outline-none focus:ring-4 focus:ring-yellow-300 dark:bg-yellow-800 dark:hover:bg-yellow-700 text-sm sm:text-base`}
                   >
                     Hard (2)
                   </button>
@@ -3950,11 +3967,12 @@ Example:
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (currentCard) {
+                      if (currentCard && !isReviewing) {
                         reviewCard(3, currentCard);
                       }
                     }}
-                    className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700 text-sm sm:text-base"
+                    disabled={isReviewing}
+                    className={`flex-1 sm:flex-none ${isReviewing ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'} text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform ${isReviewing ? '' : 'hover:scale-105 active:scale-95'} focus:outline-none focus:ring-4 focus:ring-green-300 dark:bg-green-800 dark:hover:bg-green-700 text-sm sm:text-base`}
                   >
                     Good (3)
                   </button>
@@ -3962,11 +3980,12 @@ Example:
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (currentCard) {
+                      if (currentCard && !isReviewing) {
                         reviewCard(4, currentCard);
                       }
                     }}
-                    className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700 text-sm sm:text-base"
+                    disabled={isReviewing}
+                    className={`flex-1 sm:flex-none ${isReviewing ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold py-2 sm:py-3 px-3 sm:px-6 rounded-lg shadow-md transition-all duration-300 transform ${isReviewing ? '' : 'hover:scale-105 active:scale-95'} focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700 text-sm sm:text-base`}
                   >
                     Easy (4)
                   </button>
