@@ -2877,21 +2877,39 @@ function App() {
   const reviewedCount = reviewedCards.length;
   const toReviewCount = yetToReviewCards.length;
 
-  // Calculate cards actually due today
-  // If showDueTodayOnly is true, filteredFlashcards already contains only cards due today
-  // If showDueTodayOnly is false, we need to calculate cards due today from all cards
-  const cardsDueToday = showDueTodayOnly ? 
-    totalCardsCount : 
-    flashcards.filter(card => {
-      // Apply category filter first
-      if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
-      
-      if (!card.nextReview) return false;
+  // Calculate total cards that were due today (including those already reviewed)
+  const cardsDueToday = flashcards.filter(card => {
+    // Apply category filter first
+    if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1); // Start of tomorrow
+    
+    // Card is considered "due today" if:
+    // 1. It was due before or on today (nextReview <= end of today), OR
+    // 2. It was reviewed today (meaning it was due and got completed)
+    
+    // Check if reviewed today (was due and completed today)
+    if (card.lastReview) {
+      const lastReviewDate = card.lastReview.toDate ? card.lastReview.toDate() : new Date(card.lastReview);
+      if (lastReviewDate >= today && lastReviewDate < tomorrow) {
+        return true; // Was reviewed today, so it was due today
+      }
+    }
+    
+    // Check if still due (was due before end of today and not yet reviewed today)
+    if (card.nextReview) {
       const nextReviewDate = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today to match the filtering logic
-      return nextReviewDate <= today;
-    }).length;
+      const endOfToday = new Date(today);
+      endOfToday.setHours(23, 59, 59, 999);
+      return nextReviewDate <= endOfToday;
+    }
+    
+    // New cards (no nextReview) are always considered due
+    return !card.nextReview;
+  }).length;
 
   // Calculate cards reviewed today
   const cardsReviewedToday = flashcards.filter(card => {
