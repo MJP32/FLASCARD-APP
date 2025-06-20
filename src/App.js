@@ -3437,15 +3437,16 @@ Example:
               <div className="flex flex-col space-y-3 text-right">
                 {showDueTodayOnly ? (
                   <>
-                    <div className="flex flex-col gap-1 items-end">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">📅</span>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
-                          {selectedCategory === 'All' ? "Today" : selectedCategory}
-                        </p>
-                        <p className="text-amber-600 dark:text-amber-400 text-xs font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
-                      </div>
-                      {selectedCategory !== 'All' && (() => {
+                    <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm">
+                      <div className="flex flex-col gap-1 items-end">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">📅</span>
+                          <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
+                            {selectedCategory === 'All' ? "Today" : selectedCategory}
+                          </p>
+                          <p className="text-amber-600 dark:text-amber-400 text-xs font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
+                        </div>
+                        {selectedCategory !== 'All' && (() => {
                         // Calculate overall today progress (all categories)
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
