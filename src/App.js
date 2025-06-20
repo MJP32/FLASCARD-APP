@@ -10,6 +10,23 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // Main App component for the flashcard application
 function App() {
+  // Settings states
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false); // To ensure settings are loaded before saving/using them
+  const [fsrsParams, setFsrsParams] = useState({
+    requestRetention: 0.9,
+    maximumInterval: 36500,
+    w: [0.4, 0.6, 2.4, 5.8, 4.93, 0.94, 0.86, 0.01, 1.49, 0.14, 0.94, 2.18, 0.05, 0.34, 1.26, 0.29, 2.61],
+    initialDifficulty: 5,
+    fuzzFactor: 0.05,
+    easyFactor: 1.3,
+    goodFactor: 1.0,
+    hardFactor: 0.8,
+    againFactor: 0.5,
+    initialStability: 2
+  });
+
   // State variables for Firebase, user authentication, and flashcards
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
@@ -37,18 +54,25 @@ function App() {
   const [showDueTodayOnly, setShowDueTodayOnly] = useState(true); // Show only cards due today when logged in
   const [showLoginScreen, setShowLoginScreen] = useState(true); // Always show login screen first
 
+  // Persist theme on load
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) setIsDarkMode(savedTheme === 'dark');
+  }, []);
+
+  // Apply/remove .dark class on body and persist theme
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.body.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
   // Settings states
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [settingsLoaded, setSettingsLoaded] = useState(false); // To ensure settings are loaded before saving/using them
-  const [fsrsParams, setFsrsParams] = useState({
-    easyFactor: 1.5,
-    goodFactor: 1.0,
-    hardFactor: 0.7,
-    againFactor: 0.3,
-    initialDifficulty: 5,
-    initialStability: 1,
-  });
+  // Removed duplicate settings state declarations from here. Only keep the ones at the top of the component.
   const [isGeneratingAnswer, setIsGeneratingAnswer] = useState(false); // State for Gemini API loading (Suggest Answer)
   const [isGeneratingExample, setIsGeneratingExample] = useState(false); // State for Gemini API loading (Generate Example)
   const [generatedExample, setGeneratedExample] = useState(''); // State to store generated example
@@ -65,7 +89,8 @@ function App() {
   const [showFsrsFactors, setShowFsrsFactors] = useState(false); // State for FSRS Factors dropdown - closed by default
   const [showGenerationPrompt, setShowGenerationPrompt] = useState(false); // State for Generation Prompt dropdown
   const [showApiKeys, setShowApiKeys] = useState(false); // State for API Keys dropdown
-
+  const [showFeedback, setShowFeedback] = useState(false); // State for Feedback dropdown
+  const [feedbackText, setFeedbackText] = useState(''); // State for feedback text
   // Export modal state
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFormat, setExportFormat] = useState('csv'); // 'csv' or 'excel'
@@ -86,6 +111,10 @@ function App() {
   const [copyFeedback, setCopyFeedback] = useState(''); // State for copy button feedback
   const [formattedAnswerContent, setFormattedAnswerContent] = useState(''); // Store formatted content
   const [formattedQuestionContent, setFormattedQuestionContent] = useState(''); // Store formatted content
+  const [editQuestion, setEditQuestion] = useState(""); // Controlled state for edit question field
+  const [editAnswer, setEditAnswer] = useState(""); // Controlled state for edit answer field
+  // Tracking state for debugging contentEditable behavior
+  const [contentEditableDebug, setContentEditableDebug] = useState("");
 
   // Refs for new card input fields and file input
   const newCardQuestionRef = useRef(null);
@@ -103,25 +132,39 @@ function App() {
 
   // Shared formatting function for both questions and answers
   const formatAnswer = (text) => {
-    console.log('formatAnswer called with:', text?.substring(0, 100));
+    console.log('📥 formatAnswer called with text length:', text?.length);
+    console.log('📥 formatAnswer preview:', text?.substring(0, 100));
+    
     if (!text || !text.trim()) {
-      console.log('formatAnswer: empty text, returning empty');
+      console.log('❌ formatAnswer: empty text, returning empty');
       return '';
     }
     
+    console.log('✅ formatAnswer: processing text of length', text.length);
+    
     // First, check if this is primarily code content
     // More specific code detection - avoid false positives with markdown formatting
-    const codeIndicators = /^[\s]*```|^[\s]*\{[\s]*$|^[\s]*public class|^[\s]*function\s*\(|^[\s]*def\s+\w+\s*\(|^[\s]*#include/.test(text);
-    const specialChars = text.match(/[{}();]/g) || [];
+    const codeIndicators = /^[\s]*```|^[\s]*\{[\s]*$|^[\s]*public class|^[\s]*function\s*\(|^[\s]*def\s+\w+\s*\(|^[\s]*#include|^[\s]*import\s+|^[\s]*<\w+|^[\s]*if\s*\(|^[\s]*for\s*\(|^[\s]*while\s*\(/.test(text);
+    
+    // Only count programming-specific special characters, not formatting characters
+    const programmingSpecialChars = text.match(/[{}();]/g) || [];
     const words = text.split(/\s+/).filter(w => w.length > 0);
-    const specialCharRatio = specialChars.length / words.length;
-    const isCodeContent = codeIndicators || (specialCharRatio > 0.15 && words.length > 10);
+    const specialCharRatio = programmingSpecialChars.length / words.length;
+    
+    // Check for markdown/formatting patterns that should NOT be treated as code
+    const hasMarkdownFormatting = /\*\*[^*]+\*\*|\*[^*]+\*|•|◦|▪|▫|→|←|↑|↓/.test(text);
+    const hasStructuredText = /advantages|disadvantages|benefits|drawbacks|pros|cons|overview|summary|definition|concept/i.test(text);
+    
+    // More restrictive code detection - require either explicit code indicators OR high ratio of programming chars WITHOUT formatting indicators
+    const isCodeContent = codeIndicators || (specialCharRatio > 0.25 && words.length > 10 && !hasMarkdownFormatting && !hasStructuredText);
     
     console.log('formatAnswer: Code detection analysis:');
     console.log('  - codeIndicators:', codeIndicators);
-    console.log('  - specialChars count:', specialChars.length);
+    console.log('  - programmingSpecialChars count:', programmingSpecialChars.length);
     console.log('  - words count:', words.length);
     console.log('  - specialCharRatio:', specialCharRatio);
+    console.log('  - hasMarkdownFormatting:', hasMarkdownFormatting);
+    console.log('  - hasStructuredText:', hasStructuredText);
     console.log('  - final isCodeContent:', isCodeContent);
     
     if (isCodeContent) {
@@ -131,6 +174,92 @@ function App() {
     }
     
     console.log('formatAnswer: treating as human-readable text, applying formatting');
+    
+    // First, preprocess the text to improve structure and readability
+    const preprocessText = (rawText) => {
+      let processed = rawText;
+      
+      // STEP 1: Detect and format code blocks
+      // Look for code patterns and wrap them in proper code blocks
+      processed = processed.replace(/\b(public\s+class\s+\w+|function\s+\w+\s*\(|def\s+\w+\s*\(|if\s*\([^)]+\)|for\s*\([^)]+\)|while\s*\([^)]+\)|try\s*\{|catch\s*\([^)]+\))[^.]*[;}]/gi, '\n```\n$&\n```\n');
+      
+      // Format method calls and code snippets
+      processed = processed.replace(/\b(\w+\.\w+\([^)]*\)|\w+\([^)]*\)|new\s+\w+\([^)]*\))/g, '`$1`');
+      
+      // Format class names and type names
+      processed = processed.replace(/\b([A-Z][a-zA-Z]*(?:Exception|Error|Thread|Stream|List|Map|Set|Queue|Interface|Class))\b/g, '`$1`');
+      
+      // STEP 2: Improve list formatting dramatically
+      // Convert sequences of items into proper lists
+      processed = processed.replace(/([.!?])\s+((?:\w+[^.!?]*[,;]\s*)+\w+[^.!?]*\.)/g, (match, ending, listText) => {
+        const items = listText.replace(/\.$/, '').split(/[,;]\s*/);
+        if (items.length >= 3) {
+          const formattedList = items.map((item, index) => `${index + 1}. ${item.trim()}`).join('\n');
+          return `${ending}\n\n${formattedList}\n`;
+        }
+        return match;
+      });
+      
+      // STEP 3: Improve numbered lists - ensure each number starts on new line
+      processed = processed.replace(/([.!?])\s*(\d+\.\s+)/g, '$1\n\n$2');
+      processed = processed.replace(/([^.\n])\s+(\d+\.\s+)/g, '$1\n\n$2');
+      
+      // STEP 4: Add line breaks before bold text patterns
+      processed = processed.replace(/([.!?])\s*(\*\*[^*]+\*\*)/g, '$1\n\n$2');
+      processed = processed.replace(/([a-z.])\s*(\*\*[A-Z][^*]+\*\*)/g, '$1\n\n$2');
+      
+      // STEP 5: Add line breaks before section headers
+      processed = processed.replace(/([.!?])\s*([A-Z][A-Za-z\s]{2,30}:)/g, '$1\n\n$2');
+      processed = processed.replace(/([.!?])\s*(Advantages?|Disadvantages?|Benefits?|Drawbacks?|Pros?|Cons?):/gi, '$1\n\n$2:');
+      processed = processed.replace(/([.!?])\s*(Performance|Implementation|Usage|Example|Overview|Definition|Concept|Framework|Pattern|Method|Interface|Class|Algorithm)([:\s])/gi, '$1\n\n$2$3');
+      processed = processed.replace(/([.!?])\s*(How\s+[^:]{5,25}:|What\s+[^:]{5,25}:|Why\s+[^:]{5,25}:|When\s+[^:]{5,25}:)/gi, '$1\n\n$2');
+      
+      // STEP 6: Add line breaks before bullet points and improve bullet formatting
+      processed = processed.replace(/([.!?])\s*([•▪▫◦])/g, '$1\n$2');
+      processed = processed.replace(/([^.\n])\s*([•▪▫◦])/g, '$1\n$2');
+      
+      // Convert comma-separated items into bullet lists when appropriate
+      processed = processed.replace(/:\s*([^.!?:]*(?:,\s*[^.!?:]*){2,}[.!?])/g, (match, listText) => {
+        const items = listText.replace(/[.!?]$/, '').split(/,\s*/);
+        if (items.length >= 3 && items.every(item => item.length < 50)) {
+          const formattedList = items.map(item => `• ${item.trim()}`).join('\n');
+          return `:\n${formattedList}\n`;
+        }
+        return match;
+      });
+      
+      // STEP 7: Bold key terms and important concepts
+      processed = processed.replace(/\b(ForkJoin|Thread|Synchronized|Performance|Memory|CPU|Framework|Algorithm|Implementation|Interface|Class|Method|API|Database|Network|Security|Lock|Queue|Stream|Parallel|Concurrent|Asynchronous|Synchronous|ExecutorService|CompletableFuture|ConcurrentHashMap)\b/gi, '<strong>$1</strong>');
+      
+      // STEP 8: Convert existing markdown formatting
+      processed = processed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      processed = processed.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      
+      // STEP 9: Format code blocks properly
+      processed = processed.replace(/```\n([^`]+)\n```/g, '<pre><code>$1</code></pre>');
+      
+      // STEP 10: Improve spacing and structure
+      processed = processed.replace(/\.([A-Z])/g, '. $1');
+      processed = processed.replace(/\s+/g, ' ').trim();
+      processed = processed.replace(/\n\s*\n/g, '\n\n');
+      
+      // STEP 11: Group related content - add extra spacing between major sections
+      processed = processed.replace(/(\n\n)(Advantages?:|Disadvantages?:|Benefits?:|Drawbacks?:)/gi, '$1\n$2');
+      processed = processed.replace(/(\n\n)(Performance|Implementation|Usage|Example|Overview|Definition|Concept)/gi, '$1\n$2');
+      
+      // STEP 12: Add proper paragraph breaks for readability
+      processed = processed.replace(/([.!?])\s+([A-Z][^.!?]*(?:is|are|can|will|should|must|provides|offers|enables|allows|requires|involves)[^.!?]*[.!?])/g, '$1\n\n$2');
+      
+      console.log('📝 Enhanced text preprocessing with code formatting completed');
+      console.log('📄 Original length:', rawText.length);
+      console.log('📄 Processed length:', processed.length);
+      console.log('📋 Preview:', processed.substring(0, 250) + '...');
+      
+      return processed;
+    };
+    
+    // Apply text preprocessing
+    const preprocessedText = preprocessText(text);
     
     // Human-readable text transformation
     let result = [];
@@ -146,12 +275,26 @@ function App() {
       if (lower.includes('algorithm') || lower.includes('performance')) return '⚡';
       if (lower.includes('design') || lower.includes('pattern')) return '🎨';
       if (lower.includes('test') || lower.includes('debug')) return '🔍';
-      return '📋';
+      return ''; // Remove default pin icon
     };
     
-    // Split text into logical sections
+    // Split preprocessed text into logical sections
     const sections = [];
-    const sentences = text.split(/\.\s+/).filter(s => s.trim());
+    // Split by line breaks first, then by sentences, to handle the new structure
+    const lines = preprocessedText.split(/\n+/).filter(line => line.trim());
+    const sentences = [];
+    
+    // Process each line and split further if needed
+    lines.forEach(line => {
+      if (line.includes('.') && !line.endsWith(':')) {
+        // Split sentences within the line
+        const lineSentences = line.split(/\.\s+/).filter(s => s.trim());
+        sentences.push(...lineSentences);
+      } else {
+        // Keep the line as is (headers, single sentences, etc.)
+        sentences.push(line.trim());
+      }
+    });
     
     let currentSection = null;
     
@@ -159,9 +302,11 @@ function App() {
       const trimmed = sentence.trim();
       if (!trimmed) return;
       
-      // Detect section headers/topics
+      // Detect section headers/topics - enhanced to work with preprocessed text
       const isNewTopic = trimmed.match(/^[A-Z][a-z]+ (?:keyword|interface|method|class|pattern|algorithm)/i) ||
-                        trimmed.includes(':') && trimmed.split(':')[0].length < 30;
+                        (trimmed.includes(':') && trimmed.split(':')[0].length < 50) ||
+                        trimmed.match(/^<strong>[^<]+<\/strong>/i) ||  // Bold headers
+                        trimmed.match(/^(Performance|Implementation|Usage|Example|Overview|Definition|Concept|Framework|Pattern|Method|Interface|Class|Algorithm|How\s+[^:]+|What\s+[^:]+|Why\s+[^:]+|When\s+[^:]+)/i);
       
       if (isNewTopic) {
         // Save previous section
@@ -169,8 +314,10 @@ function App() {
           sections.push(currentSection);
         }
         
-        // Start new section
-        const topicName = trimmed.includes(':') ? trimmed.split(':')[0].trim() : trimmed;
+        // Start new section - clean up HTML tags for title
+        let topicName = trimmed.includes(':') ? trimmed.split(':')[0].trim() : trimmed;
+        // Remove HTML tags from title
+        topicName = topicName.replace(/<[^>]*>/g, '');
         const description = trimmed.includes(':') ? trimmed.split(':').slice(1).join(':').trim() : '';
         
         currentSection = {
@@ -181,10 +328,10 @@ function App() {
           content: []
         };
       } else {
-        // Add to current section or create default section
+        // Add to current section or create a section without 'Overview' title
         if (!currentSection) {
           currentSection = {
-            title: 'Overview',
+            title: '',  // Remove 'Overview' title
             description: '',
             advantages: [],
             disadvantages: [],
@@ -223,17 +370,83 @@ function App() {
       });
     });
     
-    // If no sections were created, create a simple formatted version
+    // If no sections were created, create a simple formatted version with better structure
     if (sections.length === 0) {
       console.log('formatAnswer: no sections detected, creating simple format');
-      return `<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">📋 Formatted Content</div><div style="background: #f8fafc; color: #334155; padding: 10px; border-radius: 6px; margin: 6px 0; border-left: 3px solid #cbd5e1;">${text}</div>`;
+      
+      // Convert line breaks to HTML breaks and add enhanced formatting
+      const lines = preprocessedText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      let formattedContent = '';
+      let inListGroup = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const nextLine = lines[i + 1];
+        const isCurrentList = line.match(/^\d+\.\s+/) || line.match(/^[•▪▫◦]\s+/);
+        const isNextList = nextLine && (nextLine.match(/^\d+\.\s+/) || nextLine.match(/^[•▪▫◦]\s+/));
+        
+        // Start list group
+        if (isCurrentList && !inListGroup) {
+          formattedContent += '<div style="margin: 12px 0; padding: 12px; background: #f1f5f9; border-radius: 8px; border-left: 4px solid #3b82f6;">';
+          inListGroup = true;
+        }
+        
+        // Style different line types
+        if (line.match(/^<pre><code>/)) {
+          // Code blocks with syntax highlighting
+          formattedContent += `<div style="margin: 16px 0; background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 8px; border-left: 4px solid #3b82f6; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; font-size: 14px; line-height: 1.4; overflow-x: auto;">${line.replace(/<\/?pre><\/?code>/g, '')}</div>`;
+        } else if (line.match(/^[•▪▫◦]\s+/)) {
+          // Bullet points
+          formattedContent += `<div style="margin: 6px 0; padding-left: 16px; color: #1e40af; font-weight: 500; position: relative;">
+            <span style="position: absolute; left: 0; color: #3b82f6;">•</span>
+            ${line.replace(/^[•▪▫◦]\s+/, '')}
+          </div>`;
+        } else if (line.match(/^\d+\.\s+/)) {
+          // Numbered lists with better styling
+          const number = line.match(/^(\d+)\./)[1];
+          const content = line.replace(/^\d+\.\s+/, '');
+          formattedContent += `<div style="margin: 8px 0; padding-left: 24px; color: #1e40af; font-weight: 500; position: relative;">
+            <span style="position: absolute; left: 0; color: #3b82f6; font-weight: bold; min-width: 20px;">${number}.</span>
+            ${content}
+          </div>`;
+        } else if (line.endsWith(':')) {
+          // Section headers with enhanced styling
+          formattedContent += `<div style="margin: 20px 0 12px 0; color: #1d4ed8; font-weight: bold; font-size: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px;">${line}</div>`;
+        } else if (line.match(/^<strong>[^<]+<\/strong>/)) {
+          // Bold headers
+          formattedContent += `<div style="margin: 16px 0 8px 0; color: #1d4ed8; font-weight: bold; font-size: 16px;">${line}</div>`;
+        } else {
+          // Regular content with better typography and inline code formatting
+          let processedLine = line;
+          
+          // Style inline code with backticks
+          processedLine = processedLine.replace(/`([^`]+)`/g, '<code style="background: #f1f5f9; color: #3730a3; padding: 2px 6px; border-radius: 4px; font-family: \'Consolas\', \'Monaco\', \'Courier New\', monospace; font-size: 13px;">$1</code>');
+          
+          formattedContent += `<div style="margin: 8px 0; line-height: 1.6; color: #374151;">${processedLine}</div>`;
+        }
+        
+        // End list group
+        if (inListGroup && !isNextList) {
+          formattedContent += '</div>';
+          inListGroup = false;
+        }
+      }
+      
+      // Close any open list group
+      if (inListGroup) {
+        formattedContent += '</div>';
+      }
+      
+      return `<div style="background: #f8fafc; color: #334155; padding: 15px; border-radius: 6px; margin: 6px 0; border-left: 3px solid #cbd5e1;">${formattedContent}</div>`;
     }
     
     // Format each section beautifully with colors and visual separation
     sections.forEach((section, index) => {
-      // Section header with icon and colored background
-      const icon = getTopicIcon(section.title);
-      result.push(`<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">${icon} ${section.title}</div>`);
+      // Only add section header if there's a title
+      if (section.title && section.title.trim()) {
+        // Remove the icon from section headers
+        result.push(`<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 18px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">${section.title}</div>`);
+      }
       
       // Description with light blue background
       if (section.description) {
@@ -777,8 +990,8 @@ function App() {
           case 3: // Good - review in 3 days
             daysToAdd = 3;
             break;
-          case 4: // Easy - review in 7 days
-            daysToAdd = 7;
+          case 4: // Easy - review in 15 days
+            daysToAdd = 15;
             break;
           default:
             console.warn("Invalid quality rating:", quality);
@@ -829,7 +1042,9 @@ function App() {
 
       console.log(`Card ${card.id} reviewed with quality ${quality}. Next review in ${daysToAdd} days.`);
       
-      // Calendar will be updated automatically through the flashcards state change
+      // Force calendar update to immediately reflect the new due date
+      await updateCalendarDates();
+      console.log(`✅ Calendar updated after Easy button - card will be due in ${daysToAdd} days`);
       
       // Always move to next card after updating
       nextCard();
@@ -1865,7 +2080,22 @@ function App() {
     setSelectedUploadFiles([]); // Clear selected files after upload attempt
     if (fileInputRef.current) fileInputRef.current.value = ''; // Clear file input visual
   };
-
+  const handleSendFeedback = () => {
+    if (!feedbackText.trim()) {
+      alert('Please enter your feedback before sending.');
+      return;
+    }
+    
+    const subject = encodeURIComponent('Flashcard App Feedback');
+    const body = encodeURIComponent(`Hi,\n\nHere's my feedback for the Flashcard App:\n\n${feedbackText}\n\nBest regards`);
+    const mailtoLink = `mailto:support@flashcardapp.com?subject=${subject}&body=${body}`;
+    
+    window.open(mailtoLink, '_blank');
+    
+    // Clear the feedback after sending
+    setFeedbackText('');
+    alert('Feedback email opened! Please send it from your email client.');
+  };
   // Function to handle answer suggestion using Gemini API
   const handleSuggestAnswer = async () => {
     const question = newCardQuestionRef.current.value.trim();
@@ -2040,69 +2270,22 @@ function App() {
   const handleEditCard = (card) => {
     setEditCardData({ ...card }); // Copy card data to edit state
     setGeneratedQuestions([]); // Clear any old generated questions when opening edit from button
+    
+    // Initialize controlled state variables with card content
+    setEditQuestion(card.question || "");
+    setEditAnswer(card.answer || "");
+    
     setIsEditingCard(true);
   };
 
-  // Function to save changes to a card
-  const handleSaveCardChanges = async () => {
-    if (!db || !userId || !editCardData) {
-      console.log("handleSaveCardChanges: db, userId, or editCardData not available");
-      setAuthError("Cannot save changes: Database not properly initialized. Please try logging out and back in.");
-      return;
-    }
 
-    const updatedQuestion = (editQuestionRef.current.innerHTML || editQuestionRef.current.textContent || '').trim();
-    const updatedAnswer = (editAnswerRef.current.innerHTML || editAnswerRef.current.textContent || '').trim();
-    const updatedCategory = editCategoryRef.current.value.trim() || 'Uncategorized';
-    const updatedAdditionalInfo = editAdditionalInfoRef.current.value.trim() || null;
-
-    if (!updatedQuestion || !updatedAnswer) {
-      alert("Question and Answer cannot be empty."); // Using alert for simplicity, replace with custom modal for production
-      return;
-    }
-
-    const appId = "flashcard-app-3f2a3"; // Hardcoding appId
-    try {
-      // Additional validation for document reference
-      if (!editCardData.id) {
-        throw new Error("Card ID is missing - cannot update card");
-      }
-
-      await updateDoc(doc(db, `/artifacts/${appId}/users/${userId}/flashcards`, editCardData.id), {
-        question: updatedQuestion,
-        answer: updatedAnswer,
-        category: updatedCategory,
-        additional_info: updatedAdditionalInfo,
-      });
-      console.log(`Card ${editCardData.id} updated successfully!`);
-      
-      // Find the index of the updated card in the current filtered flashcards
-      const updatedCardIndex = filteredFlashcards.findIndex(card => card.id === editCardData.id);
-      if (updatedCardIndex !== -1) {
-        setCurrentCardIndex(updatedCardIndex);
-      }
-      
-      // Reset the answer view to show the question first
-      setShowAnswer(false);
-      
-      setIsEditingCard(false); // Exit edit mode
-      setEditCardData(null); // Clear edit data
-      setGeneratedQuestions([]); // Clear generated questions after saving
-    } catch (error) {
-      console.error("Error updating flashcard:", error);
-      if (error.code && (error.code === 'unavailable' || error.message.includes('offline'))) {
-        setAuthError("Firestore write failed: You appear to be offline or there's a network issue. Please check your internet connection.");
-      } else {
-        setAuthError(`Error updating flashcard: ${error.message}`);
-      }
-    }
-  };
-
-  // Unified API calling function for different providers
-  const callAI = async (prompt, provider = selectedApiProvider) => {
+  // AI API call function
+  const callAI = async (prompt) => {
+    const provider = selectedApiProvider;
     const apiKey = apiKeys[provider];
+    
     if (!apiKey) {
-      throw new Error(`API key not configured for ${provider}`);
+      throw new Error(`API key for ${provider} not configured`);
     }
 
     try {
@@ -2116,17 +2299,12 @@ function App() {
               'anthropic-version': '2023-06-01'
             },
             body: JSON.stringify({
-              model: 'claude-3-5-sonnet-20241022',
-              max_tokens: 2000,
-              messages: [
-                {
-                  role: 'user',
-                  content: prompt
-                }
-              ]
+              model: 'claude-3-sonnet-20240229',
+              max_tokens: 1000,
+              messages: [{ role: 'user', content: prompt }]
             })
           });
-
+          
           if (!anthropicResponse.ok) {
             const error = await anthropicResponse.json();
             throw new Error(`Anthropic API error: ${error.error?.message || anthropicResponse.statusText}`);
@@ -2166,203 +2344,316 @@ function App() {
     }
   };
 
-  // Simple test formatting function
-  const simpleFormatTest = (text) => {
-    return `<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 16px 0 8px 0; font-weight: bold; font-size: 18px;">📋 Test Formatting</div><div style="background: #eff6ff; color: #1e40af; padding: 12px; border-radius: 6px; margin: 8px 0; border-left: 4px solid #3b82f6; font-weight: 500;">${text}</div>`;
+
+  // Event handlers for contentEditable synchronization
+  const handleQuestionInput = (e) => {
+    try {
+      const content = e.target.innerHTML || '';
+      setEditQuestion(content);
+      console.log("🔍 Question content updated:", content?.substring(0, 50));
+    } catch (error) {
+      console.error("Error in handleQuestionInput:", error);
+    }
   };
 
-  // Function to format answer for better readability
-  const handleFormatAnswer = () => {
-    console.log('🔥 FORMAT ANSWER BUTTON CLICKED - Starting function');
-    
-    // Try to find the element by ID as backup if ref is stale
-    let answerElement = editAnswerRef.current;
-    if (!answerElement) {
-      console.log('⚠️ editAnswerRef.current is null, trying to find by ID...');
-      answerElement = document.getElementById('edit-answer');
-      if (answerElement) {
-        console.log('✅ Found element by ID, updating ref');
-        editAnswerRef.current = answerElement;
-      }
+  const handleAnswerInput = (e) => {
+    try {
+      const content = e.target.innerHTML || '';
+      setEditAnswer(content);
+      console.log("🔍 Answer content updated:", content?.substring(0, 50));
+    } catch (error) {
+      console.error("Error in handleAnswerInput:", error);
     }
+  };
+
+  // Robust format answer handler with comprehensive debugging
+  const handleFormatAnswer = () => {
+    console.log('🔥 FORMAT ANSWER - Starting');
     
-    if (!answerElement) {
-      console.log('❌ Could not find answer element');
+    // Get current content from the DOM element
+    const element = editAnswerRef.current || document.getElementById('edit-answer');
+    if (!element) {
+      console.error('❌ Element not found');
       alert('Error: Could not find answer field');
       return;
     }
+    console.log('✅ Element found:', element);
     
-    console.log('✅ Answer element found:', answerElement);
+    // Try multiple methods to get content
+    let currentContent = '';
+    const methods = [];
     
-    // Clean up any existing observer before creating a new one
-    if (answerElement.formattingObserver) {
-      console.log('🧹 Cleaning up existing MutationObserver');
-      answerElement.formattingObserver.disconnect();
-      delete answerElement.formattingObserver;
+    // Method 1: React state
+    if (editAnswer && editAnswer.trim()) {
+      currentContent = editAnswer;
+      // Strip HTML tags to get plain text for processing
+      const stripped = currentContent.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').trim();
+      if (stripped) {
+        currentContent = stripped;
+        methods.push('React state (HTML stripped)');
+      }
     }
     
-    // Get the plain text content, stripping any existing HTML
-    const currentAnswer = answerElement.textContent || answerElement.innerText || '';
-    console.log('📝 Current answer text:', currentAnswer.substring(0, 100) + '...');
+    // Method 2: DOM textContent
+    if (!currentContent) {
+      const textContent = element.textContent || '';
+      if (textContent.trim()) {
+        currentContent = textContent.trim();
+        methods.push('DOM textContent');
+      }
+    }
     
-    if (!currentAnswer.trim()) {
-      console.log('❌ Current answer is empty');
-      alert('Error: Answer field is empty');
+    // Method 3: DOM innerText
+    if (!currentContent) {
+      const innerText = element.innerText || '';
+      if (innerText.trim()) {
+        currentContent = innerText.trim();
+        methods.push('DOM innerText');
+      }
+    }
+    
+    // Method 4: DOM innerHTML stripped
+    if (!currentContent) {
+      const innerHTML = element.innerHTML || '';
+      if (innerHTML.trim()) {
+        currentContent = innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').trim();
+        methods.push('DOM innerHTML (stripped)');
+      }
+    }
+    
+    console.log('📄 Content extraction methods tried:', methods);
+    console.log('📏 Content length:', currentContent?.length);
+    console.log('📝 Content preview:', currentContent?.substring(0, 100));
+    
+    if (!currentContent || !currentContent.trim()) {
+      console.log('❌ No content found to format');
+      alert('Please enter some text first.');
       return;
     }
     
     try {
-      console.log('🚀 Applying formatAnswer function directly...');
+      let formatted = currentContent.trim();
+      const originalLength = formatted.length;
       
-      if (typeof formatAnswer !== 'function') {
-        console.error('formatAnswer is not a function:', typeof formatAnswer);
-        alert('formatAnswer function is not available');
-        return;
+      console.log('🧹 Starting formatting process...');
+      
+      // Enhanced formatting rules that work with any text
+      
+      // 1. Clean up excessive whitespace first
+      formatted = formatted.replace(/\s+/g, ' ');
+      
+      // 2. Add line breaks before numbered lists (1. 2. 3.)
+      formatted = formatted.replace(/(\w)\s*(\d+\.\s)/g, '$1\n\n$2');
+      
+      // 3. Add line breaks before bullet points
+      formatted = formatted.replace(/(\w)\s*([•▪▫◦*-]\s)/g, '$1\n$2');
+      
+      // 4. Add line breaks before section headers (Title: or TITLE:)
+      formatted = formatted.replace(/(\w)\s*([A-Z][A-Za-z\s]*:)/g, '$1\n\n$2');
+      
+      // 5. Add line breaks after periods followed by capital letters (new sentences)
+      formatted = formatted.replace(/(\.)(\s*)([A-Z])/g, '$1\n\n$3');
+      
+      // 6. Add line breaks around parenthetical explanations
+      formatted = formatted.replace(/(\w)\s*(\([^)]+\))/g, '$1\n$2');
+      
+      // 7. Add line breaks before key programming terms and concepts
+      formatted = formatted.replace(/(\w)\s*(while|however|therefore|additionally|furthermore|moreover|conversely|in contrast)\s/gi, '$1\n\n$2 ');
+      
+      // 8. Break up long sentences at commas when they're getting too long
+      const sentences = formatted.split(/\n+/);
+      formatted = sentences.map(sentence => {
+        if (sentence.length > 100) {
+          return sentence.replace(/,\s+/g, ',\n');
+        }
+        return sentence;
+      }).join('\n\n');
+      
+      // 9. Convert markdown and add emphasis
+      formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      formatted = formatted.replace(/`([^`]+)`/g, '<code style="background-color: #f3f4f6; padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>');
+      
+      // 10. Highlight technical terms and method names
+      formatted = formatted.replace(/(\w+)\(\)/g, '<code style="background-color: #e0f2fe; padding: 1px 3px; border-radius: 2px; font-family: monospace; color: #0277bd;">$1()</code>');
+      
+      // 11. Clean up excessive line breaks and convert to HTML
+      formatted = formatted.replace(/\n\s*\n\s*\n/g, '\n\n');
+      formatted = formatted.replace(/\n/g, '<br>');
+      
+      console.log('✨ Formatted length:', formatted.length);
+      console.log('🎨 Formatted preview:', formatted.substring(0, 100));
+      
+      if (formatted === currentContent.replace(/\n/g, '<br>')) {
+        console.log('⚠️ No changes made during formatting');
       }
       
-      const formattedResult = formatAnswer(currentAnswer);
-      console.log('✅ formatAnswer completed, result length:', formattedResult?.length);
+      // Force update both DOM and state
+      console.log('🔄 Updating DOM and state...');
+      element.innerHTML = formatted;
+      setEditAnswer(formatted);
       
-      if (formattedResult && formattedResult.trim()) {
-        // Store in state for persistence
-        setFormattedAnswerContent(formattedResult);
-        
-        // Apply to DOM with a small delay to ensure React has finished any pending updates
-        setTimeout(() => {
-          const element = editAnswerRef.current || document.getElementById('edit-answer');
-          if (element) {
-            element.innerHTML = formattedResult;
-            element.setAttribute('data-formatted', 'true');
-            element.focus();
-            console.log('✅ Applied formatted result and stored in state');
-          }
-        }, 50);
-        
-      } else {
-        console.warn('formatAnswer returned empty, applying fallback');
-        const fallback = simpleFormatTest(currentAnswer);
-        setFormattedAnswerContent(fallback);
-        
-        setTimeout(() => {
-          const element = editAnswerRef.current || document.getElementById('edit-answer');
-          if (element) {
-            element.innerHTML = fallback;
-            element.setAttribute('data-formatted', 'true');
-          }
-        }, 50);
-      }
+      // Trigger a re-render by focusing the element
+      setTimeout(() => {
+        if (element) {
+          element.focus();
+          element.blur();
+        }
+      }, 100);
+      
+      console.log('✅ Format Answer completed successfully');
+      console.log('📊 Original length:', originalLength, '→ New length:', formatted.length);
       
     } catch (error) {
-      console.error('Error formatting answer:', error);
-      alert('Error formatting answer: ' + error.message);
+      console.error('❌ Error during formatting:', error);
+      console.error('❌ Error stack:', error.stack);
+      alert('Error during formatting: ' + error.message);
     }
-    
-    // Trigger change event to update any state if needed with a delay
-    setTimeout(() => {
-      const element = editAnswerRef.current || document.getElementById('edit-answer');
-      if (element) {
-        const event = new Event('input', { bubbles: true });
-        element.dispatchEvent(event);
-        console.log('Dispatched input event');
-      }
-    }, 100);
   };
 
-  // Function to format question for better readability (same logic as answer formatting)
+  // Enhanced format question handler with comprehensive debugging
   const handleFormatQuestion = () => {
-    console.log('🔥 FORMAT QUESTION BUTTON CLICKED - Starting function');
+    console.log('🔥 FORMAT QUESTION - Starting');
     
-    // Try to find the element by ID as backup if ref is stale
-    let questionElement = editQuestionRef.current;
-    if (!questionElement) {
-      console.log('⚠️ editQuestionRef.current is null, trying to find by ID...');
-      questionElement = document.getElementById('edit-question');
-      if (questionElement) {
-        console.log('✅ Found element by ID, updating ref');
-        editQuestionRef.current = questionElement;
-      }
-    }
-    
-    if (!questionElement) {
-      console.log('❌ Could not find question element');
+    // Get current content from the DOM element
+    const element = editQuestionRef.current || document.getElementById('edit-question');
+    if (!element) {
+      console.error('❌ Element not found');
       alert('Error: Could not find question field');
       return;
     }
+    console.log('✅ Element found:', element);
     
-    console.log('✅ Question element found:', questionElement);
+    // Try multiple methods to get content
+    let currentContent = '';
+    const methods = [];
     
-    // Clean up any existing observer before creating a new one
-    if (questionElement.formattingObserver) {
-      console.log('🧹 Cleaning up existing MutationObserver for question');
-      questionElement.formattingObserver.disconnect();
-      delete questionElement.formattingObserver;
+    // Method 1: React state
+    if (editQuestion && editQuestion.trim()) {
+      currentContent = editQuestion;
+      // Strip HTML tags to get plain text for processing
+      const stripped = currentContent.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').trim();
+      if (stripped) {
+        currentContent = stripped;
+        methods.push('React state (HTML stripped)');
+      }
     }
     
-    // Get the plain text content, stripping any existing HTML
-    const currentQuestion = questionElement.textContent || questionElement.innerText || '';
-    console.log('📝 Current question text:', currentQuestion.substring(0, 100) + '...');
+    // Method 2: DOM textContent
+    if (!currentContent) {
+      const textContent = element.textContent || '';
+      if (textContent.trim()) {
+        currentContent = textContent.trim();
+        methods.push('DOM textContent');
+      }
+    }
     
-    if (!currentQuestion.trim()) {
-      console.log('❌ Current question is empty');
-      alert('Error: Question field is empty');
+    // Method 3: DOM innerText
+    if (!currentContent) {
+      const innerText = element.innerText || '';
+      if (innerText.trim()) {
+        currentContent = innerText.trim();
+        methods.push('DOM innerText');
+      }
+    }
+    
+    // Method 4: DOM innerHTML stripped
+    if (!currentContent) {
+      const innerHTML = element.innerHTML || '';
+      if (innerHTML.trim()) {
+        currentContent = innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '').trim();
+        methods.push('DOM innerHTML (stripped)');
+      }
+    }
+    
+    console.log('📄 Content extraction methods tried:', methods);
+    console.log('📏 Content length:', currentContent?.length);
+    console.log('📝 Content preview:', currentContent?.substring(0, 100));
+    
+    if (!currentContent || !currentContent.trim()) {
+      console.log('❌ No content found to format');
+      alert('Please enter some text first.');
       return;
     }
     
     try {
-      console.log('🚀 Applying formatAnswer function to question...');
+      let formatted = currentContent.trim();
+      const originalLength = formatted.length;
       
-      if (typeof formatAnswer !== 'function') {
-        console.error('formatAnswer is not a function:', typeof formatAnswer);
-        alert('formatAnswer function is not available');
-        return;
+      console.log('🧹 Starting formatting process...');
+      
+      // Enhanced formatting rules that work with any text
+      
+      // 1. Clean up excessive whitespace first
+      formatted = formatted.replace(/\s+/g, ' ');
+      
+      // 2. Add line breaks before numbered lists (1. 2. 3.)
+      formatted = formatted.replace(/(\w)\s*(\d+\.\s)/g, '$1\n\n$2');
+      
+      // 3. Add line breaks before bullet points
+      formatted = formatted.replace(/(\w)\s*([•▪▫◦*-]\s)/g, '$1\n$2');
+      
+      // 4. Add line breaks before section headers (Title: or TITLE:)
+      formatted = formatted.replace(/(\w)\s*([A-Z][A-Za-z\s]*:)/g, '$1\n\n$2');
+      
+      // 5. Add line breaks after periods followed by capital letters (new sentences)
+      formatted = formatted.replace(/(\.)(\s*)([A-Z])/g, '$1\n\n$3');
+      
+      // 6. Add line breaks around parenthetical explanations
+      formatted = formatted.replace(/(\w)\s*(\([^)]+\))/g, '$1\n$2');
+      
+      // 7. Add line breaks before key programming terms and concepts
+      formatted = formatted.replace(/(\w)\s*(while|however|therefore|additionally|furthermore|moreover|conversely|in contrast)\s/gi, '$1\n\n$2 ');
+      
+      // 8. Break up long sentences at commas when they're getting too long
+      const sentences = formatted.split(/\n+/);
+      formatted = sentences.map(sentence => {
+        if (sentence.length > 100) {
+          return sentence.replace(/,\s+/g, ',\n');
+        }
+        return sentence;
+      }).join('\n\n');
+      
+      // 9. Convert markdown and add emphasis
+      formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      formatted = formatted.replace(/`([^`]+)`/g, '<code style="background-color: #f3f4f6; padding: 2px 4px; border-radius: 3px; font-family: monospace;">$1</code>');
+      
+      // 10. Highlight technical terms and method names
+      formatted = formatted.replace(/(\w+)\(\)/g, '<code style="background-color: #e0f2fe; padding: 1px 3px; border-radius: 2px; font-family: monospace; color: #0277bd;">$1()</code>');
+      
+      // 11. Clean up excessive line breaks and convert to HTML
+      formatted = formatted.replace(/\n\s*\n\s*\n/g, '\n\n');
+      formatted = formatted.replace(/\n/g, '<br>');
+      
+      console.log('✨ Formatted length:', formatted.length);
+      console.log('🎨 Formatted preview:', formatted.substring(0, 100));
+      
+      if (formatted === currentContent.replace(/\n/g, '<br>')) {
+        console.log('⚠️ No changes made during formatting');
       }
       
-      const formattedResult = formatAnswer(currentQuestion);
-      console.log('✅ formatAnswer completed for question, result length:', formattedResult?.length);
+      // Force update both DOM and state
+      console.log('🔄 Updating DOM and state...');
+      element.innerHTML = formatted;
+      setEditQuestion(formatted);
       
-      if (formattedResult && formattedResult.trim()) {
-        // Store in state for persistence
-        setFormattedQuestionContent(formattedResult);
-        
-        // Apply to DOM with a small delay to ensure React has finished any pending updates
-        setTimeout(() => {
-          const element = editQuestionRef.current || document.getElementById('edit-question');
-          if (element) {
-            element.innerHTML = formattedResult;
-            element.setAttribute('data-formatted', 'true');
-            element.focus();
-            console.log('✅ Applied formatted result to question and stored in state');
-          }
-        }, 50);
-        
-      } else {
-        console.warn('formatAnswer returned empty for question, applying fallback');
-        const fallback = simpleFormatTest(currentQuestion);
-        setFormattedQuestionContent(fallback);
-        
-        setTimeout(() => {
-          const element = editQuestionRef.current || document.getElementById('edit-question');
-          if (element) {
-            element.innerHTML = fallback;
-            element.setAttribute('data-formatted', 'true');
-          }
-        }, 50);
-      }
+      // Trigger a re-render by focusing the element
+      setTimeout(() => {
+        if (element) {
+          element.focus();
+          element.blur();
+        }
+      }, 100);
+      
+      console.log('✅ Format Question completed successfully');
+      console.log('📊 Original length:', originalLength, '→ New length:', formatted.length);
       
     } catch (error) {
-      console.error('Error formatting question:', error);
-      alert('Error formatting question: ' + error.message);
+      console.error('❌ Error during formatting:', error);
+      console.error('❌ Error stack:', error.stack);
+      alert('Error during formatting: ' + error.message);
     }
-    
-    // Trigger change event to update any state if needed with a delay
-    setTimeout(() => {
-      const element = editQuestionRef.current || document.getElementById('edit-question');
-      if (element) {
-        const event = new Event('input', { bubbles: true });
-        element.dispatchEvent(event);
-        console.log('Dispatched input event for question');
-      }
-    }, 100);
   };
 
   // Function to delete a card
@@ -2399,6 +2690,42 @@ function App() {
   // Cancel delete action
   const cancelDelete = () => {
     setShowConfirmDelete(false);
+  };
+
+  // Save card changes function
+  const handleSaveCardChanges = async () => {
+    if (!db || !userId || !editCardData) return;
+    
+    // Validate required fields
+    if (!editQuestion.trim() || !editAnswer.trim()) {
+      alert('Question and Answer fields are required');
+      return;
+    }
+
+    const appId = "flashcard-app-3f2a3"; // Hardcoding appId
+    try {
+      const updatedCard = {
+        ...editCardData,
+        question: editQuestion.trim(),
+        answer: editAnswer.trim(),
+        lastModified: serverTimestamp()
+      };
+      
+      await updateDoc(doc(db, `/artifacts/${appId}/users/${userId}/flashcards`, editCardData.id), updatedCard);
+      
+      // Close edit modal and reset state
+      setIsEditingCard(false);
+      setEditCardData(null);
+      setEditQuestion('');
+      setEditAnswer('');
+      setGeneratedQuestions([]);
+      setShowGeneratedQuestionsModal(false);
+      
+      console.log('Card updated successfully');
+    } catch (error) {
+      console.error('Error updating card:', error);
+      alert('Failed to update card: ' + error.message);
+    }
   };
 
   const handleCopyPrompt = () => {
@@ -2591,12 +2918,12 @@ Your flashcard application supports CSV, Excel (.xlsx), and Numbers (.numbers) f
 1.  **\`number\` (Optional):**
     * This field is for an arbitrary numerical identifier.
     * **If you don't provide a number, leave this field completely empty.** Do not put \`""\` or \` \` (a space).
-    * Example (empty number): \`,,Spring Security,What is CSRF protection?,...\`
+    * Example (empty number): \`,,Math,What is 2 + 2?,...\`
 
 2.  **\`category\` (Optional):**
     * This field allows you to group your flashcards.
     * **If you don't provide a category, leave this field completely empty.** It will default to 'Uncategorized' in the app.
-    * Example (empty category): \`,,What is a binary tree?,...\`
+    * Example (empty category): \`,,What is 1 + 1?,...\`
 
 3.  **\`question\` (Required):**
     * The question for your flashcard. This field cannot be empty.
@@ -2614,27 +2941,17 @@ The most critical aspect of CSV is correctly handling content that contains deli
 
 * **Commas (\`,\`) within a field:**
     * If a field's content contains a comma, the **entire field must be enclosed in double quotes (\`"\`)\`.**
-    * Example: \`,,What are the three core principles of OOP?,"Encapsulation, Inheritance, Polymorphism",...\`
+    * Example: \`,,What are colors?,"Red, Blue, Green",...\`
 
 * **Newline characters (line breaks) within a field:**
     * If a field's content spans multiple lines, the **entire field must be enclosed in double quotes (\`"\`)\`.** The newlines within the quotes will be preserved.
-    * Example: \`,,Explain @Transactional annotation,"@Transactional annotation provides:\\n1. Transaction management\\n2. Rollback capabilities\\n3. Isolation levels",...\`
+    * Example: \`,,List fruits,"Apples\\nBananas\\nOranges",...\`
     * *Note:* The \`\\n\` here represents a newline character.
 
 * **Double Quotes (\`"\`) within a quoted field:**
     * If a field is enclosed in double quotes (because it contains commas or newlines), and the field * itself* contains a double quote, that **internal double quote must be escaped by preceding it with another double quote (\`""\`)\`.**
-    * Example: \`,,What does ""immutable"" mean?,"It means the object's state cannot be changed after it is created.",...\`
+    * Example: \`,,What is a ""simple"" example?,"Something easy to understand.",...\`
 
-#### Example of a Complete CSV File
-
-\`\`\`
-number,category,question,answer,additional_info
-,Spring Security,What is CSRF protection?,"CSRF protection prevents unauthorized commands from being transmitted from a user's browser to a web application. It uses a token to ensure requests are legitimate.","More details on synchronizer token pattern, often involves a hidden token."
-10,Spring Data,Explain @Transactional annotation,"@Transactional annotation provides:\\n1. Transaction management\\n2. Rollback capabilities\\n3. Isolation levels","Useful for ensuring data consistency in database operations."
-,Java Basics,What is the difference between \`==\` and \`.equals()\`?,"\`==\` compares object references (memory addresses) for primitive types or if two variables refer to the exact same object instance.
-\`.equals()\` compares the actual content/value of objects, as defined by the class's implementation (e.g., String, Integer classes override it to compare content).","Primitive types always use \`==\`."
-20,Algorithms,What is Big O notation?,"Big O notation describes the upper bound of the growth rate of an algorithm's running time or space requirements in terms of the input size. It helps classify algorithms according to how their run time or space requirements grow as the input size grows.","Common Big O notations: O(1), O(log n), O(n), O(n log n), O(n^2), O(2^n), O(n!)."
-\`\`\`
 `;
 
   // Content for the Prompt for Generating Flashcards
@@ -2651,11 +2968,8 @@ Constraints:
 - Ensure the CSV content is UTF-8 encoded.
 - Additional_info is optional; if omitted, leave it empty.
 
-Example with multiline answer and additional info:
-,Spring Security,What is CSRF protection?,"CSRF protection prevents unauthorized commands from being transmitted from a user's browser to a web application. It uses a token to ensure requests are legitimate.",More details on synchronizer token pattern.
-
-Example with no number, category, or additional_info:
-,,What is a binary tree?,A tree data structure in which each node has at most two children, which are referred to as the left child and the right child.
+Example:
+,Math,What is 2 + 2?,4
 `;
 
 
@@ -2807,6 +3121,23 @@ Example with no number, category, or additional_info:
     XLSX.writeFile(workbook, `flashcards_export_${dateStr}.xlsx`);
   };
 
+  // Show login screen if user is not authenticated
+  if (showLoginScreen && !userId) {
+    return (
+      <LoginScreen 
+        authError={authError}
+        handleLogin={handleLogin}
+        handleRegister={handleRegister}
+        handleAnonymousLogin={handleAnonymousLogin}
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        isDarkMode={isDarkMode}
+      />
+    );
+  }
+
   return (
     <>
     <div className="min-h-screen flex flex-col items-center justify-center p-6 font-inter bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-gray-900 dark:to-indigo-950 text-slate-800 dark:text-slate-100 transition-all duration-700 ease-out backdrop-blur-sm"
@@ -2814,7 +3145,8 @@ Example with no number, category, or additional_info:
            background: 'linear-gradient(135deg, #ffffff 0%, #fefeff 25%, #fdfdff 50%, #fefffe 75%, #ffffff 100%)',
            backgroundSize: '400% 400%',
            animation: 'gradientShift 15s ease infinite',
-           paddingTop: '300px'
+           paddingTop: '250px',
+paddingBottom: '50px'
          }}>
       {/* Combined Header Panel */}
       <div className="fixed top-6 left-6 right-6 z-50" style={{ position: 'fixed', top: '24px', left: '24px', right: '24px', zIndex: 9999 }}>
@@ -2943,7 +3275,10 @@ Example with no number, category, or additional_info:
             <div className="flex items-center gap-2">
               {/* Calendar Button */}
               <button
-                onClick={() => setShowCalendarModal(true)}
+                onClick={() => {
+                  setShowSettingsModal(false);
+                  setShowCalendarModal(true);
+                }}
                 className="p-3 bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg border border-blue-700 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 aria-label="Show calendar"
               >
@@ -2953,7 +3288,10 @@ Example with no number, category, or additional_info:
               </button>
               {/* Settings Icon Button */}
               <button
-                onClick={() => setShowSettingsModal(true)}
+                onClick={() => {
+                  setShowCalendarModal(false);
+                  setShowSettingsModal(true);
+                }}
                 className="p-3 bg-blue-600 hover:bg-blue-700 rounded-xl shadow-lg border border-blue-700 transition-all duration-300 transform hover:scale-110 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 aria-label="Open settings"
               >
@@ -3068,12 +3406,29 @@ Example with no number, category, or additional_info:
                 placeholder="Add extra notes, context, or code examples here..."
               ></textarea>
             </div>
+            <div className="flex space-x-4">
             <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-black font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
-            >
-              Add Card
-            </button>
+                type="submit"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300 dark:bg-blue-800 dark:hover:bg-blue-700"
+              >
+                Add Card
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateCardForm(false);
+                  // Clear form fields
+                  if (newCardQuestionRef.current) newCardQuestionRef.current.value = '';
+                  if (newCardAnswerRef.current) newCardAnswerRef.current.value = '';
+                  if (newCardCategoryRef.current) newCardCategoryRef.current.value = '';
+                  if (newCardAdditionalInfoRef.current) newCardAdditionalInfoRef.current.value = '';
+                }}
+                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-4 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-100"
+              >
+                Cancel
+              </button>
+              
+            </div>
           </form>
         </div>
       ) : showUploadCsvForm ? (
@@ -3130,7 +3485,7 @@ Example with no number, category, or additional_info:
             )}
 
             {/* Prompt for Generating Flashcards - Now a collapsible dropdown */}
-            <div className="bg-gray-100 p-4 rounded-lg text-sm text-gray-700 dark:bg-gray-700 dark:text-gray-300 overflow-auto max-h-60">
+            <div className="bg-blue-100 dark:bg-gray-700 dark:text-gray-300 p-4 rounded-lg text-sm text-gray-700 overflow-auto max-h-60">
               <div className="flex justify-between items-center w-full focus:outline-none">
                 <button
                   onClick={() => setShowGenerationPrompt(!showGenerationPrompt)}
@@ -3214,8 +3569,7 @@ Example with no number, category, or additional_info:
                         overflow: 'hidden'
                       }}
                     >
-                    <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-start p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem' }}
-                         style={{ transform: showAnswer ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
+                    <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-start p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem', transform: showAnswer ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
                       <div className="text-4xl font-bold mb-8 overflow-auto max-h-full leading-relaxed text-center mt-8">
                         <div className="text-3xl text-blue-600 dark:text-blue-400 mb-4 font-bold">Question</div>
                         <div 
@@ -3225,8 +3579,7 @@ Example with no number, category, or additional_info:
                       </div>
                     </div>
 
-                    <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-between p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem' }}
-                         style={{ transform: showAnswer ? 'rotateY(0deg)' : 'rotateY(-180deg)', backfaceVisibility: 'hidden' }}>
+                    <div className="absolute inset-0 backdrop-blur-sm bg-white dark:bg-slate-100 flex flex-col justify-between p-10 text-slate-800 dark:text-slate-900 transition-all duration-700 ease-out backface-hidden border-2 border-slate-200 dark:border-slate-600 shadow-lg" style={{ borderRadius: '2rem', transform: showAnswer ? 'rotateY(0deg)' : 'rotateY(-180deg)', backfaceVisibility: 'hidden' }}>
                       {/* Display answer with improved formatting */}
                       <div className="mb-6 overflow-y-auto w-full flex-grow mt-8" style={{ maxHeight: 'calc(100% - 200px)' }}>
                         <div className="text-3xl text-emerald-600 dark:text-emerald-400 mb-6 font-bold text-center">Answer</div>
@@ -3464,7 +3817,8 @@ Example with no number, category, or additional_info:
                   ref={editQuestionRef}
                   contentEditable={true}
                   suppressContentEditableWarning={true}
-                  dangerouslySetInnerHTML={{ __html: editCardData.question }}
+                  onInput={handleQuestionInput}
+                  dangerouslySetInnerHTML={{ __html: editQuestion }}
                   className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[100px] max-h-[200px] overflow-y-auto"
                   style={{ minHeight: '100px' }}
                 ></div>
@@ -3477,7 +3831,7 @@ Example with no number, category, or additional_info:
                   <button
                     type="button"
                     onClick={handleFormatAnswer}
-                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 px-3 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-300"
                   >
                     ✨ Format Answer
                   </button>
@@ -3487,7 +3841,8 @@ Example with no number, category, or additional_info:
                   ref={editAnswerRef}
                   contentEditable={true}
                   suppressContentEditableWarning={true}
-                  dangerouslySetInnerHTML={{ __html: editCardData.answer }}
+                  onInput={handleAnswerInput}
+                  dangerouslySetInnerHTML={{ __html: editAnswer }}
                   className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[250px] max-h-[400px] overflow-y-auto"
                   style={{ minHeight: '250px' }}
                 ></div>
@@ -3543,24 +3898,6 @@ Example with no number, category, or additional_info:
               </div>
 
 
-              {/* Scroll indicator and extra padding for scrolling */}
-              <div className="pt-8 pb-4 text-center">
-                <div className="inline-block w-8 h-1 bg-gray-300 dark:bg-gray-600 rounded-full opacity-50"></div>
-                <p className="text-xs text-gray-400 mt-2">Scroll for more content</p>
-              </div>
-              
-              {/* Test content to ensure scrolling works */}
-              <div className="mt-8 p-4 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  📝 <strong>Scrolling Test:</strong> If you can see this yellow box, the modal is scrollable! 
-                  This content should only be visible when you scroll down in the edit modal.
-                </p>
-                <div className="mt-4 space-y-2">
-                  <div className="h-4 bg-yellow-200 dark:bg-yellow-700 rounded"></div>
-                  <div className="h-4 bg-yellow-200 dark:bg-yellow-700 rounded"></div>
-                  <div className="h-4 bg-yellow-200 dark:bg-yellow-700 rounded"></div>
-                </div>
-              </div>
             </div>
             </div>
             {/* Fixed Footer with Action Buttons */}
@@ -3850,7 +4187,7 @@ Example with no number, category, or additional_info:
       {showSettingsModal && (
         <>
           {/* Invisible backdrop for click-to-close */}
-          <div className="fixed inset-0 z-50" onClick={() => setShowSettingsModal(false)}></div>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50" onClick={() => setShowSettingsModal(false)}></div>
           {/* Settings panel */}
           <div 
             className="fixed top-24 right-6 bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto transform transition-all duration-300 scale-100 opacity-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 backdrop-blur-xl bg-white/95 dark:bg-gray-800/95"
@@ -3881,7 +4218,7 @@ Example with no number, category, or additional_info:
             <div className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 80px)' }}>
               <div className="p-6 space-y-5">
               {/* User Information Section */}
-              <section className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-purple-100 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
                 <button
                   onClick={() => setShowUserInfo(!showUserInfo)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -3974,7 +4311,7 @@ Example with no number, category, or additional_info:
               </section>
 
               {/* API Keys Configuration Section */}
-              <section className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-blue-100 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
                 <button
                   onClick={() => setShowApiKeys(!showApiKeys)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -4095,7 +4432,7 @@ Example with no number, category, or additional_info:
               </section>
 
               {/* FSRS Configuration Section */}
-              <section className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-green-100 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
                 <button
                   onClick={() => setShowFsrsFactors(!showFsrsFactors)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -4273,7 +4610,7 @@ Example with no number, category, or additional_info:
               </section>
 
               {/* CSV Upload Guide Section */}
-              <section className="bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
                 <button
                   onClick={() => setShowCsvGuide(!showCsvGuide)}
                   className="flex justify-between items-center w-full focus:outline-none group"
@@ -4308,9 +4645,57 @@ Example with no number, category, or additional_info:
                   </div>
                 )}
               </section>
+                            {/* Feedback Section */}
+                            <section className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900 dark:to-indigo-900 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-blue-700">
+                <button
+                  onClick={() => setShowFeedback(!showFeedback)}
+                  className="flex items-center justify-between w-full text-left"
+                >
+                  <div className="flex items-center">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-700 rounded-lg mr-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 dark:text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-1.586l-4.707 4.707z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-blue-800 dark:text-blue-200">💬 Feedback</h3>
+                  </div>
+                  <svg
+                    className={`w-5 h-5 text-blue-600 dark:text-blue-300 transition-transform ${showFeedback ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showFeedback && (
+                  <div className="mt-5">
+                    <p className="text-blue-700 dark:text-blue-300 mb-4">
+                      We'd love to hear your thoughts! Share your feedback, suggestions, or report any issues.
+                    </p>
+                    <textarea
+                      value={feedbackText}
+                      onChange={(e) => setFeedbackText(e.target.value)}
+                      placeholder="Enter your feedback here..."
+                      className="w-full h-32 p-4 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-gray-700 dark:text-gray-200 resize-none"
+                    />
+                    <div className="flex justify-end mt-4">
+                      <button
+                        onClick={handleSendFeedback}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all duration-300 transform shadow-md focus:outline-none focus:ring-4 focus:ring-blue-300 active:scale-95 flex items-center gap-2"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        Send Email
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
 
               {/* Theme Section - Moved to bottom */}
-              <section className="bg-gradient-to-r from-gray-50 to-slate-50 dark:from-gray-700 dark:to-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-600">
+              <section className="bg-blue-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-blue-200 dark:border-gray-600">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center">
                     <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded-lg mr-3">
@@ -4337,6 +4722,9 @@ Example with no number, category, or additional_info:
           </div>
         </>
       )}
+
+      {/* Calendar Modal */}
+      
     </div>
     </>
   );

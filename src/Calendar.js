@@ -1,10 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalData, setModalData] = useState(null);
+  
+  // Add escape key handler to close calendar
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        if (showModal) {
+          // If modal is open, close the modal first
+          setShowModal(false);
+        } else {
+          // If no modal is open, close the entire calendar
+          onClose();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose, showModal]);
   
   // Debug logging
   console.log('Calendar component received calendarDates:', calendarDates);
@@ -136,24 +156,49 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
         borderTopLeftRadius: '8px',
         borderTopRightRadius: '8px'
       }}>
-        <button 
-          style={{
-            padding: '8px',
-            borderRadius: '50%',
-            border: 'none',
-            backgroundColor: 'transparent',
-            cursor: 'pointer',
-            transition: 'background-color 0.2s',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            color: isDarkMode ? '#d1d5db' : '#374151'
-          }}
-          onClick={() => navigateMonth(-1)}
-          onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(55, 65, 81, 0.5)' : 'rgba(255,255,255,0.5)'}
-          onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
-        >
-          ‹
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button 
+            style={{
+              padding: '8px',
+              borderRadius: '50%',
+              border: 'none',
+              backgroundColor: 'transparent',
+              cursor: 'pointer',
+              transition: 'background-color 0.2s',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              color: isDarkMode ? '#d1d5db' : '#374151'
+            }}
+            onClick={() => navigateMonth(-1)}
+            onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(55, 65, 81, 0.5)' : 'rgba(255,255,255,0.5)'}
+            onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            ‹
+          </button>
+          
+          <button 
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.9)',
+              color: 'white',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontSize: '14px',
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+            onClick={onClose}
+            onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(220, 38, 38, 0.9)' : 'rgba(220, 38, 38, 1)'}
+            onMouseOut={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.9)'}
+            title="Close Calendar"
+          >
+            ✕ Close
+          </button>
+        </div>
         
         <h1 style={{ 
           fontSize: '24px', 
