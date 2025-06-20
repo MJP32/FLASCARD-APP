@@ -3407,8 +3407,13 @@ Example:
                     <div className="flex items-center gap-2">
                       <span className="text-lg">📅</span>
                       <div>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Today's Progress</p>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
+                          {selectedCategory === 'All' ? "Today's Progress" : `${selectedCategory} Progress`}
+                        </p>
                         <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
+                        {selectedCategory !== 'All' && (
+                          <p className="text-slate-500 dark:text-slate-400 text-xs">completed/due today</p>
+                        )}
                       </div>
                     </div>
                   </>
@@ -3417,15 +3422,25 @@ Example:
                     <div className="flex items-center gap-2">
                       <span className="text-lg">✅</span>
                       <div>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">Reviewed</p>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
+                          {selectedCategory === 'All' ? 'Reviewed' : 'Reviewed'}
+                        </p>
                         <p className="text-emerald-600 dark:text-emerald-400 text-sm font-semibold">{reviewedCount}</p>
+                        {selectedCategory !== 'All' && (
+                          <p className="text-slate-500 dark:text-slate-400 text-xs">in {selectedCategory}</p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-lg">⏳</span>
                       <div>
-                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">To Review</p>
+                        <p className="text-slate-600 dark:text-slate-300 text-xs font-bold">
+                          {selectedCategory === 'All' ? 'To Review' : 'To Review'}
+                        </p>
                         <p className="text-orange-600 dark:text-orange-400 text-sm font-semibold">{toReviewCount}</p>
+                        {selectedCategory !== 'All' && (
+                          <p className="text-slate-500 dark:text-slate-400 text-xs">in {selectedCategory}</p>
+                        )}
                       </div>
                     </div>
                   </>
