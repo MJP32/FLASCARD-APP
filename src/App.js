@@ -3429,9 +3429,6 @@ Example:
                           {selectedCategory === 'All' ? "Today" : selectedCategory}
                         </p>
                         <p className="text-amber-600 dark:text-amber-400 text-lg font-bold">{cardsReviewedToday}/{cardsDueToday}</p>
-                        {selectedCategory !== 'All' && (
-                          <p className="text-slate-500 dark:text-slate-400 text-xs">completed/due today</p>
-                        )}
                       </div>
                     </div>
                   </>
