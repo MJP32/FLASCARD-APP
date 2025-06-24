@@ -461,6 +461,18 @@ label {
   min-height: 200px;
   transition: transform var(--transition-normal);
   transform-style: preserve-3d;
+  /* Prevent card from going under top menu */
+  margin-top: 20px;
+  scroll-margin-top: 300px;
+}
+
+/* Main flashcard container - prevent from going under fixed header */
+.flashcard-container {
+  margin-top: 50px !important;
+  padding-top: 30px;
+  min-height: calc(100vh - 380px);
+  position: relative;
+  z-index: 1;
 }
 
 .flashcard-inner {

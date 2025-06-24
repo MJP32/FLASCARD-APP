@@ -3833,7 +3833,7 @@ Example:
               <div className="flex items-center justify-center w-full md:w-3/4 flex-col"> {/* Main card wrapper and AI buttons container */}
                 <div className="flex items-center justify-center w-full"> {/* Card container */}
                   {/* Flashcard Panel Container with navigation layout */}
-                  <div className="relative backdrop-blur-xl rounded-3xl shadow-2xl border border-blue-700/50 dark:border-blue-700/50 p-16" style={{ backgroundColor: 'rgba(147, 197, 253, 0.7)', borderRadius: '1.5rem', overflow: 'visible', minHeight: '56rem', minWidth: '80rem' }}>
+                  <div className="flashcard-container relative backdrop-blur-xl rounded-3xl shadow-2xl border border-blue-700/50 dark:border-blue-700/50 p-16" style={{ backgroundColor: 'rgba(147, 197, 253, 0.7)', borderRadius: '1.5rem', overflow: 'visible', minHeight: '56rem', minWidth: '80rem' }}>
                     
                     {/* Spacer for top */}
                     <div className="h-8"></div>
