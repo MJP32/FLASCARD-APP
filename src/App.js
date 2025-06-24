@@ -3244,6 +3244,8 @@ Example:
 
   // Function to handle the actual export based on selected format
   const handleExportConfirm = () => {
+    console.log('Export confirmed with format:', exportFormat);
+    
     // Format the date for filename
     const today = new Date();
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -3251,8 +3253,10 @@ Example:
     const dateStr = formattedDate.replace(/,/g, '').replace(/ /g, '_');
 
     if (exportFormat === 'csv') {
+      console.log('Calling CSV export');
       exportCSV(dateStr);
     } else {
+      console.log('Calling Excel export');
       exportExcel(dateStr);
     }
     
@@ -3305,39 +3309,73 @@ Example:
 
   // Function to export cards as Excel file
   const exportExcel = (dateStr) => {
-    // Create worksheet data in the same format as import
-    const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
-    const worksheetData = [
-      headers,
-      ...filteredFlashcards.map(card => [
-        card.id || '',
-        card.csvNumber || '',
-        card.category || 'Uncategorized',
-        card.question || '',
-        card.answer || '',
-        card.additional_info || ''
-      ])
-    ];
+    try {
+      console.log('Starting Excel export with', filteredFlashcards.length, 'cards');
+      
+      // Create worksheet data in the same format as import
+      const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
+      const worksheetData = [
+        headers,
+        ...filteredFlashcards.map(card => [
+          card.id || '',
+          card.csvNumber || '',
+          card.category || 'Uncategorized',
+          card.question || '',
+          card.answer || '',
+          card.additional_info || ''
+        ])
+      ];
 
-    // Create workbook and worksheet
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-    
-    // Set column widths for better readability
-    worksheet['!cols'] = [
-      { width: 10 }, // id
-      { width: 10 }, // number
-      { width: 15 }, // category
-      { width: 30 }, // question
-      { width: 50 }, // answer
-      { width: 20 }  // additional_info
-    ];
+      console.log('Worksheet data prepared, creating workbook...');
 
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Flashcards');
-    
-    // Write and download the file
-    XLSX.writeFile(workbook, `flashcards_export_${dateStr}.xlsx`);
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+      
+      // Set column widths for better readability
+      worksheet['!cols'] = [
+        { width: 10 }, // id
+        { width: 10 }, // number
+        { width: 15 }, // category
+        { width: 30 }, // question
+        { width: 50 }, // answer
+        { width: 20 }  // additional_info
+      ];
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Flashcards');
+      
+      console.log('Workbook created, attempting to write file...');
+      
+      // Write and download the file
+      const filename = `flashcards_export_${dateStr}.xlsx`;
+      
+      try {
+        XLSX.writeFile(workbook, filename);
+        console.log('Excel export completed successfully:', filename);
+      } catch (writeError) {
+        console.warn('XLSX.writeFile failed, trying manual blob approach:', writeError);
+        
+        // Fallback: create blob manually and trigger download
+        const workbookBlob = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([workbookBlob], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        console.log('Excel export completed using fallback method:', filename);
+      }
+    } catch (error) {
+      console.error('Error during Excel export:', error);
+      alert(`Excel export failed: ${error.message}`);
+    }
   };
 
   // Show login screen if user is not authenticated
