@@ -4153,7 +4153,8 @@ Example:
                       }).length;
                       
                       // Check if ALL cards due today (across all categories) have been reviewed
-                      const allDueCardsReviewed = totalCardsDueTodayAllCategories === 0 || 
+                      // Only show congratulations if there were cards due AND they've all been reviewed
+                      const allDueCardsReviewed = totalCardsDueTodayAllCategories > 0 && 
                                                   (totalCardsReviewedTodayAllCategories >= totalCardsDueTodayAllCategories);
                       
                       if (allDueCardsReviewed) {
