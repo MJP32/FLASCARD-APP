@@ -1217,34 +1217,58 @@ function App() {
       specifiedDate.setHours(0, 0, 0, 0);
       const isToday = today.getTime() === specifiedDate.getTime();
       
-      const dueCards = querySnapshot.docs.filter(doc => {
-        const card = doc.data();
-        if (!card.nextReview) return false;
+      // For today, we need to calculate remaining cards (cards due minus cards reviewed today)
+      // For future dates, just count cards due on that exact date
+      let dueCards;
+      
+      if (isToday) {
+        // For today: count cards that are due (including new cards and overdue) 
+        // but exclude cards that were already reviewed today
+        const cardsDueToday = querySnapshot.docs.filter(doc => {
+          const card = doc.data();
+          
+          // Include new cards (no nextReview date)
+          if (!card.nextReview) return true;
+          
+          const nextReviewDate = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+          const reviewDate = new Date(nextReviewDate);
+          reviewDate.setHours(0, 0, 0, 0);
+          
+          // Include cards that are due today or overdue
+          return reviewDate.getTime() <= specifiedDate.getTime();
+        });
         
-        const nextReviewDate = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
-        const reviewDate = new Date(nextReviewDate);
-        reviewDate.setHours(0, 0, 0, 0);
+        // Count cards that were reviewed today
+        const cardsReviewedToday = querySnapshot.docs.filter(doc => {
+          const card = doc.data();
+          if (!card.lastReview) return false;
+          
+          const lastReviewDate = card.lastReview.toDate ? card.lastReview.toDate() : new Date(card.lastReview);
+          const lastReviewDay = new Date(lastReviewDate);
+          lastReviewDay.setHours(0, 0, 0, 0);
+          
+          return lastReviewDay.getTime() === specifiedDate.getTime();
+        });
         
-        const isDue = isToday ? 
-          reviewDate.getTime() <= specifiedDate.getTime() : 
-          reviewDate.getTime() === specifiedDate.getTime();
+        // Return remaining cards (due cards minus reviewed cards, but never negative)
+        const remainingCards = Math.max(0, cardsDueToday.length - cardsReviewedToday.length);
         
-        // Debug logging for Easy button testing
-        if (card.lastQuality === 4) {
-          console.log(`Calendar check - Easy card (quality 4):`, {
-            cardId: doc.id,
-            lastQuality: card.lastQuality,
-            nextReview: nextReviewDate,
-            reviewDate: reviewDate,
-            specifiedDate: specifiedDate,
-            isToday: isToday,
-            isDue: isDue,
-            timeDiff: reviewDate.getTime() - specifiedDate.getTime()
-          });
-        }
+        console.log(`Calendar for today - Due: ${cardsDueToday.length}, Reviewed: ${cardsReviewedToday.length}, Remaining: ${remainingCards}`);
         
-        return isDue;
-      });
+        return remainingCards;
+      } else {
+        // For future dates: only include cards due exactly on that date
+        dueCards = querySnapshot.docs.filter(doc => {
+          const card = doc.data();
+          if (!card.nextReview) return false;
+          
+          const nextReviewDate = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+          const reviewDate = new Date(nextReviewDate);
+          reviewDate.setHours(0, 0, 0, 0);
+          
+          return reviewDate.getTime() === specifiedDate.getTime();
+        });
+      }
       
       return dueCards.length;
     } catch (error) {
