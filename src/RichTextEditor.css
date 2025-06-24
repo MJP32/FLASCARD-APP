@@ -1,0 +1,311 @@
+.dropdown-section {
+  margin: 8px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dropdown-header {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.dropdown-header:hover {
+  background: linear-gradient(135deg, #f1f5f9 0%, #cbd5e1 100%);
+}
+
+.dropdown-content {
+  padding: 12px;
+  background: white;
+  display: block;
+}
+
+/* Code dropdown styles */
+.code-dropdown-section {
+  margin: 8px 0;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1f2937;
+}
+
+.code-dropdown-header {
+  background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 500;
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.code-dropdown-header:hover {
+  background: linear-gradient(135deg, #4b5563 0%, #6b7280 100%);
+}
+
+.code-dropdown-content {
+  padding: 0;
+  background: #1f2937;
+  display: block;
+}
+
+.code-lang-select {
+  background: #4b5563;
+  color: white;
+  border: 1px solid #6b7280;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.code-lang-select:hover {
+  background: #6b7280;
+}
+
+.code-lang-select:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+/* Dark mode styles */
+.dark .dropdown-section {
+  border-color: #4b5563;
+}
+
+.dark .dropdown-header {
+  background: linear-gradient(135deg, #374151 0%, #4b5563 100%);
+  border-color: #4b5563;
+  color: white;
+}
+
+.dark .dropdown-content {
+  background: #1f2937;
+  color: white;
+}
+
+/* Simple code block styling - IntelliJ Dark Theme */
+pre {
+  background: #2B2B2B !important; /* IntelliJ Dark Background */
+  color: #A9B7C6 !important; /* IntelliJ Default Text Color */
+  font-family: 'JetBrains Mono', 'Courier New', Consolas, Monaco, monospace !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  padding: 16px !important;
+  border-radius: 6px !important;
+  border: 1px solid #555555 !important; /* IntelliJ Border Color */
+  margin: 8px 0 !important;
+  overflow-x: auto !important;
+  white-space: pre-wrap !important;
+}
+
+/* Advanced code block styling - IntelliJ Dark Theme */
+.advanced-code-block {
+  border: 2px solid #555555; /* IntelliJ Border */
+  border-radius: 8px;
+  margin: 12px 0;
+  background: #2B2B2B; /* IntelliJ Background */
+  overflow: hidden;
+}
+
+.advanced-code-block .code-header {
+  background: linear-gradient(135deg, #3c3c3c 0%, #424242 100%); /* IntelliJ Header */
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #555555; /* IntelliJ Border */
+}
+
+.advanced-code-block .language-selector {
+  background: #4b5563;
+  color: white;
+  border: 1px solid #6b7280;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.advanced-code-block .language-selector:hover {
+  background: #6b7280;
+}
+
+.advanced-code-block .language-selector:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+.advanced-code-block .format-code-btn {
+  background: #059669;
+  color: white;
+  border: 1px solid #047857;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.advanced-code-block .format-code-btn:hover {
+  background: #047857;
+  border-color: #065f46;
+  transform: translateY(-1px);
+}
+
+.advanced-code-block .format-code-btn:active {
+  background: #065f46;
+  transform: translateY(0);
+}
+
+.advanced-code-block .format-code-btn:focus {
+  outline: none;
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.advanced-code-block .code-content {
+  margin: 0;
+  padding: 16px;
+  background: transparent;
+  color: #A9B7C6; /* IntelliJ Default Text Color */
+  font-family: 'JetBrains Mono', 'Courier New', Consolas, Monaco, monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  min-height: 100px;
+  white-space: pre-wrap;
+  outline: none;
+  border: none;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  
+  /* Try CSS approach for Tab handling */
+  tab-size: 2;
+  -moz-tab-size: 2;
+}
+
+.advanced-code-block .code-content:focus {
+  background: rgba(55, 65, 81, 0.3);
+}
+
+/* Syntax highlighting colors using CSS classes - Global styles */
+span.syntax-keyword {
+  color: #CC7832 !important; /* IntelliJ Orange for keywords */
+  font-weight: normal !important;
+}
+
+.syntax-builtin {
+  color: #CC7832 !important; /* IntelliJ Orange for built-ins */
+}
+
+.syntax-string {
+  color: #6A8759 !important; /* IntelliJ Green for strings */
+}
+
+.syntax-comment {
+  color: #808080 !important; /* IntelliJ Gray for comments */
+  font-style: italic !important;
+}
+
+.syntax-number {
+  color: #6897BB !important; /* IntelliJ Blue for numbers */
+}
+
+/* More specific selectors for different contexts - IntelliJ Colors */
+.advanced-code-block .syntax-keyword,
+.advanced-code-block .code-content .syntax-keyword,
+pre .syntax-keyword,
+[contenteditable] .syntax-keyword {
+  color: #CC7832 !important; /* IntelliJ Orange */
+  font-weight: normal !important;
+}
+
+.advanced-code-block .syntax-builtin,
+.advanced-code-block .code-content .syntax-builtin,
+pre .syntax-builtin,
+[contenteditable] .syntax-builtin {
+  color: #CC7832 !important; /* IntelliJ Orange */
+}
+
+.advanced-code-block .syntax-string,
+.advanced-code-block .code-content .syntax-string,
+pre .syntax-string,
+[contenteditable] .syntax-string {
+  color: #6A8759 !important; /* IntelliJ Green */
+}
+
+.advanced-code-block .syntax-comment,
+.advanced-code-block .code-content .syntax-comment,
+pre .syntax-comment,
+[contenteditable] .syntax-comment {
+  color: #808080 !important; /* IntelliJ Gray */
+  font-style: italic !important;
+}
+
+.advanced-code-block .syntax-number,
+.advanced-code-block .code-content .syntax-number,
+pre .syntax-number,
+[contenteditable] .syntax-number {
+  color: #6897BB !important; /* IntelliJ Blue */
+}
+
+/* New syntax highlighting colors for Java */
+.syntax-type {
+  color: #CC7832 !important; /* IntelliJ Orange for types */
+}
+
+.syntax-annotation {
+  color: #BBB529 !important; /* IntelliJ Yellow for annotations */
+}
+
+.syntax-method {
+  color: #FFC66D !important; /* IntelliJ Yellow for methods/functions */
+}
+
+.syntax-field {
+  color: #9876AA !important; /* IntelliJ Purple for fields */
+}
+
+/* More specific selectors for new types - IntelliJ Colors */
+.advanced-code-block .syntax-type,
+.advanced-code-block .code-content .syntax-type,
+pre .syntax-type,
+[contenteditable] .syntax-type {
+  color: #CC7832 !important; /* IntelliJ Orange */
+}
+
+.advanced-code-block .syntax-annotation,
+.advanced-code-block .code-content .syntax-annotation,
+pre .syntax-annotation,
+[contenteditable] .syntax-annotation {
+  color: #BBB529 !important; /* IntelliJ Yellow */
+}
+
+.advanced-code-block .syntax-method,
+.advanced-code-block .code-content .syntax-method,
+pre .syntax-method,
+[contenteditable] .syntax-method {
+  color: #FFC66D !important; /* IntelliJ Yellow for methods */
+}
+
+.advanced-code-block .syntax-field,
+.advanced-code-block .code-content .syntax-field,
+pre .syntax-field,
+[contenteditable] .syntax-field {
+  color: #9876AA !important; /* IntelliJ Purple for fields */
+}

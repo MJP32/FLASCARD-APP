@@ -18,7 +18,10 @@
       "Bash(cat:*)",
       "Bash(ls:*)",
       "Bash(/bin/bash -c \"rg -n -C 3 'Scroll for more content' src/App.js\")",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(npm install:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

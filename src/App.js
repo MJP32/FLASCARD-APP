@@ -5,6 +5,7 @@ import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, u
 import LoginScreen from './LoginScreen.jsx';
 import * as XLSX from 'xlsx';
 import Calendar from './Calendar';
+import RichTextEditor from './RichTextEditor';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -12,6 +13,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 function App() {
   // Settings states
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showIntervalSettings, setShowIntervalSettings] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false); // To ensure settings are loaded before saving/using them
   const [fsrsParams, setFsrsParams] = useState({
@@ -24,7 +26,12 @@ function App() {
     goodFactor: 1.0,
     hardFactor: 0.8,
     againFactor: 0.5,
-    initialStability: 2
+    initialStability: 2,
+    // Initial intervals for first review
+    initialAgainInterval: 1,
+    initialHardInterval: 1,
+    initialGoodInterval: 4,  // Changed from default 3 to 4
+    initialEasyInterval: 15
   });
 
   // State variables for Firebase, user authentication, and flashcards
@@ -45,6 +52,7 @@ function App() {
   const [calendarDates, setCalendarDates] = useState([]); // State for calendar dates and card counts
   const [showLoginModal, setShowLoginModal] = useState(false); // State for login modal visibility
   const [selectedCategory, setSelectedCategory] = useState('All'); // State for selected category filter
+  const [categorySortBy, setCategorySortBy] = useState('alphabetical'); // State for category sort order: 'alphabetical', 'most-due', 'least-due'
   const [authError, setAuthError] = useState(''); // New state for Firebase authentication errors
   const [userDisplayName, setUserDisplayName] = useState(''); // New state for user display name
 
@@ -144,7 +152,7 @@ function App() {
 
   // Refs for edit card inputs
   const editQuestionRef = useRef(null);
-  const editAnswerRef = useRef(null);
+  // Note: Removed editAnswerRef since we're now using RichTextEditor component
   const editCategoryRef = useRef(null);
   const editAdditionalInfoRef = useRef(null);
   
@@ -649,18 +657,7 @@ function App() {
     }
   }, [editQuestion, isEditingCard]);
   
-  useEffect(() => {
-    if (editAnswerRef.current && isEditingCard) {
-      const element = editAnswerRef.current;
-      if (element.innerHTML !== editAnswer) {
-        const savedPos = saveCursorPosition(element);
-        element.innerHTML = editAnswer;
-        if (savedPos !== null) {
-          restoreCursorPosition(element, savedPos);
-        }
-      }
-    }
-  }, [editAnswer, isEditingCard]);
+  // Note: Removed editAnswerRef useEffect since we're now using RichTextEditor component
 
   // Initialize Firebase and set up authentication listener
   useEffect(() => {
@@ -1108,24 +1105,25 @@ function App() {
       const currentInterval = cardData.interval || 1;
       
       if (isFirstReview) {
-        // For first review, use fixed intervals based on quality
+        // For first review, use initial intervals from settings
         switch (quality) {
-          case 1: // Again - review again today
-            daysToAdd = 1;
+          case 1: // Again
+            daysToAdd = fsrsParams.initialAgainInterval;
             break;
-          case 2: // Hard - review in 1 day
-            daysToAdd = 1;
+          case 2: // Hard
+            daysToAdd = fsrsParams.initialHardInterval;
             break;
-          case 3: // Good - review in 3 days
-            daysToAdd = 3;
+          case 3: // Good
+            daysToAdd = fsrsParams.initialGoodInterval;
             break;
-          case 4: // Easy - review in 15 days
-            daysToAdd = 15;
+          case 4: // Easy
+            daysToAdd = fsrsParams.initialEasyInterval;
             break;
           default:
             console.warn("Invalid quality rating:", quality);
             return;
         }
+        console.log("First review - using initial interval:", daysToAdd, "days for quality:", quality);
       } else {
         // For subsequent reviews, use FSRS factors
         switch (quality) {
@@ -2477,92 +2475,29 @@ function App() {
     }
   };
 
-  // Event handlers for contentEditable synchronization
-  const handleQuestionInput = (e) => {
-    try {
-      const content = e.target.innerHTML || '';
-      setEditQuestion(content);
-    } catch (error) {
-      console.error("Error in handleQuestionInput:", error);
-    }
-  };
 
-  const handleQuestionKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      
-      // Insert line break using execCommand for better browser compatibility
-      document.execCommand('insertHTML', false, '<br>');
-      
-      // Update state to keep React in sync
-      const content = e.target.innerHTML;
-      setEditQuestion(content);
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      
-      // Insert tab spaces using execCommand
-      document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
-      
-      // Update state to keep React in sync
-      const content = e.target.innerHTML;
-      setEditQuestion(content);
-    }
-  };
-
-  const handleAnswerInput = (e) => {
-    try {
-      const content = e.target.innerHTML || '';
-      setEditAnswer(content);
-    } catch (error) {
-      console.error("Error in handleAnswerInput:", error);
-    }
-  };
-
-  const handleAnswerKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      
-      // Insert line break using execCommand for better browser compatibility
-      document.execCommand('insertHTML', false, '<br>');
-      
-      // Update state to keep React in sync
-      const content = e.target.innerHTML;
-      setEditAnswer(content);
-    } else if (e.key === 'Tab') {
-      e.preventDefault();
-      
-      // Insert tab spaces using execCommand
-      document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
-      
-      // Update state to keep React in sync
-      const content = e.target.innerHTML;
-      setEditAnswer(content);
-    }
-  };
-
-  // Simple and direct format answer handler
+  // Format answer handler for RichTextEditor
   const handleFormatAnswer = () => {
     console.log('🔥 FORMAT ANSWER CLICKED');
     
     try {
-      // Get the element directly
-      const element = editAnswerRef.current;
-      if (!element) {
-        alert('Could not find answer field');
-        return;
-      }
+      // Get current answer content
+      let text = editAnswer;
       
-      // Get text content
-      let text = element.textContent || element.innerText || '';
-      console.log('📝 Original text:', text.substring(0, 100));
+      // Strip HTML tags to get plain text for processing
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = text;
+      let plainText = tempDiv.textContent || tempDiv.innerText || '';
       
-      if (!text.trim()) {
+      console.log('📝 Original text:', plainText.substring(0, 100));
+      
+      if (!plainText.trim()) {
         alert('Please enter some text first');
         return;
       }
       
       // Simple formatting
-      let formatted = text.trim();
+      let formatted = plainText.trim();
       
       // Add line breaks at periods followed by capital letters
       formatted = formatted.replace(/\.\s*([A-Z])/g, '.\n\n$1');
@@ -2579,20 +2514,21 @@ function App() {
       // Method names like map()
       formatted = formatted.replace(/(\w+)\(\)/g, '<code style="background: #e3f2fd; padding: 2px 4px; border-radius: 3px;">$1()</code>');
       
-      // Convert newlines to HTML
+      // Convert newlines to HTML paragraphs (better for RichTextEditor)
+      formatted = formatted.replace(/\n\n/g, '</p><p>');
       formatted = formatted.replace(/\n/g, '<br>');
+      formatted = '<p>' + formatted + '</p>';
       
       console.log('🎨 Formatted text:', formatted.substring(0, 100));
       
-      // Update the element
-      element.innerHTML = formatted;
+      // Update the RichTextEditor content
       setEditAnswer(formatted);
       
       console.log('✅ Format complete!');
       
     } catch (error) {
       console.error('❌ Format error:', error);
-      alert('Formatting failed: ' + error.message);
+      alert('Error formatting text: ' + error.message);
     }
   };
 
@@ -2743,20 +2679,40 @@ function App() {
 
   // Function to delete a card
   const handleDeleteCard = async () => {
-    if (!db || !userId || !editCardData) return;
+    console.log('Delete card clicked - Debug info:');
+    console.log('db:', !!db);
+    console.log('userId:', userId);
+    console.log('editCardData:', editCardData);
+    
+    if (!db || !userId || !editCardData) {
+      console.log('Missing required data for delete');
+      return;
+    }
 
     // Show confirmation dialog before deleting
+    console.log('Showing delete confirmation modal');
     setShowConfirmDelete(true);
   };
 
   // Confirmed delete action
   const confirmDelete = async () => {
+    console.log('Confirm delete clicked - Debug info:');
+    console.log('db:', !!db);
+    console.log('editCardData:', editCardData);
+    console.log('editCardData.id:', editCardData?.id);
+    
     setShowConfirmDelete(false); // Close confirmation modal
-    if (!db || !editCardData?.id) return;
+    if (!db || !editCardData?.id) {
+      console.log('Missing db or editCardData.id for delete');
+      return;
+    }
 
     const appId = "flashcard-app-3f2a3"; // Hardcoding appId
+    const docPath = `/artifacts/${appId}/users/${userId}/flashcards`;
+    console.log('Attempting to delete document at path:', docPath, 'with ID:', editCardData.id);
+    
     try {
-      await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/flashcards`, editCardData.id));
+      await deleteDoc(doc(db, docPath, editCardData.id));
       console.log(`Card ${editCardData.id} deleted successfully!`);
       setIsEditingCard(false); // Exit edit mode
       setEditCardData(null); // Clear edit data
@@ -2769,6 +2725,8 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting flashcard:", error);
+      console.error("Error details:", error.code, error.message);
+      alert('Failed to delete card: ' + error.message);
     }
   };
 
@@ -2801,10 +2759,16 @@ function App() {
     };
     
     try {
+      // Get category and additional info from refs
+      const category = editCategoryRef.current?.value?.trim() || 'Uncategorized';
+      const additionalInfo = editAdditionalInfoRef.current?.value?.trim() || '';
+      
       const updatedCard = {
         ...editCardData,
         question: editQuestion.trim(),
         answer: editAnswer.trim(),
+        category: category,
+        additional_info: additionalInfo,
         lastModified: serverTimestamp()
       };
       
@@ -2814,7 +2778,12 @@ function App() {
       setFlashcards(prevFlashcards => 
         prevFlashcards.map(card => 
           card.id === currentEditedCardId 
-            ? { ...card, question: editQuestion.trim(), answer: editAnswer.trim() }
+            ? { ...card, 
+                question: editQuestion.trim(), 
+                answer: editAnswer.trim(),
+                category: category,
+                additional_info: additionalInfo
+              }
             : card
         )
       );
@@ -2983,10 +2952,11 @@ function App() {
   // Get unique categories with due counts for the dropdown
   const getCategoriesWithCounts = () => {
     const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today to match filtering logic
     const categoryData = [];
     
     // Get all unique categories
-    const allCategories = [...new Set(flashcards.map(card => card.category || 'Uncategorized'))].sort();
+    const allCategories = [...new Set(flashcards.map(card => card.category || 'Uncategorized'))];
     
     // Add 'All' category with count based on current filter
     const allFilteredCards = flashcards.filter(card => {
@@ -3011,10 +2981,39 @@ function App() {
         }
         return true; // Show all cards when filter is off
       });
-      categoryData.push({ name: category, count: cardsInCategory.length });
+      
+      // Only add category if it has cards, or if we're showing all cards (not just due today)
+      if (cardsInCategory.length > 0 || !showDueTodayOnly) {
+        categoryData.push({ name: category, count: cardsInCategory.length });
+      }
     });
     
-    return categoryData;
+    // Sort categories based on user preference (but keep 'All' at the top)
+    const allCategory = categoryData.find(cat => cat.name === 'All');
+    const otherCategories = categoryData.filter(cat => cat.name !== 'All');
+    
+    switch (categorySortBy) {
+      case 'most-due':
+        otherCategories.sort((a, b) => b.count - a.count);
+        break;
+      case 'least-due':
+        otherCategories.sort((a, b) => a.count - b.count);
+        break;
+      case 'alphabetical':
+      default:
+        otherCategories.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+    }
+    
+    // Return with 'All' first, then sorted categories
+    const sortedCategoryData = [allCategory, ...otherCategories];
+    
+    console.log('Categories with counts:', sortedCategoryData);
+    console.log('Sort by:', categorySortBy);
+    console.log('showDueTodayOnly:', showDueTodayOnly);
+    console.log('today cutoff:', today);
+    
+    return sortedCategoryData;
   };
   
   const categoriesWithCounts = getCategoriesWithCounts();
@@ -3567,24 +3566,73 @@ Example:
             </div>
           </div>
           
-          {/* Category Filter - Full width below */}
+          {/* Category Filter, Sort Options, and Due Today Toggle - Side by side */}
           {flashcards.length > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-300/50 dark:border-gray-600/50">
-              <label htmlFor="category-filter" className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
-                Filter by Category:
-              </label>
-              <select
-                id="category-filter"
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="block w-full max-w-xs py-2 px-3 border-0 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer text-slate-700 dark:text-slate-200 transition-all duration-300"
-              >
-                {categoriesWithCounts.map(cat => (
-                  <option key={cat.name} value={cat.name} className="py-1">
-                    {cat.name} ({cat.count} {showDueTodayOnly ? 'due' : 'cards'})
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-row items-end gap-2">
+                {/* Category Filter */}
+                <div className="flex-grow">
+                  <label htmlFor="category-filter" className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
+                    Filter by Category:
+                  </label>
+                  <select
+                    id="category-filter"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="block w-full py-2 px-3 border-0 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer text-slate-700 dark:text-slate-200 transition-all duration-300"
+                  >
+                    {categoriesWithCounts.map(cat => (
+                      <option key={cat.name} value={cat.name} className="py-1">
+                        {cat.name} ({cat.count} {showDueTodayOnly ? 'due' : 'cards'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Category Sort */}
+                <div className="flex-shrink-0" style={{ minWidth: '120px' }}>
+                  <label htmlFor="category-sort" className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
+                    Sort by:
+                  </label>
+                  <select
+                    id="category-sort"
+                    value={categorySortBy}
+                    onChange={(e) => setCategorySortBy(e.target.value)}
+                    className="block w-full py-2 px-3 border-0 bg-white/90 dark:bg-slate-700/90 backdrop-blur-sm rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer text-slate-700 dark:text-slate-200 transition-all duration-300"
+                  >
+                    <option value="alphabetical">A-Z</option>
+                    <option value="most-due">Most Due</option>
+                    <option value="least-due">Least Due</option>
+                  </select>
+                </div>
+
+                {/* Due Today Toggle - Only show when logged in */}
+                {userId && (
+                  <div className="flex-shrink-0">
+                    <button
+                      onClick={() => setShowDueTodayOnly(!showDueTodayOnly)}
+                      className={`px-4 py-2 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold cursor-pointer transition-all duration-300 whitespace-nowrap ${
+                        showDueTodayOnly 
+                          ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                          : 'bg-white/90 dark:bg-slate-700/90 text-slate-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600'
+                      }`}
+                      title={showDueTodayOnly ? 'Show all cards' : 'Show only cards due today'}
+                    >
+                      {showDueTodayOnly ? 'Due Today' : 'All Cards'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {/* Status text below both controls */}
+              {userId && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  {showDueTodayOnly 
+                    ? `Showing ${filteredFlashcards.length} cards due today` 
+                    : `Showing ${filteredFlashcards.length} of ${flashcards.length} total cards`
+                  }
+                </p>
+              )}
             </div>
           )}
           
@@ -4041,24 +4089,31 @@ Example:
                       });
                     }
                     
-                    // If there are other categories with due cards, suggest switching
-                    if (categoriesWithDueCards.length > 0) {
+                    // If there are other categories with due cards, show option to switch
+                    if (categoriesWithDueCards.length > 0 && selectedCategory !== 'All') {
                       return (
                         <div>
-                          <div className="text-4xl mb-4">✅</div>
-                          <p className="text-xl mb-4 font-semibold text-blue-600 dark:text-blue-400">Category Complete!</p>
-                          <p className="text-lg mb-4">You've finished all cards in the "{selectedCategory}" category.</p>
+                          <div className="text-4xl mb-4">📝</div>
+                          <p className="text-xl mb-4 font-semibold text-gray-600 dark:text-gray-400">No more cards in "{selectedCategory}"</p>
                           <p className="text-md mb-4 text-gray-600 dark:text-gray-300">
-                            There {categoriesWithDueCards.length === 1 ? 'is' : 'are'} {categoriesWithDueCards.length} other {categoriesWithDueCards.length === 1 ? 'category' : 'categories'} with cards to review:
+                            Would you like to continue with another category?
                           </p>
                           <div className="space-y-2 mb-6">
                             {categoriesWithDueCards.slice(0, 3).map((cat, index) => (
-                              <div key={index} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-lg px-4 py-2">
+                              <button
+                                key={index}
+                                onClick={() => {
+                                  setSelectedCategory(cat.name);
+                                  setCurrentCardIndex(0);
+                                  setShowAnswer(false);
+                                }}
+                                className="w-full flex justify-between items-center bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg px-4 py-3 transition-all duration-200"
+                              >
                                 <span className="font-medium">{cat.name}</span>
                                 <span className="bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full text-sm">
                                   {cat.count} due
                                 </span>
-                              </div>
+                              </button>
                             ))}
                             {categoriesWithDueCards.length > 3 && (
                               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -4066,36 +4121,132 @@ Example:
                               </p>
                             )}
                           </div>
-                          <div className="space-y-3">
-                            <button
-                              onClick={() => {
-                                setSelectedCategory(categoriesWithDueCards[0].name);
-                                setCurrentCardIndex(0);
-                                setShowAnswer(false);
-                              }}
-                              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300"
-                            >
-                              Continue with "{categoriesWithDueCards[0].name}" ({categoriesWithDueCards[0].count} cards)
-                            </button>
-                            <button
-                              onClick={() => setSelectedCategory('All')}
-                              className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-gray-300"
-                            >
-                              View All Categories
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => setSelectedCategory('All')}
+                            className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-gray-300"
+                          >
+                            Review All Categories
+                          </button>
                         </div>
                       );
                     } else {
-                      // No other categories with due cards, show congratulations
-                      return (
-                        <div>
-                          <div className="text-6xl mb-4">🎉</div>
-                          <p className="text-xl mb-4 font-semibold text-green-600 dark:text-green-400">Congratulations!</p>
-                          <p className="text-lg mb-2">You've completed all cards due today!</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">Check back tomorrow for more cards to review.</p>
-                        </div>
-                      );
+                      // Calculate total cards due across ALL categories (not filtered)
+                      const today = new Date();
+                      const totalCardsDueTodayAllCategories = flashcards.filter(card => {
+                        // Check if card is due today (no category filter)
+                        if (!card.nextReview) return true; // New cards are always due
+                        const nextReview = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+                        const endOfToday = new Date(today);
+                        endOfToday.setHours(23, 59, 59, 999);
+                        return nextReview <= endOfToday;
+                      }).length;
+                      
+                      // Calculate total cards reviewed today across ALL categories
+                      const totalCardsReviewedTodayAllCategories = flashcards.filter(card => {
+                        if (!card.lastReview) return false;
+                        const lastReviewDate = card.lastReview.toDate ? card.lastReview.toDate() : new Date(card.lastReview);
+                        const todayStart = new Date(today);
+                        todayStart.setHours(0, 0, 0, 0);
+                        const tomorrow = new Date(todayStart);
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        return lastReviewDate >= todayStart && lastReviewDate < tomorrow;
+                      }).length;
+                      
+                      // Check if ALL cards due today (across all categories) have been reviewed
+                      const allDueCardsReviewed = totalCardsDueTodayAllCategories === 0 || 
+                                                  (totalCardsReviewedTodayAllCategories >= totalCardsDueTodayAllCategories);
+                      
+                      if (allDueCardsReviewed) {
+                        // All cards completed for the day - show congratulations
+                        return (
+                          <div>
+                            <div className="text-6xl mb-4">🎉</div>
+                            <p className="text-xl mb-4 font-semibold text-green-600 dark:text-green-400">Congratulations!</p>
+                            <p className="text-lg mb-2">You've completed all {totalCardsReviewedTodayAllCategories} cards due today!</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Check back tomorrow for more cards to review.</p>
+                          </div>
+                        );
+                      } else {
+                        // Not all cards reviewed yet - check remaining due cards
+                        const remainingDueCards = totalCardsDueTodayAllCategories - totalCardsReviewedTodayAllCategories;
+                        
+                        // Calculate categories with due cards if not already calculated
+                        const categoriesWithDue = [];
+                        const allCategories = [...new Set(flashcards.map(card => card.category || 'Uncategorized'))];
+                        
+                        allCategories.forEach(category => {
+                          if (category !== selectedCategory || selectedCategory === 'All') {
+                            const dueCardsInCategory = flashcards.filter(card => {
+                              if ((card.category || 'Uncategorized') !== category) return false;
+                              
+                              // Check if card is due
+                              if (!card.nextReview) return true; // New cards are always due
+                              const nextReview = card.nextReview.toDate ? card.nextReview.toDate() : new Date(card.nextReview);
+                              const endOfToday = new Date();
+                              endOfToday.setHours(23, 59, 59, 999);
+                              return nextReview <= endOfToday;
+                            });
+                            
+                            if (dueCardsInCategory.length > 0) {
+                              categoriesWithDue.push({
+                                name: category,
+                                count: dueCardsInCategory.length
+                              });
+                            }
+                          }
+                        });
+                        
+                        // Sort according to user's preference
+                        switch (categorySortBy) {
+                          case 'most-due':
+                            categoriesWithDue.sort((a, b) => b.count - a.count);
+                            break;
+                          case 'least-due':
+                            categoriesWithDue.sort((a, b) => a.count - b.count);
+                            break;
+                          case 'alphabetical':
+                          default:
+                            categoriesWithDue.sort((a, b) => a.name.localeCompare(b.name));
+                            break;
+                        }
+                        
+                        // Find the next category with due cards (first in sorted list)
+                        const nextCategoryWithDue = categoriesWithDue.length > 0 ? categoriesWithDue[0] : null;
+                        
+                        return (
+                          <div>
+                            <div className="text-4xl mb-4">📚</div>
+                            <p className="text-xl mb-4 font-semibold text-blue-600 dark:text-blue-400">Keep going!</p>
+                            <p className="text-lg mb-4">You've reviewed {totalCardsReviewedTodayAllCategories} of {totalCardsDueTodayAllCategories} cards due today.</p>
+                            <p className="text-md mb-4 text-gray-600 dark:text-gray-300">
+                              There {remainingDueCards === 1 ? 'is' : 'are'} still {remainingDueCards} {remainingDueCards === 1 ? 'card' : 'cards'} due in other categories.
+                            </p>
+                            {nextCategoryWithDue ? (
+                              <button
+                                onClick={() => {
+                                  setSelectedCategory(nextCategoryWithDue.name);
+                                  setCurrentCardIndex(0);
+                                  setShowAnswer(false);
+                                }}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                              >
+                                Continue with "{nextCategoryWithDue.name}" ({nextCategoryWithDue.count} cards)
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  setSelectedCategory('All');
+                                  setCurrentCardIndex(0);
+                                  setShowAnswer(false);
+                                }}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-4 focus:ring-blue-300"
+                              >
+                                Show All Categories
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }
                     }
                   }
                 })()}
@@ -4145,16 +4296,13 @@ Example:
                     ✨ Format Question
                   </button>
                 </div>
-                <div
-                  id="edit-question"
-                  ref={editQuestionRef}
-                  contentEditable={true}
-                  suppressContentEditableWarning={true}
-                  onInput={handleQuestionInput}
-                  onKeyDown={handleQuestionKeyDown}
-                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[100px] max-h-[200px] overflow-y-auto"
-                  style={{ minHeight: '100px' }}
-                ></div>
+                <RichTextEditor
+                  value={editQuestion}
+                  onChange={setEditQuestion}
+                  placeholder="Enter your question..."
+                  minHeight="100px"
+                  className="w-full"
+                />
               </div>
               <div>
                 <div className="flex justify-between items-center mb-2">
@@ -4169,16 +4317,13 @@ Example:
                     ✨ Format Answer
                   </button>
                 </div>
-                <div
-                  id="edit-answer"
-                  ref={editAnswerRef}
-                  contentEditable={true}
-                  suppressContentEditableWarning={true}
-                  onInput={handleAnswerInput}
-                  onKeyDown={handleAnswerKeyDown}
-                  className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 resize-y whitespace-pre-wrap dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 min-h-[250px] max-h-[400px] overflow-y-auto"
-                  style={{ minHeight: '250px' }}
-                ></div>
+                <RichTextEditor
+                  value={editAnswer}
+                  onChange={setEditAnswer}
+                  placeholder="Enter your answer..."
+                  minHeight="250px"
+                  className="w-full"
+                />
               </div>
               <div>
                 <label htmlFor="edit-category" className="block text-gray-700 text-sm font-bold mb-2 dark:text-gray-300">
@@ -4262,7 +4407,7 @@ Example:
 
       {/* Confirmation Delete Modal */}
       {showConfirmDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style={{ zIndex: 20000 }}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center dark:bg-gray-800">
             <h3 className="text-xl font-semibold text-gray-800 mb-4 dark:text-gray-100">Confirm Deletion</h3>
             <p className="text-gray-700 mb-6 dark:text-gray-300">Are you sure you want to delete this flashcard? This action cannot be undone.</p>
@@ -5022,6 +5167,117 @@ Example:
                         </svg>
                         Send Email
                       </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* Initial Review Intervals Section */}
+              <section className="bg-purple-100 dark:bg-gray-700 p-5 rounded-xl shadow-sm border border-purple-200 dark:border-gray-600 border-txb-2 border-txb-black">
+                <button
+                  onClick={() => setShowIntervalSettings(!showIntervalSettings)}
+                  className="flex justify-between items-center w-full focus:outline-none group"
+                >
+                  <div className="flex items-center">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg mr-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">Initial Review Intervals</h3>
+                  </div>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-5 w-5 text-gray-500 dark:text-gray-400 transition-transform duration-300 ${
+                      showIntervalSettings ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showIntervalSettings && (
+                  <div className="mt-5 space-y-4">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                      Set how many days after the first review each rating should schedule the next review.
+                    </p>
+                    
+                    {/* Again Interval */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-semibold text-red-600 dark:text-red-400">Again</label>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Review again in:</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={fsrsParams.initialAgainInterval}
+                          onChange={(e) => updateFsrsParameter('initialAgainInterval', e.target.value)}
+                          className="w-16 px-2 py-1 text-center border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-gray-200"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">day(s)</span>
+                      </div>
+                    </div>
+
+                    {/* Hard Interval */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-semibold text-orange-600 dark:text-orange-400">Hard</label>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Review again in:</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={fsrsParams.initialHardInterval}
+                          onChange={(e) => updateFsrsParameter('initialHardInterval', e.target.value)}
+                          className="w-16 px-2 py-1 text-center border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-700 dark:text-gray-200"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">day(s)</span>
+                      </div>
+                    </div>
+
+                    {/* Good Interval */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-semibold text-green-600 dark:text-green-400">Good</label>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Review again in:</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={fsrsParams.initialGoodInterval}
+                          onChange={(e) => updateFsrsParameter('initialGoodInterval', e.target.value)}
+                          className="w-16 px-2 py-1 text-center border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-gray-200"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">day(s)</span>
+                      </div>
+                    </div>
+
+                    {/* Easy Interval */}
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-semibold text-blue-600 dark:text-blue-400">Easy</label>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Review again in:</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="60"
+                          value={fsrsParams.initialEasyInterval}
+                          onChange={(e) => updateFsrsParameter('initialEasyInterval', e.target.value)}
+                          className="w-16 px-2 py-1 text-center border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-200"
+                        />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">day(s)</span>
+                      </div>
                     </div>
                   </div>
                 )}

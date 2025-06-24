@@ -328,7 +328,7 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
                     }}>
                       {day}
                     </span>
-                    {due && (
+                    {due && due.cardCount > 0 && (
                       <div style={{
                         position: 'absolute',
                         bottom: '4px',
@@ -345,6 +345,21 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
                           boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                         }}>
                           {(() => { console.log('Calendar Badge - Day:', day, 'Due:', due, 'Count:', due.cardCount); return due.cardCount; })()}
+                        </div>
+                      </div>
+                    )}
+                    {due && due.cardCount === 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '4px',
+                        left: '50%',
+                        transform: 'translateX(-50%)'
+                      }}>
+                        <div style={{
+                          fontSize: '16px',
+                          filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+                        }}>
+                          😊
                         </div>
                       </div>
                     )}
@@ -367,7 +382,8 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
         <div style={{
           display: 'flex',
           justifyContent: 'center',
-          gap: '32px'
+          gap: '24px',
+          flexWrap: 'wrap'
         }}>
           <div style={{
             display: 'flex',
@@ -403,6 +419,25 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
               color: isDarkMode ? '#9ca3af' : '#6b7280',
               fontWeight: '500'
             }}>Cards Due</span>
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <div style={{
+              width: '16px',
+              height: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginRight: '8px',
+              fontSize: '12px'
+            }}>😊</div>
+            <span style={{
+              fontSize: '14px',
+              color: isDarkMode ? '#9ca3af' : '#6b7280',
+              fontWeight: '500'
+            }}>All Done</span>
           </div>
         </div>
       </div>
