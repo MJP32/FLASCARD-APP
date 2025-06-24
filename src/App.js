@@ -4,6 +4,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithEmai
 import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, updateDoc, doc, getDoc, setDoc, deleteDoc, getDocs, where, Timestamp } from 'firebase/firestore';
 import LoginScreen from './LoginScreen.jsx';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 import Calendar from './Calendar';
 import RichTextEditor from './RichTextEditor';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -3269,7 +3270,7 @@ Example:
   };
 
   // Function to handle the actual export based on selected format
-  const handleExportConfirm = () => {
+  const handleExportConfirm = async () => {
     console.log('Export confirmed with format:', exportFormat);
     
     // Test XLSX library before proceeding with Excel export
@@ -3287,12 +3288,17 @@ Example:
     const formattedDate = today.toLocaleDateString('en-US', options);
     const dateStr = formattedDate.replace(/,/g, '').replace(/ /g, '_');
 
-    if (exportFormat === 'csv') {
-      console.log('Calling CSV export');
-      exportCSV(dateStr);
-    } else {
-      console.log('Calling Excel export');
-      exportExcel(dateStr);
+    try {
+      if (exportFormat === 'csv') {
+        console.log('Calling CSV export');
+        exportCSV(dateStr);
+      } else {
+        console.log('Calling Excel export');
+        await exportExcel(dateStr);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert(`Export failed: ${error.message}`);
     }
     
     setShowExportModal(false);
@@ -3342,8 +3348,92 @@ Example:
     document.body.removeChild(link);
   };
 
-  // Function to export cards as Excel file
-  const exportExcel = (dateStr) => {
+  // Helper function to clean and truncate text for Excel
+  const cleanTextForExcel = (text, maxLength = 32000) => {
+    if (!text) return '';
+    
+    // Strip HTML tags
+    let cleanText = text.replace(/<[^>]*>/g, '');
+    
+    // Replace HTML entities
+    cleanText = cleanText
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    
+    // Remove extra whitespace
+    cleanText = cleanText.replace(/\s+/g, ' ').trim();
+    
+    // Truncate if too long and add indicator
+    if (cleanText.length > maxLength) {
+      cleanText = cleanText.substring(0, maxLength - 20) + '... [TRUNCATED]';
+    }
+    
+    return cleanText;
+  };
+
+  // Function to check if content is too long for a single Excel file
+  const checkContentLength = (cards) => {
+    let totalLength = 0;
+    let hasLongContent = false;
+    
+    cards.forEach(card => {
+      const questionLength = (card.question || '').length;
+      const answerLength = (card.answer || '').length;
+      const additionalLength = (card.additional_info || '').length;
+      
+      totalLength += questionLength + answerLength + additionalLength;
+      
+      if (questionLength > 20000 || answerLength > 20000 || additionalLength > 20000) {
+        hasLongContent = true;
+      }
+    });
+    
+    // Consider it too long if total content > 1MB or any single field > 20K chars
+    return totalLength > 1000000 || hasLongContent;
+  };
+
+  // Function to create a single Excel workbook from cards
+  const createExcelWorkbook = (cards, sheetName = 'Flashcards') => {
+    const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
+    const worksheetData = [
+      headers,
+      ...cards.map((card, index) => {
+        const row = [
+          card.id || '',
+          card.csvNumber || '',
+          card.category || 'Uncategorized',
+          cleanTextForExcel(card.question),
+          cleanTextForExcel(card.answer),
+          cleanTextForExcel(card.additional_info)
+        ];
+        
+        return row;
+      })
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    
+    // Set column widths for better readability
+    worksheet['!cols'] = [
+      { width: 10 }, // id
+      { width: 10 }, // number
+      { width: 15 }, // category
+      { width: 30 }, // question
+      { width: 50 }, // answer
+      { width: 20 }  // additional_info
+    ];
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    return workbook;
+  };
+
+  // Function to export cards as Excel file(s)
+  const exportExcel = async (dateStr) => {
     try {
       console.log('Starting Excel export with', filteredFlashcards.length, 'cards');
       console.log('XLSX library check:', typeof XLSX, XLSX?.version);
@@ -3351,115 +3441,134 @@ Example:
       if (!XLSX || !XLSX.utils) {
         throw new Error('XLSX library not loaded properly');
       }
+
+      if (!JSZip) {
+        throw new Error('JSZip library not loaded properly');
+      }
       
-      // Helper function to clean and truncate text for Excel
-      const cleanTextForExcel = (text, maxLength = 32000) => {
-        if (!text) return '';
+      // Check if content is too long for a single file
+      const isTooLong = checkContentLength(filteredFlashcards);
+      
+      if (!isTooLong) {
+        // Simple single-file export
+        console.log('Content size is manageable, creating single Excel file...');
         
-        // Strip HTML tags
-        let cleanText = text.replace(/<[^>]*>/g, '');
+        const workbook = createExcelWorkbook(filteredFlashcards);
+        const filename = `flashcards_export_${dateStr}.xlsx`;
         
-        // Replace HTML entities
-        cleanText = cleanText
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&amp;/g, '&')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'");
+        const workbookBlob = XLSX.write(workbook, { 
+          bookType: 'xlsx', 
+          type: 'array',
+          compression: true 
+        });
         
-        // Remove extra whitespace
-        cleanText = cleanText.replace(/\s+/g, ' ').trim();
+        const blob = new Blob([workbookBlob], { 
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
         
-        // Truncate if too long and add indicator
-        if (cleanText.length > maxLength) {
-          cleanText = cleanText.substring(0, maxLength - 20) + '... [TRUNCATED]';
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        console.log('Single Excel export completed successfully:', filename);
+        alert(`Excel file "${filename}" downloaded successfully!`);
+        
+      } else {
+        // Content is too long - split by categories and create ZIP
+        console.log('Content is too large, splitting by categories...');
+        
+        // Group cards by category
+        const cardsByCategory = {};
+        filteredFlashcards.forEach(card => {
+          const category = card.category || 'Uncategorized';
+          if (!cardsByCategory[category]) {
+            cardsByCategory[category] = [];
+          }
+          cardsByCategory[category].push(card);
+        });
+        
+        const categories = Object.keys(cardsByCategory);
+        console.log(`Creating ${categories.length} category files:`, categories);
+        
+        // Create ZIP file
+        const zip = new JSZip();
+        const folder = zip.folder('Flashcards_by_Category');
+        
+        // Create Excel file for each category
+        for (const category of categories) {
+          const categoryCards = cardsByCategory[category];
+          const sanitizedCategory = category.replace(/[<>:"/\\|?*]/g, '_'); // Remove invalid filename characters
+          const workbook = createExcelWorkbook(categoryCards, sanitizedCategory);
+          
+          const workbookBlob = XLSX.write(workbook, { 
+            bookType: 'xlsx', 
+            type: 'array',
+            compression: true 
+          });
+          
+          folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.xlsx`, workbookBlob);
+          console.log(`Added ${sanitizedCategory} with ${categoryCards.length} cards`);
         }
         
-        return cleanText;
-      };
-
-      // Create worksheet data in the same format as import
-      const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
-      const worksheetData = [
-        headers,
-        ...filteredFlashcards.map((card, index) => {
-          const row = [
-            card.id || '',
-            card.csvNumber || '',
-            card.category || 'Uncategorized',
-            cleanTextForExcel(card.question),
-            cleanTextForExcel(card.answer),
-            cleanTextForExcel(card.additional_info)
-          ];
-          
-          // Log any cards with very long content
-          if ((card.question || '').length > 10000 || (card.answer || '').length > 10000) {
-            console.log(`Card ${index + 1} has long content - Question: ${(card.question || '').length} chars, Answer: ${(card.answer || '').length} chars`);
-          }
-          
-          return row;
-        })
-      ];
-
-      console.log('Worksheet data prepared, creating workbook...');
-      console.log('Sample data:', worksheetData.slice(0, 2));
-
-      // Create workbook and worksheet
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-      
-      // Set column widths for better readability
-      worksheet['!cols'] = [
-        { width: 10 }, // id
-        { width: 10 }, // number
-        { width: 15 }, // category
-        { width: 30 }, // question
-        { width: 50 }, // answer
-        { width: 20 }  // additional_info
-      ];
-
-      // Add worksheet to workbook
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Flashcards');
-      
-      console.log('Workbook created, attempting to write file...');
-      
-      // Write and download the file
-      const filename = `flashcards_export_${dateStr}.xlsx`;
-      
-      // Always use the manual blob approach for better browser compatibility
-      console.log('Using manual blob approach for Excel export...');
-      
-      const workbookBlob = XLSX.write(workbook, { 
-        bookType: 'xlsx', 
-        type: 'array',
-        compression: true 
-      });
-      
-      const blob = new Blob([workbookBlob], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-      });
-      
-      console.log('Blob created, size:', blob.size, 'bytes');
-      
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', filename);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      
-      console.log('Triggering download...');
-      link.click();
-      
-      // Clean up
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }, 100);
-      
-      console.log('Excel export completed successfully:', filename);
-      alert(`Excel file "${filename}" should be downloading now!`);
+        // Add a summary file
+        const summaryData = [
+          ['Category', 'Card Count', 'File Name'],
+          ...categories.map(category => [
+            category,
+            cardsByCategory[category].length,
+            `${category.replace(/[<>:"/\\|?*]/g, '_')}_${cardsByCategory[category].length}_cards.xlsx`
+          ]),
+          ['Total', filteredFlashcards.length, `${categories.length} files`]
+        ];
+        
+        const summaryWorkbook = XLSX.utils.book_new();
+        const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
+        summaryWorksheet['!cols'] = [{ width: 20 }, { width: 15 }, { width: 40 }];
+        XLSX.utils.book_append_sheet(summaryWorkbook, summaryWorksheet, 'Export Summary');
+        
+        const summaryBlob = XLSX.write(summaryWorkbook, { 
+          bookType: 'xlsx', 
+          type: 'array',
+          compression: true 
+        });
+        
+        folder.file('_Export_Summary.xlsx', summaryBlob);
+        
+        // Generate ZIP file
+        console.log('Generating ZIP file...');
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+        
+        // Download ZIP file
+        const zipFilename = `flashcards_export_${dateStr}_by_category.zip`;
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(zipBlob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', zipFilename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        console.log('ZIP export completed successfully:', zipFilename);
+        alert(`ZIP file "${zipFilename}" downloaded successfully!\n\nContains ${categories.length} Excel files organized by category, plus a summary file.`);
+      }
       
     } catch (error) {
       console.error('Error during Excel export:', error);
