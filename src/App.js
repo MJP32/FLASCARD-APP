@@ -3485,32 +3485,66 @@ Example:
       const sanitizedCategory = category.replace(/[<>:"/\\|?*]/g, '_');
       
       try {
-        const workbook = createExcelWorkbook(categoryCards, sanitizedCategory);
-        const workbookBlob = XLSX.write(workbook, { 
-          bookType: 'xlsx', 
-          type: 'array',
-          compression: true 
-        });
+        // Check content length for this category
+        const maxLength = Math.max(
+          ...categoryCards.map(card => 
+            Math.max(
+              (card.question || '').length,
+              (card.answer || '').length,
+              (card.additional_info || '').length
+            )
+          )
+        );
         
-        folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.xlsx`, workbookBlob);
-        console.log(`✅ Added ${sanitizedCategory} with ${categoryCards.length} cards`);
+        console.log(`Category ${category} max field length: ${maxLength}`);
+        
+        // If any field is too long, use CSV instead of Excel for this category
+        if (maxLength > 20000) {
+          console.warn(`Category ${category} has content too long for Excel, using CSV format`);
+          const csvData = [
+            ['id', 'number', 'category', 'question', 'answer', 'additional_info'],
+            ...categoryCards.map(card => [
+              card.id || '',
+              card.csvNumber || '',
+              card.category || 'Uncategorized',
+              (card.question || '').replace(/"/g, '""'),
+              (card.answer || '').replace(/"/g, '""'),
+              (card.additional_info || '').replace(/"/g, '""')
+            ])
+          ].map(row => row.join(',')).join('\n');
+          
+          folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.csv`, csvData);
+          console.log(`📄 Added ${sanitizedCategory} as CSV (content too long for Excel)`);
+        } else {
+          // Content is manageable, create Excel file
+          const workbook = createExcelWorkbook(categoryCards, sanitizedCategory);
+          const workbookBlob = XLSX.write(workbook, { 
+            bookType: 'xlsx', 
+            type: 'array',
+            compression: true 
+          });
+          
+          folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.xlsx`, workbookBlob);
+          console.log(`✅ Added ${sanitizedCategory} with ${categoryCards.length} cards as Excel`);
+        }
       } catch (categoryError) {
-        console.error(`❌ Failed to create Excel for category ${category}:`, categoryError);
-        // If even individual categories fail, create a CSV file instead
+        console.error(`❌ Failed to create file for category ${category}:`, categoryError);
+        // If everything fails, create a simple CSV file
         const csvData = [
           ['id', 'number', 'category', 'question', 'answer', 'additional_info'],
           ...categoryCards.map(card => [
             card.id || '',
             card.csvNumber || '',
             card.category || 'Uncategorized',
-            (card.question || '').replace(/"/g, '""'),
-            (card.answer || '').replace(/"/g, '""'),
-            (card.additional_info || '').replace(/"/g, '""')
+            // Super aggressive cleaning for CSV fallback
+            (card.question || '').replace(/[^\x20-\x7E]/g, '').substring(0, 10000).replace(/"/g, '""'),
+            (card.answer || '').replace(/[^\x20-\x7E]/g, '').substring(0, 10000).replace(/"/g, '""'),
+            (card.additional_info || '').replace(/[^\x20-\x7E]/g, '').substring(0, 10000).replace(/"/g, '""')
           ])
         ].map(row => row.join(',')).join('\n');
         
         folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.csv`, csvData);
-        console.log(`📄 Added ${sanitizedCategory} as CSV fallback`);
+        console.log(`📄 Added ${sanitizedCategory} as CSV fallback (error recovery)`);
       }
     }
     
@@ -3579,69 +3613,9 @@ Example:
         throw new Error('JSZip library not loaded properly');
       }
       
-      // Check if content is too long for a single file
-      const isTooLong = checkContentLength(filteredFlashcards);
-      
-      // Also check if there are multiple categories - safer to split
-      const categories = [...new Set(filteredFlashcards.map(card => card.category || 'Uncategorized'))];
-      const hasMultipleCategories = categories.length > 1;
-      const shouldSplit = isTooLong || hasMultipleCategories;
-      
-      console.log(`Categories found: ${categories.length} (${categories.join(', ')})`);
-      console.log(`Should split: ${shouldSplit} (isTooLong: ${isTooLong}, hasMultipleCategories: ${hasMultipleCategories})`);
-      
-      if (!shouldSplit) {
-        // Try simple single-file export first
-        console.log('Content size is manageable, attempting single Excel file...');
-        
-        try {
-          const workbook = createExcelWorkbook(filteredFlashcards);
-          const filename = `flashcards_export_${dateStr}.xlsx`;
-          
-          const workbookBlob = XLSX.write(workbook, { 
-            bookType: 'xlsx', 
-            type: 'array',
-            compression: true 
-          });
-          
-          const blob = new Blob([workbookBlob], { 
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-          });
-          
-          const link = document.createElement('a');
-          const url = URL.createObjectURL(blob);
-          link.setAttribute('href', url);
-          link.setAttribute('download', filename);
-          link.style.visibility = 'hidden';
-          document.body.appendChild(link);
-          link.click();
-          
-          setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          }, 100);
-          
-          console.log('Single Excel export completed successfully:', filename);
-          alert(`Excel file "${filename}" downloaded successfully!`);
-          
-        } catch (singleFileError) {
-          console.warn('Single file export failed, falling back to categorized export:', singleFileError);
-          
-          // Check if it's the character limit error
-          if (singleFileError.message && singleFileError.message.includes('32767')) {
-            console.log('Character limit exceeded, automatically switching to categorized export...');
-            alert('Content is too large for a single Excel file. Creating separate files by category...');
-            await createCategorizedExport(dateStr);
-          } else {
-            throw singleFileError; // Re-throw if it's a different error
-          }
-        }
-        
-      } else {
-        // Content is pre-determined to be too long - split by categories
-        console.log('Content is too large, creating categorized export...');
-        await createCategorizedExport(dateStr);
-      }
+      // ALWAYS use categorized export to avoid character limit issues
+      console.log('Using categorized export for maximum compatibility...');
+      await createCategorizedExport(dateStr);
       
     } catch (error) {
       console.error('Error during Excel export:', error);
