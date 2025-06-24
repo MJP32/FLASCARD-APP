@@ -3349,7 +3349,7 @@ Example:
   };
 
   // Helper function to clean and truncate text for Excel
-  const cleanTextForExcel = (text, maxLength = 32000) => {
+  const cleanTextForExcel = (text, maxLength = 30000) => {
     if (!text) return '';
     
     // Strip HTML tags
@@ -3367,9 +3367,10 @@ Example:
     // Remove extra whitespace
     cleanText = cleanText.replace(/\s+/g, ' ').trim();
     
-    // Truncate if too long and add indicator
+    // Aggressively truncate if too long - be very conservative
     if (cleanText.length > maxLength) {
-      cleanText = cleanText.substring(0, maxLength - 20) + '... [TRUNCATED]';
+      cleanText = cleanText.substring(0, maxLength - 50) + '... [CONTENT TRUNCATED FOR EXCEL COMPATIBILITY]';
+      console.warn(`Content truncated from ${text.length} to ${cleanText.length} characters`);
     }
     
     return cleanText;
@@ -3395,8 +3396,8 @@ Example:
         problemCard = { index, questionLength, answerLength, additionalLength };
       }
       
-      // Excel limit is 32,767 characters per cell - be more conservative
-      if (questionLength > 30000 || answerLength > 30000 || additionalLength > 30000) {
+      // Excel limit is 32,767 characters per cell - be very conservative
+      if (questionLength > 25000 || answerLength > 25000 || additionalLength > 25000) {
         hasLongContent = true;
       }
     });
@@ -3409,8 +3410,8 @@ Example:
       problemCard
     });
     
-    // Consider it too long if any single field > 30K chars (close to Excel's 32K limit)
-    const shouldSplit = hasLongContent || maxFieldLength > 30000;
+    // Consider it too long if any single field > 25K chars (well below Excel's 32K limit)
+    const shouldSplit = hasLongContent || maxFieldLength > 25000;
     
     if (shouldSplit) {
       console.log('Will split into categories due to long content');
@@ -3581,7 +3582,15 @@ Example:
       // Check if content is too long for a single file
       const isTooLong = checkContentLength(filteredFlashcards);
       
-      if (!isTooLong) {
+      // Also check if there are multiple categories - safer to split
+      const categories = [...new Set(filteredFlashcards.map(card => card.category || 'Uncategorized'))];
+      const hasMultipleCategories = categories.length > 1;
+      const shouldSplit = isTooLong || hasMultipleCategories;
+      
+      console.log(`Categories found: ${categories.length} (${categories.join(', ')})`);
+      console.log(`Should split: ${shouldSplit} (isTooLong: ${isTooLong}, hasMultipleCategories: ${hasMultipleCategories})`);
+      
+      if (!shouldSplit) {
         // Try simple single-file export first
         console.log('Content size is manageable, attempting single Excel file...');
         
