@@ -3242,9 +3242,44 @@ Example:
     setShowExportModal(true);
   };
 
+  // Test function to verify XLSX is working
+  const testXLSX = () => {
+    try {
+      console.log('Testing XLSX library...');
+      console.log('XLSX available:', !!XLSX);
+      console.log('XLSX.utils available:', !!XLSX?.utils);
+      console.log('XLSX.write available:', !!XLSX?.write);
+      console.log('XLSX version:', XLSX?.version);
+      
+      // Create a simple test workbook
+      const testData = [['Test', 'Data'], ['Hello', 'World']];
+      const testWorkbook = XLSX.utils.book_new();
+      const testWorksheet = XLSX.utils.aoa_to_sheet(testData);
+      XLSX.utils.book_append_sheet(testWorkbook, testWorksheet, 'Test');
+      
+      // Try to create a blob
+      const testBlob = XLSX.write(testWorkbook, { bookType: 'xlsx', type: 'array' });
+      console.log('Test blob created, size:', testBlob.byteLength);
+      
+      return true;
+    } catch (error) {
+      console.error('XLSX test failed:', error);
+      return false;
+    }
+  };
+
   // Function to handle the actual export based on selected format
   const handleExportConfirm = () => {
     console.log('Export confirmed with format:', exportFormat);
+    
+    // Test XLSX library before proceeding with Excel export
+    if (exportFormat === 'excel') {
+      const xlsxWorking = testXLSX();
+      if (!xlsxWorking) {
+        alert('Excel export is not available. The XLSX library failed to load properly. Please try CSV export instead.');
+        return;
+      }
+    }
     
     // Format the date for filename
     const today = new Date();
@@ -3311,22 +3346,64 @@ Example:
   const exportExcel = (dateStr) => {
     try {
       console.log('Starting Excel export with', filteredFlashcards.length, 'cards');
+      console.log('XLSX library check:', typeof XLSX, XLSX?.version);
       
+      if (!XLSX || !XLSX.utils) {
+        throw new Error('XLSX library not loaded properly');
+      }
+      
+      // Helper function to clean and truncate text for Excel
+      const cleanTextForExcel = (text, maxLength = 32000) => {
+        if (!text) return '';
+        
+        // Strip HTML tags
+        let cleanText = text.replace(/<[^>]*>/g, '');
+        
+        // Replace HTML entities
+        cleanText = cleanText
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+        
+        // Remove extra whitespace
+        cleanText = cleanText.replace(/\s+/g, ' ').trim();
+        
+        // Truncate if too long and add indicator
+        if (cleanText.length > maxLength) {
+          cleanText = cleanText.substring(0, maxLength - 20) + '... [TRUNCATED]';
+        }
+        
+        return cleanText;
+      };
+
       // Create worksheet data in the same format as import
       const headers = ['id', 'number', 'category', 'question', 'answer', 'additional_info'];
       const worksheetData = [
         headers,
-        ...filteredFlashcards.map(card => [
-          card.id || '',
-          card.csvNumber || '',
-          card.category || 'Uncategorized',
-          card.question || '',
-          card.answer || '',
-          card.additional_info || ''
-        ])
+        ...filteredFlashcards.map((card, index) => {
+          const row = [
+            card.id || '',
+            card.csvNumber || '',
+            card.category || 'Uncategorized',
+            cleanTextForExcel(card.question),
+            cleanTextForExcel(card.answer),
+            cleanTextForExcel(card.additional_info)
+          ];
+          
+          // Log any cards with very long content
+          if ((card.question || '').length > 10000 || (card.answer || '').length > 10000) {
+            console.log(`Card ${index + 1} has long content - Question: ${(card.question || '').length} chars, Answer: ${(card.answer || '').length} chars`);
+          }
+          
+          return row;
+        })
       ];
 
       console.log('Worksheet data prepared, creating workbook...');
+      console.log('Sample data:', worksheetData.slice(0, 2));
 
       // Create workbook and worksheet
       const workbook = XLSX.utils.book_new();
@@ -3350,31 +3427,44 @@ Example:
       // Write and download the file
       const filename = `flashcards_export_${dateStr}.xlsx`;
       
-      try {
-        XLSX.writeFile(workbook, filename);
-        console.log('Excel export completed successfully:', filename);
-      } catch (writeError) {
-        console.warn('XLSX.writeFile failed, trying manual blob approach:', writeError);
-        
-        // Fallback: create blob manually and trigger download
-        const workbookBlob = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([workbookBlob], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', filename);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
+      // Always use the manual blob approach for better browser compatibility
+      console.log('Using manual blob approach for Excel export...');
+      
+      const workbookBlob = XLSX.write(workbook, { 
+        bookType: 'xlsx', 
+        type: 'array',
+        compression: true 
+      });
+      
+      const blob = new Blob([workbookBlob], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      
+      console.log('Blob created, size:', blob.size, 'bytes');
+      
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      
+      console.log('Triggering download...');
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        
-        console.log('Excel export completed using fallback method:', filename);
-      }
+      }, 100);
+      
+      console.log('Excel export completed successfully:', filename);
+      alert(`Excel file "${filename}" should be downloading now!`);
+      
     } catch (error) {
       console.error('Error during Excel export:', error);
-      alert(`Excel export failed: ${error.message}`);
+      console.error('Error stack:', error.stack);
+      alert(`Excel export failed: ${error.message}\n\nCheck browser console for details.`);
     }
   };
 
