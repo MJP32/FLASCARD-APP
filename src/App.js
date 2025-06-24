@@ -3379,21 +3379,46 @@ Example:
   const checkContentLength = (cards) => {
     let totalLength = 0;
     let hasLongContent = false;
+    let maxFieldLength = 0;
+    let problemCard = null;
     
-    cards.forEach(card => {
+    cards.forEach((card, index) => {
       const questionLength = (card.question || '').length;
       const answerLength = (card.answer || '').length;
       const additionalLength = (card.additional_info || '').length;
       
       totalLength += questionLength + answerLength + additionalLength;
       
-      if (questionLength > 20000 || answerLength > 20000 || additionalLength > 20000) {
+      const maxCurrentField = Math.max(questionLength, answerLength, additionalLength);
+      if (maxCurrentField > maxFieldLength) {
+        maxFieldLength = maxCurrentField;
+        problemCard = { index, questionLength, answerLength, additionalLength };
+      }
+      
+      // Excel limit is 32,767 characters per cell - be more conservative
+      if (questionLength > 30000 || answerLength > 30000 || additionalLength > 30000) {
         hasLongContent = true;
       }
     });
     
-    // Consider it too long if total content > 1MB or any single field > 20K chars
-    return totalLength > 1000000 || hasLongContent;
+    console.log('Content analysis:', {
+      totalCards: cards.length,
+      totalLength,
+      maxFieldLength,
+      hasLongContent,
+      problemCard
+    });
+    
+    // Consider it too long if any single field > 30K chars (close to Excel's 32K limit)
+    const shouldSplit = hasLongContent || maxFieldLength > 30000;
+    
+    if (shouldSplit) {
+      console.log('Will split into categories due to long content');
+    } else {
+      console.log('Content size is manageable for single file');
+    }
+    
+    return shouldSplit;
   };
 
   // Function to create a single Excel workbook from cards
@@ -3432,6 +3457,113 @@ Example:
     return workbook;
   };
 
+  // Function to create categorized ZIP export
+  const createCategorizedExport = async (dateStr) => {
+    console.log('Creating categorized export...');
+    
+    // Group cards by category
+    const cardsByCategory = {};
+    filteredFlashcards.forEach(card => {
+      const category = card.category || 'Uncategorized';
+      if (!cardsByCategory[category]) {
+        cardsByCategory[category] = [];
+      }
+      cardsByCategory[category].push(card);
+    });
+    
+    const categories = Object.keys(cardsByCategory);
+    console.log(`Creating ${categories.length} category files:`, categories);
+    
+    // Create ZIP file
+    const zip = new JSZip();
+    const folder = zip.folder('Flashcards_by_Category');
+    
+    // Create Excel file for each category
+    for (const category of categories) {
+      const categoryCards = cardsByCategory[category];
+      const sanitizedCategory = category.replace(/[<>:"/\\|?*]/g, '_');
+      
+      try {
+        const workbook = createExcelWorkbook(categoryCards, sanitizedCategory);
+        const workbookBlob = XLSX.write(workbook, { 
+          bookType: 'xlsx', 
+          type: 'array',
+          compression: true 
+        });
+        
+        folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.xlsx`, workbookBlob);
+        console.log(`✅ Added ${sanitizedCategory} with ${categoryCards.length} cards`);
+      } catch (categoryError) {
+        console.error(`❌ Failed to create Excel for category ${category}:`, categoryError);
+        // If even individual categories fail, create a CSV file instead
+        const csvData = [
+          ['id', 'number', 'category', 'question', 'answer', 'additional_info'],
+          ...categoryCards.map(card => [
+            card.id || '',
+            card.csvNumber || '',
+            card.category || 'Uncategorized',
+            (card.question || '').replace(/"/g, '""'),
+            (card.answer || '').replace(/"/g, '""'),
+            (card.additional_info || '').replace(/"/g, '""')
+          ])
+        ].map(row => row.join(',')).join('\n');
+        
+        folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.csv`, csvData);
+        console.log(`📄 Added ${sanitizedCategory} as CSV fallback`);
+      }
+    }
+    
+    // Add a summary file
+    const summaryData = [
+      ['Category', 'Card Count', 'File Name'],
+      ...categories.map(category => [
+        category,
+        cardsByCategory[category].length,
+        `${category.replace(/[<>:"/\\|?*]/g, '_')}_${cardsByCategory[category].length}_cards.xlsx`
+      ]),
+      ['Total', filteredFlashcards.length, `${categories.length} files`]
+    ];
+    
+    const summaryWorkbook = XLSX.utils.book_new();
+    const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
+    summaryWorksheet['!cols'] = [{ width: 20 }, { width: 15 }, { width: 40 }];
+    XLSX.utils.book_append_sheet(summaryWorkbook, summaryWorksheet, 'Export Summary');
+    
+    const summaryBlob = XLSX.write(summaryWorkbook, { 
+      bookType: 'xlsx', 
+      type: 'array',
+      compression: true 
+    });
+    
+    folder.file('_Export_Summary.xlsx', summaryBlob);
+    
+    // Generate ZIP file
+    console.log('Generating ZIP file...');
+    const zipBlob = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 }
+    });
+    
+    // Download ZIP file
+    const zipFilename = `flashcards_export_${dateStr}_by_category.zip`;
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(zipBlob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', zipFilename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    
+    setTimeout(() => {
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 100);
+    
+    console.log('ZIP export completed successfully:', zipFilename);
+    alert(`ZIP file "${zipFilename}" downloaded successfully!\n\nContains ${categories.length} files organized by category, plus a summary file.`);
+  };
+
   // Function to export cards as Excel file(s)
   const exportExcel = async (dateStr) => {
     try {
@@ -3450,64 +3582,12 @@ Example:
       const isTooLong = checkContentLength(filteredFlashcards);
       
       if (!isTooLong) {
-        // Simple single-file export
-        console.log('Content size is manageable, creating single Excel file...');
+        // Try simple single-file export first
+        console.log('Content size is manageable, attempting single Excel file...');
         
-        const workbook = createExcelWorkbook(filteredFlashcards);
-        const filename = `flashcards_export_${dateStr}.xlsx`;
-        
-        const workbookBlob = XLSX.write(workbook, { 
-          bookType: 'xlsx', 
-          type: 'array',
-          compression: true 
-        });
-        
-        const blob = new Blob([workbookBlob], { 
-          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-        });
-        
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', filename);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }, 100);
-        
-        console.log('Single Excel export completed successfully:', filename);
-        alert(`Excel file "${filename}" downloaded successfully!`);
-        
-      } else {
-        // Content is too long - split by categories and create ZIP
-        console.log('Content is too large, splitting by categories...');
-        
-        // Group cards by category
-        const cardsByCategory = {};
-        filteredFlashcards.forEach(card => {
-          const category = card.category || 'Uncategorized';
-          if (!cardsByCategory[category]) {
-            cardsByCategory[category] = [];
-          }
-          cardsByCategory[category].push(card);
-        });
-        
-        const categories = Object.keys(cardsByCategory);
-        console.log(`Creating ${categories.length} category files:`, categories);
-        
-        // Create ZIP file
-        const zip = new JSZip();
-        const folder = zip.folder('Flashcards_by_Category');
-        
-        // Create Excel file for each category
-        for (const category of categories) {
-          const categoryCards = cardsByCategory[category];
-          const sanitizedCategory = category.replace(/[<>:"/\\|?*]/g, '_'); // Remove invalid filename characters
-          const workbook = createExcelWorkbook(categoryCards, sanitizedCategory);
+        try {
+          const workbook = createExcelWorkbook(filteredFlashcards);
+          const filename = `flashcards_export_${dateStr}.xlsx`;
           
           const workbookBlob = XLSX.write(workbook, { 
             bookType: 'xlsx', 
@@ -3515,59 +3595,43 @@ Example:
             compression: true 
           });
           
-          folder.file(`${sanitizedCategory}_${categoryCards.length}_cards.xlsx`, workbookBlob);
-          console.log(`Added ${sanitizedCategory} with ${categoryCards.length} cards`);
+          const blob = new Blob([workbookBlob], { 
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+          });
+          
+          const link = document.createElement('a');
+          const url = URL.createObjectURL(blob);
+          link.setAttribute('href', url);
+          link.setAttribute('download', filename);
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }, 100);
+          
+          console.log('Single Excel export completed successfully:', filename);
+          alert(`Excel file "${filename}" downloaded successfully!`);
+          
+        } catch (singleFileError) {
+          console.warn('Single file export failed, falling back to categorized export:', singleFileError);
+          
+          // Check if it's the character limit error
+          if (singleFileError.message && singleFileError.message.includes('32767')) {
+            console.log('Character limit exceeded, automatically switching to categorized export...');
+            alert('Content is too large for a single Excel file. Creating separate files by category...');
+            await createCategorizedExport(dateStr);
+          } else {
+            throw singleFileError; // Re-throw if it's a different error
+          }
         }
         
-        // Add a summary file
-        const summaryData = [
-          ['Category', 'Card Count', 'File Name'],
-          ...categories.map(category => [
-            category,
-            cardsByCategory[category].length,
-            `${category.replace(/[<>:"/\\|?*]/g, '_')}_${cardsByCategory[category].length}_cards.xlsx`
-          ]),
-          ['Total', filteredFlashcards.length, `${categories.length} files`]
-        ];
-        
-        const summaryWorkbook = XLSX.utils.book_new();
-        const summaryWorksheet = XLSX.utils.aoa_to_sheet(summaryData);
-        summaryWorksheet['!cols'] = [{ width: 20 }, { width: 15 }, { width: 40 }];
-        XLSX.utils.book_append_sheet(summaryWorkbook, summaryWorksheet, 'Export Summary');
-        
-        const summaryBlob = XLSX.write(summaryWorkbook, { 
-          bookType: 'xlsx', 
-          type: 'array',
-          compression: true 
-        });
-        
-        folder.file('_Export_Summary.xlsx', summaryBlob);
-        
-        // Generate ZIP file
-        console.log('Generating ZIP file...');
-        const zipBlob = await zip.generateAsync({
-          type: 'blob',
-          compression: 'DEFLATE',
-          compressionOptions: { level: 6 }
-        });
-        
-        // Download ZIP file
-        const zipFilename = `flashcards_export_${dateStr}_by_category.zip`;
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(zipBlob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', zipFilename);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        
-        setTimeout(() => {
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        }, 100);
-        
-        console.log('ZIP export completed successfully:', zipFilename);
-        alert(`ZIP file "${zipFilename}" downloaded successfully!\n\nContains ${categories.length} Excel files organized by category, plus a summary file.`);
+      } else {
+        // Content is pre-determined to be too long - split by categories
+        console.log('Content is too large, creating categorized export...');
+        await createCategorizedExport(dateStr);
       }
       
     } catch (error) {
