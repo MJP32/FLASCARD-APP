@@ -23,7 +23,13 @@
       "Bash(npm uninstall:*)",
       "Bash(rm:*)",
       "Bash(pkill:*)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(/bin/pwd)",
+      "Bash(env)",
+      "Bash(test)",
+      "Bash(/bin/rm:*)",
+      "Bash(SHELL=/bin/bash npm ci)",
+      "Bash(export SHELL=/bin/bash)"
     ],
     "deny": []
   }

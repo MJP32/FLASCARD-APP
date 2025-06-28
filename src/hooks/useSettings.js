@@ -42,7 +42,13 @@ export const useSettings = (firebaseApp, userId) => {
 
   // Load user settings from Firestore when user and db are ready
   useEffect(() => {
-    if (!db || !userId) return;
+    if (!db) return;
+    
+    // If no user, just mark settings as loaded with defaults
+    if (!userId) {
+      setSettingsLoaded(true);
+      return;
+    }
 
     const loadUserSettings = async () => {
       setIsLoading(true);

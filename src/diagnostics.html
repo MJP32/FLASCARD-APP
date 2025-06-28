@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React App Diagnostics</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>React App Diagnostics</h1>
+        
+        <div id="diagnostics"></div>
+        
+        <h2>Actions:</h2>
+        <button onclick="checkLocalStorage()">Check LocalStorage</button>
+        <button onclick="clearAllStorage()">Clear All Storage</button>
+        <button onclick="checkConsoleErrors()">Check Console</button>
+        <button onclick="testReactLoad()">Test React Load</button>
+    </div>
+
+    <script>
+        const diag = document.getElementById('diagnostics');
+        
+        function addStatus(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = message;
+            diag.appendChild(div);
+        }
+        
+        // Check if root element exists
+        window.onload = function() {
+            addStatus('<strong>Page Load Complete</strong>', 'success');
+            
+            // Check for root element
+            const root = document.getElementById('root');
+            if (root) {
+                addStatus('✓ Root element found', 'success');
+            } else {
+                addStatus('✗ Root element NOT found!', 'error');
+            }
+            
+            // Check for React
+            if (window.React) {
+                addStatus('✓ React is loaded globally', 'success');
+            } else {
+                addStatus('⚠ React not found in global scope (this is normal for modern React)', 'info');
+            }
+            
+            // Check localStorage
+            try {
+                const testKey = 'test_' + Date.now();
+                localStorage.setItem(testKey, 'test');
+                localStorage.removeItem(testKey);
+                addStatus('✓ LocalStorage is working', 'success');
+            } catch (e) {
+                addStatus('✗ LocalStorage error: ' + e.message, 'error');
+            }
+            
+            // Check for service worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    if (registrations.length > 0) {
+                        addStatus(`⚠ ${registrations.length} service worker(s) found. This might cache old files.`, 'info');
+                    } else {
+                        addStatus('✓ No service workers registered', 'success');
+                    }
+                });
+            }
+            
+            // Display browser info
+            addStatus(`<strong>Browser Info:</strong><br>
+                User Agent: ${navigator.userAgent}<br>
+                Language: ${navigator.language}<br>
+                Online: ${navigator.onLine ? 'Yes' : 'No'}`, 'info');
+        };
+        
+        function checkLocalStorage() {
+            const items = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                try {
+                    items[key] = localStorage.getItem(key);
+                } catch (e) {
+                    items[key] = 'Error reading value';
+                }
+            }
+            addStatus(`<strong>LocalStorage Contents:</strong><pre>${JSON.stringify(items, null, 2)}</pre>`, 'info');
+        }
+        
+        function clearAllStorage() {
+            if (confirm('This will clear all localStorage, sessionStorage, and unregister service workers. Continue?')) {
+                try {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    
+                    // Unregister service workers
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                            for(let registration of registrations) {
+                                registration.unregister();
+                            }
+                        });
+                    }
+                    
+                    // Clear caches
+                    if ('caches' in window) {
+                        caches.keys().then(names => {
+                            names.forEach(name => {
+                                caches.delete(name);
+                            });
+                        });
+                    }
+                    
+                    addStatus('✓ All storage cleared! Please refresh the page.', 'success');
+                } catch (e) {
+                    addStatus('✗ Error clearing storage: ' + e.message, 'error');
+                }
+            }
+        }
+        
+        function checkConsoleErrors() {
+            addStatus('Check the browser console (F12) for any error messages.', 'info');
+            console.log('=== DIAGNOSTIC TEST ===');
+            console.log('If you see this message, console logging is working.');
+            console.log('Look for any red error messages above or below this.');
+            console.log('===================');
+        }
+        
+        function testReactLoad() {
+            addStatus('Creating a test React element...', 'info');
+            
+            const testDiv = document.createElement('div');
+            testDiv.id = 'react-test';
+            testDiv.style.border = '2px solid blue';
+            testDiv.style.padding = '20px';
+            testDiv.style.marginTop = '20px';
+            testDiv.innerHTML = '<h3>React Test Container</h3><div id="react-test-root"></div>';
+            document.querySelector('.container').appendChild(testDiv);
+            
+            // Try to load React directly
+            const script = document.createElement('script');
+            script.innerHTML = `
+                try {
+                    const e = React.createElement;
+                    const domContainer = document.querySelector('#react-test-root');
+                    const root = ReactDOM.createRoot(domContainer);
+                    root.render(e('h4', null, 'React is working! 🎉'));
+                } catch (error) {
+                    document.querySelector('#react-test-root').innerHTML = 
+                        '<p style="color: red;">React test failed: ' + error.message + '</p>';
+                }
+            `;
+            
+            // First load React and ReactDOM from CDN
+            const reactScript = document.createElement('script');
+            reactScript.crossOrigin = true;
+            reactScript.src = "https://unpkg.com/react@18/umd/react.development.js";
+            
+            const reactDOMScript = document.createElement('script');
+            reactDOMScript.crossOrigin = true;
+            reactDOMScript.src = "https://unpkg.com/react-dom@18/umd/react-dom.development.js";
+            
+            reactScript.onload = () => {
+                document.head.appendChild(reactDOMScript);
+            };
+            
+            reactDOMScript.onload = () => {
+                document.head.appendChild(script);
+                addStatus('✓ React CDN test executed', 'success');
+            };
+            
+            document.head.appendChild(reactScript);
+        }
+    </script>
+</body>
+</html>

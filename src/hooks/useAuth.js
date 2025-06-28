@@ -5,7 +5,8 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
   onAuthStateChanged, 
-  signOut 
+  signOut,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 
 /**
@@ -139,6 +140,28 @@ export const useAuth = (firebaseApp) => {
   };
 
   /**
+   * Send password reset email
+   * @param {string} email - User email
+   * @returns {Promise<void>}
+   */
+  const sendPasswordReset = async (email) => {
+    if (!auth) throw new Error('Auth not initialized');
+    
+    setIsLoading(true);
+    setAuthError('');
+    
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error) {
+      console.error('Password reset error:', error);
+      setAuthError(error.message);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
    * Clear authentication error
    */
   const clearAuthError = () => {
@@ -159,6 +182,7 @@ export const useAuth = (firebaseApp) => {
     signInWithEmail,
     createUserWithEmail,
     signOutUser,
+    sendPasswordReset,
     clearAuthError
   };
 };

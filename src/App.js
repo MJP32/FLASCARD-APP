@@ -92,6 +92,7 @@ function App() {
     signInWithEmail,
     createUserWithEmail,
     signOutUser,
+    sendPasswordReset,
     clearAuthError
   } = useAuth(firebaseApp);
 
@@ -142,6 +143,21 @@ function App() {
     clearError: clearSettingsError
   } = useSettings(firebaseApp, userId);
 
+  // Sync login screen visibility with authentication state
+  useEffect(() => {
+    if (isAuthReady) {
+      if (userId) {
+        // User is authenticated, hide login screen
+        setShowLoginScreen(false);
+        console.log('User authenticated, hiding login screen');
+      } else {
+        // No user, show login screen
+        setShowLoginScreen(true);
+        console.log('No user found, showing login screen');
+      }
+    }
+  }, [isAuthReady, userId]);
+
   // Handle authentication
   const handleLogin = async (loginType, emailVal = '', passwordVal = '') => {
     clearAuthError();
@@ -161,19 +177,36 @@ function App() {
         default:
           throw new Error('Invalid login type');
       }
-      setShowLoginScreen(false);
+      // setShowLoginScreen(false); // This will be handled by the useEffect
     } catch (error) {
       console.error('Login error:', error);
       setError(error.message || 'Authentication failed');
     }
   };
 
+  // Handle password reset
+  const handlePasswordReset = async (resetEmail) => {
+    clearAuthError();
+    setError('');
+    
+    try {
+      await sendPasswordReset(resetEmail);
+      setMessage('Password reset email sent! Check your inbox.');
+    } catch (error) {
+      console.error('Password reset error:', error);
+      setError(error.message || 'Failed to send password reset email');
+    }
+  };
+
   const handleSignOut = async () => {
     try {
       await signOutUser();
-      setShowLoginScreen(true);
+      // setShowLoginScreen(true); // This will be handled by the useEffect
       setEmail('');
       setPassword('');
+      // Clear any user-specific state
+      setMessage('');
+      setError('');
     } catch (error) {
       console.error('Sign out error:', error);
       setError('Failed to sign out');
@@ -364,8 +397,14 @@ function App() {
       console.log('✅ Card review successful!');
       setMessage(`Card reviewed as ${rating.toUpperCase()}! Next review in ${interval} day${interval !== 1 ? 's' : ''}.`);
       
-      // Hide answer - let the filtering system handle card navigation
+      // Hide answer and move to next card
       setShowAnswer(false);
+      
+      // Add a small delay before moving to next card for better UX
+      setTimeout(() => {
+        nextCard();
+      }, 500);
+      
       clearMessage();
       
     } catch (error) {
@@ -507,6 +546,34 @@ function App() {
           event.preventDefault();
           nextCard();
           break;
+        case '1':
+          // Only allow rating when answer is shown
+          if (showAnswer && getCurrentCard()) {
+            event.preventDefault();
+            handleReviewCard('again');
+          }
+          break;
+        case '2':
+          // Only allow rating when answer is shown
+          if (showAnswer && getCurrentCard()) {
+            event.preventDefault();
+            handleReviewCard('hard');
+          }
+          break;
+        case '3':
+          // Only allow rating when answer is shown
+          if (showAnswer && getCurrentCard()) {
+            event.preventDefault();
+            handleReviewCard('good');
+          }
+          break;
+        case '4':
+          // Only allow rating when answer is shown
+          if (showAnswer && getCurrentCard()) {
+            event.preventDefault();
+            handleReviewCard('easy');
+          }
+          break;
         case 'c':
           if (event.ctrlKey || event.metaKey) return; // Don't interfere with copy
           event.preventDefault();
@@ -537,7 +604,16 @@ function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showAnswer, nextCard, prevCard, setShowAnswer]);
+  }, [showAnswer, nextCard, prevCard, setShowAnswer, handleReviewCard, getCurrentCard]);
+
+  // Debug logging for loading state
+  console.log('App loading state:', {
+    isFirebaseInitialized,
+    isAuthReady,
+    settingsLoaded,
+    userId,
+    showLoginScreen
+  });
 
   // Show loading screen while initializing
   if (!isFirebaseInitialized || !isAuthReady || !settingsLoaded) {
@@ -546,6 +622,11 @@ function App() {
         <div className="loading-content">
           <div className="loading-spinner"></div>
           <p>Loading Flashcard App...</p>
+          <div style={{ marginTop: '10px', fontSize: '12px', opacity: 0.7 }}>
+            <p>Firebase: {isFirebaseInitialized ? '✅' : '⏳'}</p>
+            <p>Auth: {isAuthReady ? '✅' : '⏳'}</p>
+            <p>Settings: {settingsLoaded ? '✅' : '⏳'}</p>
+          </div>
         </div>
       </div>
     );
@@ -566,6 +647,7 @@ function App() {
         handleAnonymousLogin={() => {
           handleLogin('anonymous');
         }}
+        handlePasswordReset={handlePasswordReset}
         authError={authError || error}
         email={email}
         setEmail={setEmail}
@@ -824,7 +906,7 @@ function App() {
         <div className="footer-shortcuts">
           <small>
             Shortcuts: <kbd>Space</kbd> Show Answer | <kbd>←/→</kbd> Navigate | 
-            <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export
+            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export
           </small>
         </div>
       </footer>
