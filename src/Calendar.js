@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
+const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible = false }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -26,8 +26,8 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
     };
   }, [onClose, showModal]);
   
-  // Debug logging
-  console.log('Calendar component received calendarDates:', calendarDates);
+  // Debug logging (commented out to reduce console spam)
+  // console.log('Calendar component received calendarDates:', calendarDates);
 
   const navigateMonth = (direction) => {
     const newDate = new Date(currentDate);
@@ -137,14 +137,20 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
     weeks.push(days.slice(i, i + 7));
   }
 
+  // Don't render if not visible
+  if (!isVisible) {
+    return null;
+  }
+
   return (
-    <div style={{ 
-      width: '480px', 
-      backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
-      borderRadius: '8px', 
-      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', 
-      border: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}` 
-    }}>
+    <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
+      <div className="modal-content" style={{ 
+        width: '480px', 
+        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
+        borderRadius: '8px', 
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', 
+        border: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}` 
+      }}>
       {/* Header */}
       <div style={{ 
         display: 'flex', 
@@ -516,6 +522,7 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false }) => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

@@ -21,7 +21,9 @@
       "Bash(awk:*)",
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(pkill:*)",
+      "Bash(true)"
     ],
     "deny": []
   }

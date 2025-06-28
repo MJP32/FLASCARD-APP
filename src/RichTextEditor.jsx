@@ -304,6 +304,75 @@ greetUser("World");</div>
     }, 100);
   };
 
+  const insertImage = () => {
+    // Save current state before inserting image
+    saveToHistory(editorRef.current.innerHTML);
+    
+    // Create file input for image selection
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      // Check file size (limit to 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image too large! Please select an image smaller than 5MB.');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64Data = e.target.result;
+        
+        // Create image element
+        const img = document.createElement('img');
+        img.src = base64Data;
+        img.style.cssText = 'max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);';
+        img.alt = file.name;
+        img.title = file.name;
+        
+        // Insert image at cursor position
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(img);
+          
+          // Add a line break after the image for easy continuation
+          const lineBreak = document.createElement('br');
+          range.insertNode(lineBreak);
+          
+          // Position cursor after the image
+          const newRange = document.createRange();
+          newRange.setStartAfter(lineBreak);
+          newRange.setEndAfter(lineBreak);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        }
+        
+        // Trigger onChange to save the new content
+        if (onChange) {
+          setTimeout(() => {
+            onChange(editorRef.current.innerHTML);
+          }, 100);
+        }
+      };
+      
+      reader.readAsDataURL(file);
+      
+      // Clean up
+      document.body.removeChild(fileInput);
+    };
+    
+    // Add to DOM and trigger click
+    document.body.appendChild(fileInput);
+    fileInput.click();
+  };
+
   const setupCodeBlockFeatures = (codeBlock, uniqueId) => {
     console.log('Setting up code block features for:', uniqueId);
     const languageSelector = codeBlock.querySelector('.language-selector');
@@ -1772,6 +1841,14 @@ greetUser("World");</div>
             title="Code Block with Syntax Highlighting"
           >
             💻
+          </button>
+          <button
+            type="button"
+            onClick={insertImage}
+            className="px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-sm"
+            title="Insert Image"
+          >
+            🖼️
           </button>
         </div>
       </div>
