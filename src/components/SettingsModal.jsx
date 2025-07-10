@@ -39,6 +39,9 @@ const SettingsModal = ({
   const [localApiKeys, setLocalApiKeys] = useState(apiKeys);
   const [localSelectedProvider, setLocalSelectedProvider] = useState(selectedProvider);
   const [showFsrsExplanation, setShowFsrsExplanation] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState(null);
 
   // Update local params when props change
   useEffect(() => {
@@ -82,6 +85,51 @@ const SettingsModal = ({
   const handleSaveApiKeys = () => {
     if (onApiKeysUpdate) {
       onApiKeysUpdate(localApiKeys, localSelectedProvider);
+    }
+  };
+
+  const handleSendFeedback = async () => {
+    if (!feedbackText.trim()) {
+      setFeedbackStatus({ type: 'error', message: 'Please enter your feedback before sending.' });
+      return;
+    }
+
+    setFeedbackSending(true);
+    setFeedbackStatus(null);
+
+    try {
+      // Create email subject and body
+      const subject = encodeURIComponent('FSRS Flashcards - User Feedback');
+      const body = encodeURIComponent(
+        `User Feedback\n\n` +
+        `From: ${userDisplayName || 'Anonymous User'}\n` +
+        `Date: ${new Date().toLocaleString()}\n` +
+        `Total Cards: ${flashcards.length}\n\n` +
+        `Feedback:\n${feedbackText}\n\n` +
+        `---\n` +
+        `Sent from FSRS Flashcards App`
+      );
+
+      // Create mailto link
+      const mailtoLink = `mailto:admin@fsrslearn.com?subject=${subject}&body=${body}`;
+      
+      // Open email client
+      window.location.href = mailtoLink;
+      
+      // Clear feedback and show success
+      setFeedbackText('');
+      setFeedbackStatus({ 
+        type: 'success', 
+        message: 'Email client opened! Please send the email to complete your feedback submission.' 
+      });
+    } catch (error) {
+      console.error('Feedback error:', error);
+      setFeedbackStatus({ 
+        type: 'error', 
+        message: 'Failed to open email client. Please try again.' 
+      });
+    } finally {
+      setFeedbackSending(false);
     }
   };
 
@@ -359,6 +407,65 @@ const SettingsModal = ({
               </div>
             </section>
           )}
+
+          {/* User Feedback Section */}
+          <section className="settings-section">
+            <h3>User Feedback</h3>
+            <div className="feedback-section">
+              <p className="section-description">
+                We value your feedback! Share your thoughts, suggestions, or report issues to help us improve FSRS Flashcards.
+              </p>
+              
+              <div className="feedback-form">
+                <label htmlFor="feedback-text" className="feedback-label">
+                  Your Feedback
+                </label>
+                <textarea
+                  id="feedback-text"
+                  className="feedback-textarea"
+                  placeholder="Tell us what you think about FSRS Flashcards, suggest new features, or report any issues you've encountered..."
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows="6"
+                  maxLength="2000"
+                  disabled={feedbackSending}
+                />
+                <div className="feedback-char-count">
+                  {feedbackText.length}/2000 characters
+                </div>
+                
+                {feedbackStatus && (
+                  <div className={`feedback-status ${feedbackStatus.type}`}>
+                    {feedbackStatus.type === 'success' ? '✅' : '❌'} {feedbackStatus.message}
+                  </div>
+                )}
+                
+                <button 
+                  className="btn btn-primary"
+                  onClick={handleSendFeedback}
+                  disabled={feedbackSending || !feedbackText.trim()}
+                >
+                  {feedbackSending ? (
+                    <>
+                      <span className="loading-spinner-small"></span>
+                      Preparing Email...
+                    </>
+                  ) : (
+                    <>
+                      📧 Send Email to admin@fsrslearn.com
+                    </>
+                  )}
+                </button>
+                
+                <p className="feedback-note">
+                  <small>
+                    Clicking "Send Email" will open your default email client with your feedback pre-filled. 
+                    Simply send the email to complete the submission.
+                  </small>
+                </p>
+              </div>
+            </div>
+          </section>
 
           {/* FSRS Parameters Section */}
           {showIntervalSettings && (

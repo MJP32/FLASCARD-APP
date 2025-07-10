@@ -91,12 +91,7 @@ const FlashcardDisplay = ({
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      {/* Card Counter */}
-      <div className="card-counter">
-        Card {currentIndex + 1} of {totalCards}
-      </div>
-
-      {/* Card Info Header */}
+      {/* Card Info Header - Must be first for absolute positioning */}
       <div className="card-info-header">
         {/* Category Badge */}
         {card.category && (
@@ -118,147 +113,158 @@ const FlashcardDisplay = ({
         </div>
       </div>
 
-      {/* Question Section */}
-      <div className="flashcard-section question-section">
-        <h3 className="section-label">Question</h3>
-        <div 
-          className="content"
-          dangerouslySetInnerHTML={{ __html: card.question || 'No question provided' }}
-        />
+      {/* Card Counter */}
+      <div className="card-counter">
+        Card {currentIndex + 1} of {totalCards}
       </div>
 
-      {/* Show Answer Button */}
-      {!showAnswer && (
-        <button 
-          className="show-answer-btn"
-          onClick={onShowAnswer}
-          aria-label="Show answer"
-        >
-          Show Answer
-        </button>
-      )}
+      {/* Main Content Area */}
+      <div className="flashcard-content">
+        {/* Question Section */}
+        <div className="flashcard-section question-section">
+          <h3 className="section-label">Question</h3>
+          <div 
+            className="content"
+            dangerouslySetInnerHTML={{ __html: card.question || 'No question provided' }}
+          />
+        </div>
 
-      {/* Answer Section */}
-      {showAnswer && (
-        <>
-          <div className="flashcard-section answer-section">
-            <h3 className="section-label">Answer</h3>
-            <div 
-              className="content"
-              dangerouslySetInnerHTML={{ __html: card.answer || 'No answer provided' }}
-            />
-          </div>
-
-          {/* Additional Info Section */}
-          {card.additional_info && (
-            <div className="flashcard-section additional-info-section">
-              <h3 className="section-label">Additional Information</h3>
+        {/* Answer Section */}
+        {showAnswer && (
+          <>
+            <div className="flashcard-section answer-section">
+              <h3 className="section-label">Answer</h3>
               <div 
                 className="content"
-                dangerouslySetInnerHTML={{ __html: card.additional_info }}
+                dangerouslySetInnerHTML={{ __html: card.answer || 'No answer provided' }}
               />
             </div>
-          )}
 
-          {/* Review Buttons */}
-          {onReviewCard && (
-            <div className="review-buttons">
-              <h3 className="section-label">How well did you know this?</h3>
-              <div className="review-button-group">
-                <button 
-                  className="review-btn again-btn"
-                  onClick={() => onReviewCard('again')}
-                  title="Completely forgot (1)"
-                >
-                  <span className="btn-emoji">😵</span>
-                  <span className="btn-text">Again</span>
-                  <span className="btn-shortcut">1</span>
-                </button>
-                
-                <button 
-                  className="review-btn hard-btn"
-                  onClick={() => onReviewCard('hard')}
-                  title="Hard to remember (2)"
-                >
-                  <span className="btn-emoji">😓</span>
-                  <span className="btn-text">Hard</span>
-                  <span className="btn-shortcut">2</span>
-                </button>
-                
-                <button 
-                  className="review-btn good-btn"
-                  onClick={() => onReviewCard('good')}
-                  title="Remembered with effort (3)"
-                >
-                  <span className="btn-emoji">😊</span>
-                  <span className="btn-text">Good</span>
-                  <span className="btn-shortcut">3</span>
-                </button>
-                
-                <button 
-                  className="review-btn easy-btn"
-                  onClick={() => onReviewCard('easy')}
-                  title="Easy to remember (4)"
-                >
-                  <span className="btn-emoji">😎</span>
-                  <span className="btn-text">Easy</span>
-                  <span className="btn-shortcut">4</span>
-                </button>
+            {/* Additional Info Section */}
+            {card.additional_info && (
+              <div className="flashcard-section additional-info-section">
+                <h3 className="section-label">Additional Information</h3>
+                <div 
+                  className="content"
+                  dangerouslySetInnerHTML={{ __html: card.additional_info }}
+                />
               </div>
+            )}
+
+            {/* Review Buttons */}
+            {onReviewCard && (
+              <div className="review-buttons">
+                <h3 className="section-label">How well did you know this?</h3>
+                <div className="review-button-group">
+                  <button 
+                    className="review-btn again-btn"
+                    onClick={() => onReviewCard('again')}
+                    title="Completely forgot (1)"
+                  >
+                    <span className="btn-emoji">😵</span>
+                    <span className="btn-text">Again</span>
+                    <span className="btn-shortcut">1</span>
+                  </button>
+                  
+                  <button 
+                    className="review-btn hard-btn"
+                    onClick={() => onReviewCard('hard')}
+                    title="Hard to remember (2)"
+                  >
+                    <span className="btn-emoji">😓</span>
+                    <span className="btn-text">Hard</span>
+                    <span className="btn-shortcut">2</span>
+                  </button>
+                  
+                  <button 
+                    className="review-btn good-btn"
+                    onClick={() => onReviewCard('good')}
+                    title="Remembered with effort (3)"
+                  >
+                    <span className="btn-emoji">😊</span>
+                    <span className="btn-text">Good</span>
+                    <span className="btn-shortcut">3</span>
+                  </button>
+                  
+                  <button 
+                    className="review-btn easy-btn"
+                    onClick={() => onReviewCard('easy')}
+                    title="Easy to remember (4)"
+                  >
+                    <span className="btn-emoji">😎</span>
+                    <span className="btn-text">Easy</span>
+                    <span className="btn-shortcut">4</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Bottom Controls Section */}
+      <div className="flashcard-bottom">
+        {/* Show Answer Button */}
+        {!showAnswer && (
+          <button 
+            className="show-answer-btn"
+            onClick={onShowAnswer}
+            aria-label="Show answer"
+          >
+            Show Answer
+          </button>
+        )}
+
+        {/* Navigation Controls */}
+        <div className="navigation-controls">
+          <button 
+            className="nav-btn prev-btn"
+            onClick={onPreviousCard}
+            disabled={totalCards <= 1}
+            aria-label="Previous card"
+          >
+            ← Previous
+          </button>
+          
+          <button 
+            className="nav-btn next-btn"
+            onClick={onNextCard}
+            disabled={totalCards <= 1}
+            aria-label="Next card"
+          >
+            Next →
+          </button>
+        </div>
+
+        {/* Card Metadata */}
+        <div className="card-metadata">
+          {card.dueDate && (
+            <div className="due-date">
+              Due: {new Date(card.dueDate).toLocaleDateString()}
             </div>
           )}
-        </>
-      )}
-
-      {/* Navigation Controls */}
-      <div className="navigation-controls">
-        <button 
-          className="nav-btn prev-btn"
-          onClick={onPreviousCard}
-          disabled={totalCards <= 1}
-          aria-label="Previous card"
-        >
-          ← Previous
-        </button>
-        
-        <button 
-          className="nav-btn next-btn"
-          onClick={onNextCard}
-          disabled={totalCards <= 1}
-          aria-label="Next card"
-        >
-          Next →
-        </button>
-      </div>
-
-      {/* Card Metadata */}
-      <div className="card-metadata">
-        {card.dueDate && (
-          <div className="due-date">
-            Due: {new Date(card.dueDate).toLocaleDateString()}
-          </div>
-        )}
-        {card.lastReviewed && (
-          <div className="last-reviewed">
-            Last reviewed: {new Date(card.lastReviewed).toLocaleDateString()}
-          </div>
-        )}
-        {card.reviewCount !== undefined && (
-          <div className="review-count">
-            Reviews: {card.reviewCount}
-          </div>
-        )}
-      </div>
-
-      {/* Keyboard Shortcuts Hint */}
-      <div className="keyboard-hints">
-        <small>
-          Use <kbd>Space</kbd> or <kbd>Enter</kbd> to show answer, 
-          <kbd>←</kbd>/<kbd>→</kbd> arrows to navigate
-          {showAnswer && onReviewCard && (
-            <>, <kbd>1</kbd>-<kbd>4</kbd> for review</>
+          {card.lastReviewed && (
+            <div className="last-reviewed">
+              Last reviewed: {new Date(card.lastReviewed).toLocaleDateString()}
+            </div>
           )}
-        </small>
+          {card.reviewCount !== undefined && (
+            <div className="review-count">
+              Reviews: {card.reviewCount}
+            </div>
+          )}
+        </div>
+
+        {/* Keyboard Shortcuts Hint */}
+        <div className="keyboard-hints">
+          <small>
+            Use <kbd>Space</kbd> or <kbd>Enter</kbd> to show answer, 
+            <kbd>←</kbd>/<kbd>→</kbd> arrows to navigate
+            {showAnswer && onReviewCard && (
+              <>, <kbd>1</kbd>-<kbd>4</kbd> for review</>
+            )}
+          </small>
+        </div>
       </div>
     </div>
   );

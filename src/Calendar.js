@@ -81,12 +81,16 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
     
     const date = new Date(year, month - 1, day);
     const due = getCardsForDay(day);
+    const isPastDay = date < today;
+    
     console.log('Calendar day pressed:', day, 'due cards found:', due);
-    if (due) {
+    
+    // Show modal for days with cards or past days without cards (smiley face days)
+    if (due || (isPastDay && !due)) {
       const modalDataToSet = {
         date: date.toLocaleDateString(),
-        value: due.cardCount,
-        type: 'cards'
+        value: due ? due.cardCount : 0,
+        type: due && due.cardCount > 0 ? 'cards' : 'completed'
       };
       console.log('Setting modal data:', modalDataToSet);
       setModalData(modalDataToSet);
@@ -334,6 +338,7 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                     }}>
                       {day}
                     </span>
+                    {/* Show badge if cards are due */}
                     {due && due.cardCount > 0 && (
                       <div style={{
                         position: 'absolute',
@@ -354,7 +359,8 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                         </div>
                       </div>
                     )}
-                    {due && due.cardCount === 0 && (
+                    {/* Show smiley face if it's a past day with no cards due or if cards were reviewed (count is 0) */}
+                    {((date && date < today && !due) || (due && due.cardCount === 0)) && (
                       <div style={{
                         position: 'absolute',
                         bottom: '4px',
@@ -487,17 +493,27 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
               gap: '8px',
               marginBottom: '16px'
             }}>
-              <div style={{
-                width: '16px',
-                height: '16px',
-                backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
-                borderRadius: '50%'
-              }}></div>
+              {modalData.type === 'completed' ? (
+                <span style={{ fontSize: '24px' }}>😊</span>
+              ) : (
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
+                  borderRadius: '50%'
+                }}></div>
+              )}
               <p style={{
                 color: isDarkMode ? '#d1d5db' : '#6b7280',
                 margin: 0
               }}>
-                <span style={{ fontWeight: '600' }}>{(() => { console.log('Calendar Modal - Date:', modalData.date, 'Value:', modalData.value, 'Modal Data:', modalData); return modalData.value; })()}</span> cards due
+                {modalData.type === 'completed' ? (
+                  <span style={{ fontWeight: '600' }}>All caught up! Great job! 🎉</span>
+                ) : (
+                  <>
+                    <span style={{ fontWeight: '600' }}>{(() => { console.log('Calendar Modal - Date:', modalData.date, 'Value:', modalData.value, 'Modal Data:', modalData); return modalData.value; })()}</span> cards due
+                  </>
+                )}
               </p>
             </div>
             <button

@@ -8,6 +8,7 @@ import FlashcardForm from './components/FlashcardForm';
 import SettingsModal from './components/SettingsModal';
 import ImportExportModal from './components/ImportExportModal';
 import GenerateQuestionsModal from './components/GenerateQuestionsModal';
+import ManageCardsModal from './components/ManageCardsModal';
 import Calendar from './Calendar';
 
 // Hooks
@@ -17,6 +18,7 @@ import { useSettings } from './hooks/useSettings';
 
 // Utils and Constants
 import { SUCCESS_MESSAGES, ERROR_MESSAGES, DEFAULT_FSRS_PARAMS } from './utils/constants';
+import { debugFirestore, checkFirestoreRules } from './utils/firebaseDebug';
 
 // Styles
 import './App.css';
@@ -51,11 +53,14 @@ function App() {
   const [showImportExportModal, setShowImportExportModal] = useState(false);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showManageCardsModal, setShowManageCardsModal] = useState(false);
 
   // Edit card states
   const [isEditingCard, setIsEditingCard] = useState(false);
   const [editCardData, setEditCardData] = useState(null);
 
+  // Mobile header collapse state
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
 
   // Message states
   const [message, setMessage] = useState('');
@@ -111,8 +116,14 @@ function App() {
     getCurrentCard,
     getCategories,
     getSubCategories,
+    getSubCategoryStats,
     getLevels,
     getCategoryStats,
+    getCardsDueToday,
+    getPastDueCards,
+    getAllDueCards,
+    getFilteredDueCards,
+    getCardsReviewedToday,
     setShowAnswer,
     setSelectedCategory,
     setSelectedSubCategory,
@@ -122,6 +133,7 @@ function App() {
     setCurrentCardIndex,
     nextCard,
     prevCard,
+    getNextCategoryWithDueCards,
     addFlashcard,
     updateFlashcard,
     deleteFlashcard,
@@ -481,6 +493,16 @@ function App() {
     }
   };
 
+  const handleToggleCardActive = async (cardId, isActive) => {
+    try {
+      await updateFlashcard(cardId, { active: isActive });
+      setMessage(`Card ${isActive ? 'activated' : 'deactivated'} successfully`);
+      clearMessage();
+    } catch (error) {
+      setError(error.message || 'Failed to update card status');
+    }
+  };
+
 
   // Handle edit card
   const handleEditCard = (card) => {
@@ -588,12 +610,17 @@ function App() {
           event.preventDefault();
           setShowImportExportModal(true);
           break;
+        case 'm':
+          event.preventDefault();
+          setShowManageCardsModal(true);
+          break;
         case 'Escape':
           event.preventDefault();
           setShowCreateCardForm(false);
           setShowSettingsModal(false);
           setShowImportExportModal(false);
           setShowCalendarModal(false);
+          setShowManageCardsModal(false);
           setIsEditingCard(false);
           setEditCardData(null);
           break;
@@ -605,6 +632,68 @@ function App() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [showAnswer, nextCard, prevCard, setShowAnswer, handleReviewCard, getCurrentCard]);
+
+  // Get computed values (must be before conditional returns)
+  const currentCard = getCurrentCard();
+  const categories = getCategories();
+  const subCategories = getSubCategories();
+  const subCategoryStats = getSubCategoryStats();
+  const levels = getLevels();
+  const categoryStats = getCategoryStats();
+  
+  // Get due cards for easy access
+  const pastDueCards = getPastDueCards();
+  const cardsDueToday = getCardsDueToday();
+  const allDueCards = getAllDueCards();
+  const filteredDueCards = getFilteredDueCards();
+  const cardsReviewedToday = getCardsReviewedToday();
+  
+  // Log due cards info on initial load (useful for debugging)
+  useEffect(() => {
+    console.log('📊 Due Cards Summary:', {
+      pastDue: pastDueCards.length,
+      dueToday: cardsDueToday.length,
+      totalDue: allDueCards.length,
+      filteredDue: filteredDueCards.length,
+      filteredFlashcards: filteredFlashcards.length,
+      showDueTodayOnly: showDueTodayOnly,
+      selectedCategory: selectedCategory,
+      selectedSubCategory: selectedSubCategory,
+      pastDueCards: pastDueCards.map(card => ({ 
+        question: card.question?.substring(0, 50), 
+        dueDate: card.dueDate 
+      })),
+      cardsDueToday: cardsDueToday.map(card => ({ 
+        question: card.question?.substring(0, 50), 
+        dueDate: card.dueDate 
+      }))
+    });
+  }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory]);
+
+  // Auto-navigation to next category with due cards
+  useEffect(() => {
+    // Only auto-navigate when:
+    // 1. We're showing due cards only
+    // 2. We have a specific category selected (not "All")
+    // 3. There are no filtered cards left in the current category
+    // 4. There are still due cards in other categories
+    if (showDueTodayOnly && selectedCategory !== 'All' && filteredFlashcards.length === 0 && allDueCards.length > 0) {
+      const nextCategory = getNextCategoryWithDueCards(selectedCategory);
+      
+      if (nextCategory) {
+        console.log(`🔄 Auto-navigating from "${selectedCategory}" to "${nextCategory}" (category completed)`);
+        setSelectedCategory(nextCategory);
+        // Ensure we stay in due cards mode
+        setShowDueTodayOnly(true);
+        setMessage(`Switched to "${nextCategory}" category (${selectedCategory} completed) - showing due cards`);
+        
+        // Clear message after 3 seconds
+        setTimeout(() => setMessage(''), 3000);
+      } else {
+        console.log('🎉 All categories completed!');
+      }
+    }
+  }, [showDueTodayOnly, selectedCategory, filteredFlashcards.length, allDueCards.length, getNextCategoryWithDueCards, setSelectedCategory, setShowDueTodayOnly]);
 
   // Debug logging for loading state
   console.log('App loading state:', {
@@ -659,12 +748,6 @@ function App() {
       />
     );
   }
-
-  const currentCard = getCurrentCard();
-  const categories = getCategories();
-  const subCategories = getSubCategories();
-  const levels = getLevels();
-  const categoryStats = getCategoryStats();
   
   // Convert flashcards to calendar dates format
   const getCalendarDates = () => {
@@ -694,121 +777,165 @@ function App() {
   return (
     <div className={`app ${isDarkMode ? 'dark' : ''}`}>
       {/* Header */}
-      <header className="app-header">
-        <div className="header-left">
-          <h1>Flashcard App</h1>
-          <span className="user-info">Welcome, {userDisplayName}</span>
+      <header className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}>
+        <div className={`header-layout ${isHeaderCollapsed ? 'hidden' : ''}`}>
+          {/* Left Section - Filters */}
+          <div className="header-left">
+            <div className="filters-group">
+              <div className="filters-header">
+                <span className="filters-title">🔍 Filters</span>
+              </div>
+              <div className="filters-content">
+                {/* Category Filter */}
+                <div className="filter-item">
+                  <label className="filter-label">Category</label>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="filter-select category-select"
+                  >
+                    <option value="All">All Categories ({flashcards.length})</option>
+                    {categories.map(category => {
+                      const stats = categoryStats[category] || { total: 0, due: 0 };
+                      return (
+                        <option key={category} value={category}>
+                          {category} ({stats.due}/{stats.total})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Sub-Category Filter */}
+                {subCategories.length > 0 && (
+                  <div className="filter-item">
+                    <label className="filter-label">Sub-Category</label>
+                    <select
+                      value={selectedSubCategory}
+                      onChange={(e) => setSelectedSubCategory(e.target.value)}
+                      className="filter-select subcategory-select"
+                    >
+                      <option value="All">All Sub-Categories</option>
+                      {subCategories.map(subCategory => {
+                        const stats = subCategoryStats[subCategory] || { total: 0, due: 0 };
+                        return (
+                          <option key={subCategory} value={subCategory}>
+                            {subCategory} ({stats.due}/{stats.total})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
+                {/* Level Filter */}
+                {levels.length > 0 && (
+                  <div className="filter-item">
+                    <label className="filter-label">Level</label>
+                    <select
+                      value={selectedLevel}
+                      onChange={(e) => setSelectedLevel(e.target.value)}
+                      className="filter-select level-select"
+                    >
+                      <option value="All">All Levels</option>
+                      {levels.map(level => (
+                        <option key={level} value={level}>
+                          {level.charAt(0).toUpperCase() + level.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Center Section - Logo */}
+          <div className="header-center">
+            <h1 className="app-logo">📚 FSRS Flashcards</h1>
+          </div>
+
+          {/* Right Section - Actions */}
+          <div className="header-right">
+            <div className="actions-toggle-section">
+              {/* Action Buttons */}
+              <div className="action-buttons">
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => setShowManageCardsModal(true)}
+                  title="Manage cards (M)"
+                >
+                  📋 Manage Cards
+                </button>
+                
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => setShowCalendarModal(true)}
+                  title="View calendar"
+                >
+                  📅 Calendar
+                </button>
+                
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => setShowSettingsModal(true)}
+                  title="Settings (S)"
+                >
+                  ⚙️ Settings
+                </button>
+              </div>
+
+              {/* Card Filter Toggle and Header Controls - Line under action buttons */}
+              <div className="toggle-controls-row">
+                <div className="card-filter-toggle">
+                  <button
+                    className={`toggle-btn ${!showDueTodayOnly ? 'active' : ''}`}
+                    onClick={() => {
+                      setShowDueTodayOnly(false);
+                      // Keep current filters when switching to all cards
+                    }}
+                  >
+                    All Cards ({flashcards.length})
+                  </button>
+                  <button
+                    className={`toggle-btn ${showDueTodayOnly ? 'active' : ''}`}
+                    onClick={() => {
+                      setShowDueTodayOnly(true);
+                      // Category and subcategory filters are still applied to due cards
+                    }}
+                    title={`Filtered Due Cards: ${filteredDueCards.length} | Total Due (All Categories): ${allDueCards.length}`}
+                  >
+                    Due Cards ({filteredDueCards.length})
+                  </button>
+                </div>
+                
+                {/* Header Toggle */}
+                <button 
+                  className="header-toggle-btn-inline"
+                  onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+                  aria-label={isHeaderCollapsed ? 'Expand header' : 'Collapse header'}
+                  title={isHeaderCollapsed ? 'Show header controls' : 'Hide header controls'}
+                >
+                  {isHeaderCollapsed ? '📤 Show Controls' : '📥 Hide Controls'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         
-        <div className="header-controls">
-          {/* Category Filter */}
-          <div className="category-filter">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="category-select"
+        {/* Show toggle button when header is collapsed */}
+        {isHeaderCollapsed && (
+          <div className="collapsed-header-controls">
+            <button 
+              className="header-toggle-btn-collapsed"
+              onClick={() => setIsHeaderCollapsed(false)}
+              aria-label="Expand header"
+              title="Show header controls"
             >
-              <option value="All">All Categories ({flashcards.length})</option>
-              {categories.map(category => {
-                const stats = categoryStats[category] || { total: 0, due: 0 };
-                return (
-                  <option key={category} value={category}>
-                    {category} ({stats.due}/{stats.total})
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          {/* Sub-Category Filter */}
-          {subCategories.length > 0 && (
-            <div className="subcategory-filter">
-              <select
-                value={selectedSubCategory}
-                onChange={(e) => setSelectedSubCategory(e.target.value)}
-                className="subcategory-select"
-              >
-                <option value="All">All Sub-Categories</option>
-                {subCategories.map(subCategory => (
-                  <option key={subCategory} value={subCategory}>
-                    {subCategory}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Level Filter */}
-          {levels.length > 0 && (
-            <div className="level-filter">
-              <select
-                value={selectedLevel}
-                onChange={(e) => setSelectedLevel(e.target.value)}
-                className="level-select"
-              >
-                <option value="All">All Levels</option>
-                {levels.map(level => (
-                  <option key={level} value={level}>
-                    {level.charAt(0).toUpperCase() + level.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Card Filter Toggle */}
-          <div className="card-filter-toggle">
-            <button
-              className={`toggle-btn ${!showDueTodayOnly ? 'active' : ''}`}
-              onClick={() => setShowDueTodayOnly(false)}
-            >
-              All Cards ({flashcards.length})
-            </button>
-            <button
-              className={`toggle-btn ${showDueTodayOnly ? 'active' : ''}`}
-              onClick={() => setShowDueTodayOnly(true)}
-            >
-              Due Today ({flashcards.filter(card => {
-                const dueDate = card.dueDate || new Date(0);
-                return dueDate <= new Date();
-              }).length})
+              📤 Show Controls
             </button>
           </div>
-
-          {/* Action Buttons */}
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowCreateCardForm(true)}
-            title="Create new flashcard (C)"
-          >
-            + New Card
-          </button>
-          
-          <button 
-            className="btn btn-secondary"
-            onClick={() => setShowImportExportModal(true)}
-            title="Import/Export flashcards (E)"
-          >
-            Import/Export
-          </button>
-          
-          <button 
-            className="btn btn-secondary"
-            onClick={() => setShowCalendarModal(true)}
-            title="View calendar"
-          >
-            📅 Calendar
-          </button>
-          
-          <button 
-            className="btn btn-secondary"
-            onClick={() => setShowSettingsModal(true)}
-            title="Settings (S)"
-          >
-            ⚙️ Settings
-          </button>
-          
-        </div>
+        )}
       </header>
 
       {/* Messages */}
@@ -823,6 +950,18 @@ function App() {
             <div className="error-message">
               ❌ {error || flashcardsError || settingsError}
               <button className="close-message" onClick={clearError}>×</button>
+              {flashcardsError && (
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ marginLeft: '10px' }}
+                  onClick={() => {
+                    debugFirestore(firebaseApp);
+                    checkFirestoreRules();
+                  }}
+                >
+                  🔍 Debug Firestore
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -833,27 +972,68 @@ function App() {
       <main className="app-main">
         {filteredFlashcards.length === 0 ? (
           <div className="no-cards-state">
-            <h2>No flashcards available</h2>
-            <p>
-              {selectedCategory === 'All' 
-                ? 'Create your first flashcard or import existing ones to get started!'
-                : `No cards found in "${selectedCategory}" category${showDueTodayOnly ? ' that are due today' : ''}.`
-              }
-            </p>
-            <div className="no-cards-actions">
-              <button 
-                className="btn btn-primary"
-                onClick={() => setShowCreateCardForm(true)}
-              >
-                Create Flashcard
-              </button>
-              <button 
-                className="btn btn-secondary"
-                onClick={() => setShowImportExportModal(true)}
-              >
-                Import Flashcards
-              </button>
-            </div>
+            {showDueTodayOnly && flashcards.length > 0 && allDueCards.length === 0 ? (
+              // All cards completed for today!
+              <>
+                <div className="completion-celebration">
+                  <div style={{ fontSize: '5rem', marginBottom: '1rem', animation: 'bounce 1s ease-in-out' }}>
+                    😊
+                  </div>
+                  <h2 style={{ color: 'var(--success-color, #4caf50)', marginBottom: '0.5rem' }}>
+                    🎉 Congratulations! 🎉
+                  </h2>
+                  <h3>All cards completed for today!</h3>
+                  <p style={{ fontSize: '1.1rem', margin: '1rem 0' }}>
+                    You've successfully reviewed all your due cards. 
+                    Great work on staying consistent! 💪
+                  </p>
+                  <div className="completion-stats" style={{ 
+                    margin: '1.5rem 0',
+                    padding: '1rem',
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderRadius: '8px'
+                  }}>
+                    <p>📊 Today's Stats:</p>
+                    <p>✅ Cards reviewed today: {cardsReviewedToday.length}</p>
+                    <p>📚 Total cards: {flashcards.length}</p>
+                    <p>🎯 Streak maintained!</p>
+                  </div>
+                  <div className="no-cards-actions">
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={() => setShowDueTodayOnly(false)}
+                    >
+                      View All Cards
+                    </button>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => setShowCreateCardForm(true)}
+                    >
+                      Create New Card
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              // Regular no cards message
+              <>
+                <h2>No flashcards available</h2>
+                <p>
+                  {selectedCategory === 'All' 
+                    ? 'Get started by managing your flashcards - create new ones or import existing collections!'
+                    : `No cards found in "${selectedCategory}" category${showDueTodayOnly ? ' that are due today' : ''}.`
+                  }
+                </p>
+                <div className="no-cards-actions">
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => setShowManageCardsModal(true)}
+                  >
+                    📋 Manage Cards
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div className="flashcard-area">
@@ -879,12 +1059,6 @@ function App() {
                   ✏️ Edit Card
                 </button>
                 <button 
-                  className="btn btn-danger"
-                  onClick={() => handleDeleteCard(currentCard.id)}
-                >
-                  🗑️ Delete Card
-                </button>
-                <button 
                   className="btn btn-primary"
                   onClick={() => setShowGenerateModal(true)}
                 >
@@ -902,11 +1076,17 @@ function App() {
           <span>Total Cards: {flashcards.length}</span>
           <span>Filtered: {filteredFlashcards.length}</span>
           <span>Categories: {categories.length}</span>
+          <span style={{ color: pastDueCards.length > 0 ? '#ff6b6b' : 'inherit' }}>
+            Past Due: {pastDueCards.length}
+          </span>
+          <span style={{ color: cardsDueToday.length > 0 ? '#feca57' : 'inherit' }}>
+            Due Today: {cardsDueToday.length}
+          </span>
         </div>
         <div className="footer-shortcuts">
           <small>
             Shortcuts: <kbd>Space</kbd> Show Answer | <kbd>←/→</kbd> Navigate | 
-            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export
+            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export | <kbd>M</kbd> Manage
           </small>
         </div>
       </footer>
@@ -920,10 +1100,13 @@ function App() {
           setEditCardData(null);
         }}
         onSubmit={isEditingCard ? handleUpdateCard : handleCreateCard}
+        onDelete={handleDeleteCard}
         editCard={editCardData}
         categories={categories}
         isDarkMode={isDarkMode}
         isLoading={flashcardsLoading}
+        apiKeys={apiKeys}
+        selectedProvider={selectedProvider}
       />
 
       <SettingsModal
@@ -966,6 +1149,22 @@ function App() {
         isDarkMode={isDarkMode}
         apiKeys={apiKeys}
         selectedProvider={selectedProvider}
+      />
+
+      <ManageCardsModal
+        isVisible={showManageCardsModal}
+        onClose={() => setShowManageCardsModal(false)}
+        flashcards={flashcards}
+        onToggleActive={handleToggleCardActive}
+        onCreateCard={() => {
+          setShowManageCardsModal(false);
+          setShowCreateCardForm(true);
+        }}
+        onImportExport={() => {
+          setShowManageCardsModal(false);
+          setShowImportExportModal(true);
+        }}
+        isDarkMode={isDarkMode}
       />
 
       {/* Loading Overlay */}

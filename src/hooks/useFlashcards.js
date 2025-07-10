@@ -72,11 +72,54 @@ export const useFlashcards = (firebaseApp, userId) => {
       console.log('📚 Loaded flashcards:', cards.length, 'cards for user:', userId);
       console.log('First few cards:', cards.slice(0, 2));
       
+      // Debug: Check active status of cards
+      const activeCards = cards.filter(card => card.active !== false);
+      const inactiveCards = cards.filter(card => card.active === false);
+      console.log(`📊 Card status: ${activeCards.length} active, ${inactiveCards.length} inactive`);
+      
+      // Debug: Check due dates
+      const now = new Date();
+      const dueCards = cards.filter(card => {
+        const dueDate = card.dueDate || new Date(0);
+        return dueDate <= now;
+      });
+      console.log(`📅 Due cards: ${dueCards.length} cards are due now`);
+      
+      // More detailed debug for first few cards
+      console.log('🔍 Sample card due dates:');
+      cards.slice(0, 3).forEach(card => {
+        const dueDate = card.dueDate || new Date(0);
+        console.log({
+          question: card.question?.substring(0, 30),
+          dueDate: dueDate,
+          dueDateString: dueDate.toString(),
+          isDue: dueDate <= now,
+          hoursUntilDue: (dueDate - now) / (1000 * 60 * 60),
+          active: card.active
+        });
+      });
+      
       setFlashcards(cards);
       setIsLoading(false);
     }, (error) => {
       console.error('❌ Error fetching flashcards:', error);
-      setError('Failed to load flashcards');
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      console.error('Full error object:', error);
+      
+      // Provide more specific error messages based on error code
+      let errorMessage = 'Failed to load flashcards';
+      if (error.code === 'permission-denied') {
+        errorMessage = 'Permission denied: Please check Firestore security rules';
+      } else if (error.code === 'unavailable') {
+        errorMessage = 'Firebase service unavailable. Please check your internet connection';
+      } else if (error.code === 'unauthenticated') {
+        errorMessage = 'Authentication required. Please log in again';
+      } else if (error.message) {
+        errorMessage = `Failed to load flashcards: ${error.message}`;
+      }
+      
+      setError(errorMessage);
       setIsLoading(false);
     });
 
@@ -91,7 +134,17 @@ export const useFlashcards = (firebaseApp, userId) => {
     
     let filtered = [...flashcards];
 
-    // Filter by category
+    // Filter out inactive cards (unless explicitly showing all)
+    // Note: cards without 'active' field are considered active (backward compatibility)
+    const beforeActiveFilter = filtered.length;
+    filtered = filtered.filter(card => card.active !== false);
+    const afterActiveFilter = filtered.length;
+    
+    if (beforeActiveFilter !== afterActiveFilter) {
+      console.log(`🔍 Active filter: ${beforeActiveFilter} → ${afterActiveFilter} cards (removed ${beforeActiveFilter - afterActiveFilter} inactive)`);
+    }
+
+    // Always apply category and subcategory filters
     if (selectedCategory !== 'All') {
       filtered = filtered.filter(card => card.category === selectedCategory);
     }
@@ -101,8 +154,9 @@ export const useFlashcards = (firebaseApp, userId) => {
       filtered = filtered.filter(card => card.sub_category === selectedSubCategory);
     }
 
-    // Filter by level
-    if (selectedLevel !== 'All') {
+    // Filter by level only when NOT showing due cards
+    // (We bypass level filter for due cards to ensure all due cards in category/subcategory are shown)
+    if (!showDueTodayOnly && selectedLevel !== 'All') {
       filtered = filtered.filter(card => {
         // Get level from card or infer from FSRS parameters
         const cardLevel = card.level || inferLevelFromFSRS(card);
@@ -113,18 +167,26 @@ export const useFlashcards = (firebaseApp, userId) => {
     // Filter by due date if enabled
     if (showDueTodayOnly) {
       const now = new Date();
+      const beforeDueFilter = filtered.length;
       console.log('📅 Filtering by due date. Current time:', now);
+      console.log('📅 Cards before due filter:', beforeDueFilter);
+      console.log('📅 Selected filters:', { selectedCategory, selectedSubCategory, selectedLevel });
+      
       filtered = filtered.filter(card => {
         const dueDate = card.dueDate || new Date(0);
         const isDue = dueDate <= now;
-        console.log('Card due check:', { 
-          question: card.question?.substring(0, 30), 
-          dueDate: dueDate, 
-          isDue 
-        });
+        if (!isDue) {
+          console.log('Card not due yet:', { 
+            question: card.question?.substring(0, 30), 
+            dueDate: dueDate,
+            active: card.active,
+            hoursUntilDue: (dueDate - now) / (1000 * 60 * 60)
+          });
+        }
         return isDue;
       });
-      console.log('📊 After due date filter:', filtered.length, 'of', flashcards.length, 'cards showing');
+      console.log('📊 After due date filter:', filtered.length, 'cards are due (removed', beforeDueFilter - filtered.length, 'future cards)');
+      console.log('📊 Note: Category and subcategory filters are still applied to due cards');
     }
 
     // Sort based on selected criteria
@@ -233,6 +295,41 @@ export const useFlashcards = (firebaseApp, userId) => {
     
     return subCategories.sort();
   }, [flashcards, selectedCategory, showDueTodayOnly]);
+
+  /**
+   * Get sub-category statistics including due counts
+   * @returns {Object} Sub-category statistics with due counts
+   */
+  const getSubCategoryStats = useCallback(() => {
+    const stats = {};
+    const now = new Date();
+    
+    flashcards.forEach(card => {
+      // Apply category filter if needed
+      if (selectedCategory !== 'All' && card.category !== selectedCategory) {
+        return;
+      }
+      
+      // Only count active cards
+      if (card.active === false) return;
+      
+      const subCategory = card.sub_category || '';
+      if (!subCategory.trim()) return;
+      
+      if (!stats[subCategory]) {
+        stats[subCategory] = { total: 0, due: 0 };
+      }
+      
+      stats[subCategory].total++;
+      
+      const dueDate = card.dueDate || new Date(0);
+      if (dueDate <= now) {
+        stats[subCategory].due++;
+      }
+    });
+    
+    return stats;
+  }, [flashcards, selectedCategory]);
 
   /**
    * Get available levels from flashcards (filtered by selected category, sub-category, and due date)
@@ -353,7 +450,8 @@ export const useFlashcards = (firebaseApp, userId) => {
         interval: 1,
         repetitions: 0,
         difficulty: 5,
-        stability: 2
+        stability: 2,
+        active: true
       });
       
       return docRef.id;
@@ -454,7 +552,8 @@ export const useFlashcards = (firebaseApp, userId) => {
           interval: 1,
           repetitions: 0,
           difficulty: cardData.difficulty || 5,
-          stability: cardData.stability || 2
+          stability: cardData.stability || 2,
+          active: cardData.active !== undefined ? cardData.active : true
         })
       );
 
@@ -505,6 +604,159 @@ export const useFlashcards = (firebaseApp, userId) => {
   }, [filteredFlashcards, currentCardIndex]);
 
   /**
+   * Get cards due today (from start of today to end of today)
+   * @returns {Array<Object>} Array of active flashcards due today
+   */
+  const getCardsDueToday = useCallback(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    return flashcards.filter(card => {
+      // Only include active cards
+      if (card.active === false) return false;
+      const dueDate = card.dueDate || new Date(0);
+      return dueDate >= startOfToday && dueDate < endOfToday;
+    });
+  }, [flashcards]);
+
+  /**
+   * Get past due cards (due before today)
+   * @returns {Array<Object>} Array of active overdue flashcards
+   */
+  const getPastDueCards = useCallback(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    return flashcards.filter(card => {
+      // Only include active cards
+      if (card.active === false) return false;
+      const dueDate = card.dueDate || new Date(0);
+      return dueDate < startOfToday;
+    });
+  }, [flashcards]);
+
+  /**
+   * Get all due cards (past due + due today)
+   * @returns {Array<Object>} Array of all active due flashcards
+   */
+  const getAllDueCards = useCallback(() => {
+    const now = new Date();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    const dueCards = flashcards.filter(card => {
+      // Only include active cards
+      if (card.active === false) return false;
+      const dueDate = card.dueDate || new Date(0);
+      return dueDate < endOfToday;
+    });
+    
+    console.log('🔍 getAllDueCards debug:', {
+      now: now,
+      endOfToday: endOfToday,
+      totalCards: flashcards.length,
+      dueCards: dueCards.length,
+      sampleDueDates: dueCards.slice(0, 3).map(card => ({
+        question: card.question?.substring(0, 30),
+        dueDate: card.dueDate,
+        hoursUntilDue: (card.dueDate - now) / (1000 * 60 * 60)
+      }))
+    });
+    
+    return dueCards;
+  }, [flashcards]);
+
+  /**
+   * Get cards that were reviewed today
+   * @returns {Array<Object>} Array of flashcards reviewed today
+   */
+  const getCardsReviewedToday = useCallback(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    return flashcards.filter(card => {
+      if (!card.lastReviewed) return false;
+      const reviewDate = card.lastReviewed instanceof Date ? card.lastReviewed : card.lastReviewed.toDate();
+      return reviewDate >= startOfToday && reviewDate < endOfToday;
+    });
+  }, [flashcards]);
+
+  /**
+   * Get due cards that match current filters (category, subcategory)
+   * @returns {Array<Object>} Array of filtered due flashcards
+   */
+  const getFilteredDueCards = useCallback(() => {
+    const now = new Date();
+    
+    let filtered = flashcards.filter(card => {
+      // Only include active cards
+      if (card.active === false) return false;
+      
+      // Check if card is due
+      const dueDate = card.dueDate || new Date(0);
+      if (dueDate > now) return false;
+      
+      return true;
+    });
+
+    // Apply category filter
+    if (selectedCategory !== 'All') {
+      filtered = filtered.filter(card => card.category === selectedCategory);
+    }
+
+    // Apply sub-category filter
+    if (selectedSubCategory !== 'All') {
+      filtered = filtered.filter(card => card.sub_category === selectedSubCategory);
+    }
+
+    return filtered;
+  }, [flashcards, selectedCategory, selectedSubCategory]);
+
+  /**
+   * Get next category with due cards
+   * @param {string} currentCategory - Current category
+   * @returns {string|null} Next category with due cards or null
+   */
+  const getNextCategoryWithDueCards = useCallback((currentCategory) => {
+    const now = new Date();
+    const categoriesWithDue = {};
+    
+    // Build a map of categories with due cards
+    flashcards.forEach(card => {
+      if (card.active === false) return;
+      
+      const dueDate = card.dueDate || new Date(0);
+      if (dueDate <= now) {
+        const category = card.category || 'Uncategorized';
+        categoriesWithDue[category] = true;
+      }
+    });
+    
+    // Get sorted list of categories with due cards
+    const dueCategories = Object.keys(categoriesWithDue).sort();
+    
+    // If no categories have due cards, return null
+    if (dueCategories.length === 0) return null;
+    
+    // If current category is 'All' or not in the list, return first category with due cards
+    if (currentCategory === 'All' || !dueCategories.includes(currentCategory)) {
+      return dueCategories[0];
+    }
+    
+    // Find current category index and return next one
+    const currentIndex = dueCategories.indexOf(currentCategory);
+    const nextIndex = (currentIndex + 1) % dueCategories.length;
+    
+    // If we've wrapped around to the beginning, return null to indicate completion
+    if (nextIndex === 0) {
+      return null;
+    }
+    
+    return dueCategories[nextIndex];
+  }, [flashcards]);
+
+  /**
    * Clear error state
    */
   const clearError = () => {
@@ -529,8 +781,14 @@ export const useFlashcards = (firebaseApp, userId) => {
     getCurrentCard,
     getCategories,
     getSubCategories,
+    getSubCategoryStats,
     getLevels,
     getCategoryStats,
+    getCardsDueToday,
+    getPastDueCards,
+    getAllDueCards,
+    getFilteredDueCards,
+    getCardsReviewedToday,
 
     // Actions
     setShowAnswer,
@@ -542,6 +800,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     setCurrentCardIndex,
     nextCard,
     prevCard,
+    getNextCategoryWithDueCards,
 
     // Database operations
     addFlashcard,

@@ -37,6 +37,71 @@ const GenerateQuestionsModal = ({
     }
   }, [isVisible]);
 
+  // Simple similarity calculation between two strings (0-1)
+  const calculateSimilarity = (str1, str2) => {
+    if (!str1 || !str2) return 0;
+    
+    // Convert to lowercase and split into words
+    const words1 = str1.toLowerCase().split(/\s+/);
+    const words2 = str2.toLowerCase().split(/\s+/);
+    
+    // Calculate Jaccard similarity
+    const set1 = new Set(words1);
+    const set2 = new Set(words2);
+    const intersection = new Set([...set1].filter(x => set2.has(x)));
+    const union = new Set([...set1, ...set2]);
+    
+    return intersection.size / union.size;
+  };
+
+  // Helper function to check if questions are diverse enough
+  const checkQuestionDiversity = (questions) => {
+    if (!Array.isArray(questions) || questions.length < 2) return true;
+    
+    // Check if all questions start with the same word
+    const firstWords = questions.map(q => 
+      q.question.trim().split(/\s+/)[0].toLowerCase()
+    );
+    const uniqueFirstWords = new Set(firstWords);
+    
+    if (uniqueFirstWords.size < questions.length * 0.5) {
+      console.warn('⚠️ Questions lack diversity in starting words');
+      return false;
+    }
+    
+    // Check if questions are too similar in length
+    const lengths = questions.map(q => q.question.length);
+    const avgLength = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+    const similarLengths = lengths.filter(l => 
+      Math.abs(l - avgLength) < avgLength * 0.2
+    ).length;
+    
+    if (similarLengths === questions.length) {
+      console.warn('⚠️ Questions are too similar in length');
+      return false;
+    }
+    
+    // Check for varied question types
+    const questionTypes = ['what', 'how', 'why', 'when', 'where', 'which', 'who', 'can', 'is', 'are', 'does', 'do', 'explain', 'describe', 'compare'];
+    const usedTypes = new Set();
+    
+    questions.forEach(q => {
+      const lowerQ = q.question.toLowerCase();
+      questionTypes.forEach(type => {
+        if (lowerQ.startsWith(type + ' ') || lowerQ.includes(' ' + type + ' ')) {
+          usedTypes.add(type);
+        }
+      });
+    });
+    
+    if (usedTypes.size < 2) {
+      console.warn('⚠️ Questions lack variety in question types');
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleGenerate = async () => {
     if (!currentCard) {
       setError('No card selected');
@@ -54,8 +119,36 @@ const GenerateQuestionsModal = ({
     setError('');
 
     try {
-      const questions = await generateQuestionsWithAI(currentCard, selectedProvider, apiKey);
+      let questions = await generateQuestionsWithAI(currentCard, selectedProvider, apiKey);
       console.log('✅ Generated questions:', questions);
+      
+      // Filter out any question that's too similar to the original
+      const originalQuestionLower = currentCard.question?.replace(/<[^>]*>/g, '').toLowerCase().trim() || '';
+      questions = questions.filter(q => {
+        const generatedLower = q.question.toLowerCase().trim();
+        // Remove if it's the exact same question or very similar (>90% match)
+        const similarity = calculateSimilarity(originalQuestionLower, generatedLower);
+        if (similarity > 0.9) {
+          console.log(`🚫 Filtered out question too similar to original: "${q.question}"`);
+          return false;
+        }
+        return true;
+      });
+      
+      // Check diversity and regenerate once if needed
+      if (!checkQuestionDiversity(questions) || questions.length < 4) {
+        console.log('🔄 Questions lack diversity or too few remaining, regenerating...');
+        questions = await generateQuestionsWithAI(currentCard, selectedProvider, apiKey);
+        console.log('✅ Regenerated questions:', questions);
+        
+        // Filter again after regeneration
+        questions = questions.filter(q => {
+          const generatedLower = q.question.toLowerCase().trim();
+          const similarity = calculateSimilarity(originalQuestionLower, generatedLower);
+          return similarity <= 0.9;
+        });
+      }
+      
       setGeneratedQuestions(questions);
       setStep('results');
     } catch (err) {
@@ -145,7 +238,7 @@ const GenerateQuestionsModal = ({
       let match;
       pattern.lastIndex = 0; // Reset regex
       
-      while ((match = pattern.exec(content)) !== null && questions.length < 4) {
+      while ((match = pattern.exec(content)) !== null && questions.length < 6) {
         const question = match[1].trim().replace(/^["']|["']$/g, '');
         const answer = match[2].trim().replace(/^["']|["']$/g, '');
         
@@ -173,40 +266,58 @@ const GenerateQuestionsModal = ({
   };
 
   const generateQuestionsWithAI = async (card, provider, apiKey) => {
-    const prompt = `Based on this flashcard content, generate 4 different questions that test the same knowledge:
+    const prompt = `Based on this flashcard content, generate 6 DIVERSE questions that explore DIFFERENT aspects of the topic:
 
 Original Question: ${card.question?.replace(/<[^>]*>/g, '') || ''}
 Original Answer: ${card.answer?.replace(/<[^>]*>/g, '') || ''}
 Category: ${card.category || 'General'}
 ${card.sub_category ? `Sub-category: ${card.sub_category}` : ''}
 
-Generate 4 new questions that:
-1. Test the same core knowledge
-2. Use different phrasing/approaches
-3. Are appropriate for the same difficulty level
-4. Maintain the same answer or a closely related answer
+Generate 6 NEW questions that MUST:
+1. Use DIFFERENT question types (e.g., "What", "How", "Why", "When", "Compare", "Explain", "True/False", "Fill-in-blank")
+2. Test DIFFERENT aspects or angles of the topic
+3. Vary in complexity (from basic recall to application/analysis)
+4. Have DIFFERENT answers that explore various facets of the subject
+5. NOT just rephrase the original question
+6. NOT include the original question in your response
 
-IMPORTANT: Respond with ONLY a valid JSON array in this exact format (no extra text):
+Examples of variety:
+- If original asks "What is X?", you might ask "How does X work?", "Why is X important?", "What are examples of X?", "What's the difference between X and Y?"
+- Mix factual questions with conceptual understanding
+- Include practical applications or real-world examples
+- Add questions that connect to related concepts
+
+IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no extra text):
 [
   {
-    "question": "Question text here",
-    "answer": "Answer text here",
-    "reasoning": "Brief explanation of how this tests the same knowledge"
+    "question": "First diverse question",
+    "answer": "First answer",
+    "reasoning": "How this explores a different aspect"
   },
   {
-    "question": "Second question text here",
-    "answer": "Second answer text here", 
-    "reasoning": "Second reasoning here"
+    "question": "Second diverse question", 
+    "answer": "Second answer",
+    "reasoning": "Different approach/angle"
   },
   {
-    "question": "Third question text here",
-    "answer": "Third answer text here",
-    "reasoning": "Third reasoning here"
+    "question": "Third diverse question",
+    "answer": "Third answer",
+    "reasoning": "Another perspective"
   },
   {
-    "question": "Fourth question text here",
-    "answer": "Fourth answer text here",
-    "reasoning": "Fourth reasoning here"
+    "question": "Fourth diverse question",
+    "answer": "Fourth answer",
+    "reasoning": "Different complexity level"
+  },
+  {
+    "question": "Fifth diverse question",
+    "answer": "Fifth answer",
+    "reasoning": "Practical application"
+  },
+  {
+    "question": "Sixth diverse question",
+    "answer": "Sixth answer",
+    "reasoning": "Conceptual understanding"
   }
 ]`;
 
@@ -239,10 +350,10 @@ IMPORTANT: Respond with ONLY a valid JSON array in this exact format (no extra t
       body: JSON.stringify({
         model: 'gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: 'You are a helpful assistant that generates educational flashcard questions. Always respond with valid JSON.' },
+          { role: 'system', content: 'You are an expert educational content creator who generates diverse, thought-provoking flashcard questions. You excel at creating varied question types that explore topics from multiple angles. Always respond with valid JSON.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.7,
+        temperature: 0.9,
         max_tokens: 1000
       })
     });
@@ -275,7 +386,7 @@ IMPORTANT: Respond with ONLY a valid JSON array in this exact format (no extra t
       body: JSON.stringify({
         model: 'claude-3-sonnet-20240229',
         max_tokens: 1000,
-        temperature: 0.7,
+        temperature: 0.9,
         messages: [
           { role: 'user', content: prompt }
         ]
@@ -312,7 +423,7 @@ IMPORTANT: Respond with ONLY a valid JSON array in this exact format (no extra t
           }
         ],
         generationConfig: {
-          temperature: 0.7,
+          temperature: 0.9,
           maxOutputTokens: 1000
         }
       })
@@ -400,7 +511,7 @@ IMPORTANT: Respond with ONLY a valid JSON array in this exact format (no extra t
               </div>
 
               <div className="generation-info">
-                <p>AI will generate 4 similar questions that test the same knowledge using different approaches.</p>
+                <p>AI will generate 6 diverse questions that explore different aspects of the topic using various question types and complexity levels. You can then select the best ones to create.</p>
                 <p><strong>Using:</strong> {selectedProvider.toUpperCase()}</p>
               </div>
 
@@ -422,7 +533,7 @@ IMPORTANT: Respond with ONLY a valid JSON array in this exact format (no extra t
 
           {step === 'results' && (
             <div className="results-step">
-              <h3>Select questions to create: ({generatedQuestions.length} generated)</h3>
+              <h3>Select diverse questions to create: ({generatedQuestions.length} generated)</h3>
               <div className="questions-list">
                 {generatedQuestions.length === 0 ? (
                   <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
