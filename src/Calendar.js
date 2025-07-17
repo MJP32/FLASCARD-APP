@@ -85,12 +85,12 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
     
     console.log('Calendar day pressed:', day, 'due cards found:', due);
     
-    // Show modal for days with cards or past days without cards (smiley face days)
-    if (due || (isPastDay && !due)) {
+    // Show modal for days with cards or completed cards
+    if (due) {
       const modalDataToSet = {
         date: date.toLocaleDateString(),
-        value: due ? due.cardCount : 0,
-        type: due && due.cardCount > 0 ? 'cards' : 'completed'
+        value: due.cardCount > 0 ? due.cardCount : due.completedCount || 0,
+        type: due.cardCount > 0 ? 'cards' : 'completed'
       };
       console.log('Setting modal data:', modalDataToSet);
       setModalData(modalDataToSet);
@@ -349,18 +349,20 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                         <div style={{
                           padding: '2px 6px',
                           borderRadius: '9999px',
-                          backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
+                          backgroundColor: date && date > today 
+                            ? (isDarkMode ? '#6b7280' : '#9ca3af') // Gray for future dates
+                            : (isDarkMode ? '#2563eb' : '#3b82f6'), // Blue for due/past dates
                           color: '#ffffff',
                           fontSize: '12px',
                           fontWeight: '500',
                           boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                         }}>
-                          {(() => { console.log('Calendar Badge - Day:', day, 'Due:', due, 'Count:', due.cardCount); return due.cardCount; })()}
+                          {due.cardCount}
                         </div>
                       </div>
                     )}
-                    {/* Show smiley face if it's a past day with no cards due or if cards were reviewed (count is 0) */}
-                    {((date && date < today && !due) || (due && due.cardCount === 0)) && (
+                    {/* Show smiley face only for days with completed cards */}
+                    {due && due.completedCount > 0 && due.cardCount === 0 && (
                       <div style={{
                         position: 'absolute',
                         bottom: '4px',

@@ -33,7 +33,9 @@ const FlashcardForm = ({
     answer: '',
     category: 'Uncategorized',
     sub_category: '',
-    additional_info: ''
+    additional_info: '',
+    notes: '',
+    starred: false
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,31 +43,35 @@ const FlashcardForm = ({
   const [isAddingInfo, setIsAddingInfo] = useState(false);
   const [isGeneratingExample, setIsGeneratingExample] = useState(false);
   const [enhancementError, setEnhancementError] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Track original form data to detect changes
+  const [originalFormData, setOriginalFormData] = useState(null);
 
   // Reset form when editCard changes or form becomes visible
   useEffect(() => {
     if (isVisible) {
-      if (editCard) {
-        setFormData({
-          question: editCard.question || '',
-          answer: editCard.answer || '',
-          category: editCard.category || 'Uncategorized',
-          sub_category: editCard.sub_category || '',
-          additional_info: editCard.additional_info || ''
-        });
-      } else {
-        setFormData({
-          question: '',
-          answer: '',
-          category: 'Uncategorized',
-          sub_category: '',
-          additional_info: ''
-        });
-      }
+      const newFormData = editCard ? {
+        question: editCard.question || '',
+        answer: editCard.answer || '',
+        category: editCard.category || 'Uncategorized',
+        sub_category: editCard.sub_category || '',
+        additional_info: editCard.additional_info || '',
+        notes: editCard.notes || '',
+        starred: editCard.starred || false
+      } : {
+        question: '',
+        answer: '',
+        category: 'Uncategorized',
+        sub_category: '',
+        additional_info: '',
+        notes: '',
+        starred: false
+      };
+      
+      setFormData(newFormData);
+      setOriginalFormData(newFormData); // Track original state
       setErrors({});
-      setShowDeleteConfirm(false);
       setEnhancementError('');
     }
   }, [isVisible, editCard]);
@@ -87,6 +93,42 @@ const FlashcardForm = ({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  // Check if form has changes
+  const hasChanges = () => {
+    if (!originalFormData) return false;
+    
+    return Object.keys(formData).some(key => {
+      return formData[key] !== originalFormData[key];
+    });
+  };
+
+  // Auto-save function
+  const autoSave = async () => {
+    if (!editCard || !hasChanges() || !validateForm()) {
+      return false;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await onSubmit(formData, editCard.id);
+      return true;
+    } catch (error) {
+      console.error('Auto-save error:', error);
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle form close with auto-save
+  const handleClose = async () => {
+    if (editCard && hasChanges() && validateForm()) {
+      // Auto-save changes before closing
+      await autoSave();
+    }
+    onClose();
   };
 
   const handleSubmit = async (e) => {
@@ -121,6 +163,8 @@ const FlashcardForm = ({
         });
       }
       
+      // Update original data to prevent auto-save on close after successful submit
+      setOriginalFormData(formData);
       onClose();
     } catch (error) {
       console.error('Error submitting flashcard:', error);
@@ -130,13 +174,21 @@ const FlashcardForm = ({
     }
   };
 
-  const handleCancel = () => {
-    setFormData({
-      question: '',
-      answer: '',
-      category: 'Uncategorized',
-      additional_info: ''
-    });
+  const handleCancel = async () => {
+    // Auto-save changes if editing and there are changes
+    if (editCard && hasChanges() && validateForm()) {
+      await autoSave();
+    }
+    
+    // Reset form for new cards
+    if (!editCard) {
+      setFormData({
+        question: '',
+        answer: '',
+        category: 'Uncategorized',
+        additional_info: ''
+      });
+    }
     setErrors({});
     onClose();
   };
@@ -196,8 +248,18 @@ Example output:
 IMPORTANT: Start your response directly with <ul> or <ol> tag. Do not include any text before or after the HTML list.`;
 
       const enhancedAnswer = await callAI(prompt, selectedProvider, apiKey);
+      
+      // Wrap the generated content in a collapsible section
+      const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">🧠 Key Concepts</summary>
+  <div class="generated-content-body">
+    ${enhancedAnswer.trim()}
+  </div>
+</details>`;
+
       const currentAnswer = formData.answer.trim();
-      const newAnswer = currentAnswer ? `${currentAnswer}\n\n${enhancedAnswer.trim()}` : enhancedAnswer.trim();
+      const newAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
       handleFieldChange('answer', newAnswer);
     } catch (error) {
       console.error('Enhancement error:', error);
@@ -258,8 +320,18 @@ ${formData.additional_info ? 'Expand and improve the existing additional informa
 Return only the additional information content with proper HTML formatting:`;
 
       const additionalInfo = await callAI(prompt, selectedProvider, apiKey);
+      
+      // Wrap the generated content in a collapsible section
+      const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">🧠 Additional Information</summary>
+  <div class="generated-content-body">
+    ${additionalInfo.trim()}
+  </div>
+</details>`;
+
       const currentInfo = formData.additional_info.trim();
-      const newInfo = currentInfo ? `${currentInfo}\n\n${additionalInfo.trim()}` : additionalInfo.trim();
+      const newInfo = currentInfo ? `${currentInfo}\n\n${collapsibleContent}` : collapsibleContent;
       handleFieldChange('additional_info', newInfo);
     } catch (error) {
       console.error('Additional info error:', error);
@@ -305,11 +377,11 @@ Category: ${formData.category}
 ${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
 
 DECISION CRITERIA:
-1. Generate a code example if:
+1. Generate a Java code example if:
    - The topic is programming-related
    - The question asks about implementation, syntax, or algorithms
    - The answer discusses technical concepts that can be demonstrated in code
-   - The category suggests programming (e.g., JavaScript, Python, Data Structures, etc.)
+   - The category suggests programming (e.g., Java, Data Structures, Algorithms, OOP, etc.)
 
 2. Generate a practical example if:
    - The topic is conceptual but not code-related
@@ -321,23 +393,53 @@ DECISION CRITERIA:
    - An example would not add value
    - The question is about historical facts, dates, or names
 
-If a code example is appropriate, provide it with:
-- Clear, commented code
+If a Java code example is appropriate, provide it with:
+- Clean Java code with proper syntax and conventions
+- ABSOLUTELY NO EXPLANATORY COMMENTS in the code
+- NO comments like "// This demonstrates", "// Here we", "// Notice", "// Example of"
+- Write the code as if it were production code - clean and minimal
+- Include the expected output when the code is executed (if applicable)
+- Put ALL explanations in the paragraph below the code block
 - Proper formatting with HTML <pre><code> tags
-- A brief explanation of what the code demonstrates
+
+CRITICAL: Write Java code exactly as a developer would write it in a real project. 
+Do NOT add any teaching comments or explanations inside the code block.
+The code should speak for itself through proper variable names and structure.
+ALWAYS include what output the code produces when executed (if it produces console output).
 
 If a practical example is appropriate, provide it with:
 - A concrete scenario or use case
 - Clear formatting with HTML tags
 - Step-by-step walkthrough if needed
 
-Format code examples like this:
+Format Java code examples like this:
 <div class="example-section">
-<h4>Example:</h4>
-<pre><code class="language-javascript">
-// Your code here
+<h4>Java Example:</h4>
+<pre><code class="language-java">
+public class Student {
+    private String name;
+    private int age;
+    
+    public Student(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+    
+    public String getName() {
+        return name;
+    }
+    
+    public static void main(String[] args) {
+        Student student = new Student("Alice", 20);
+        System.out.println("Student name: " + student.getName());
+    }
+}
 </code></pre>
-<p>Explanation of what this example demonstrates.</p>
+<div class="output-section">
+<h5>Output:</h5>
+<pre><code class="output">Student name: Alice</code></pre>
+</div>
+<p>This example demonstrates basic class structure with constructor and getter method.</p>
 </div>
 
 Format practical examples like this:
@@ -356,9 +458,17 @@ If not applicable, return exactly: NOT_APPLICABLE`;
         // Show a user-friendly message instead of adding content
         setEnhancementError('An example is not applicable for this type of content');
       } else {
-        // Append the generated example to the existing answer
+        // Wrap the generated example in a collapsible section
+        const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">💡 Example</summary>
+  <div class="generated-content-body">
+    ${result.trim()}
+  </div>
+</details>`;
+
         const currentAnswer = formData.answer.trim();
-        const newAnswer = currentAnswer ? `${currentAnswer}\n\n${result.trim()}` : result.trim();
+        const newAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
         handleFieldChange('answer', newAnswer);
       }
     } catch (error) {
@@ -373,6 +483,16 @@ If not applicable, return exactly: NOT_APPLICABLE`;
 
   // Generic AI calling function
   const callAI = async (prompt, provider, apiKey) => {
+    // Validate API key before making calls
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error(`${provider.charAt(0).toUpperCase() + provider.slice(1)} API key is required. Please add your API key in Settings.`);
+    }
+
+    // Validate API key format
+    if (provider === 'anthropic' && !apiKey.startsWith('sk-ant-')) {
+      throw new Error('Invalid Anthropic API key format. API key should start with "sk-ant-"');
+    }
+
     switch (provider) {
       case 'openai':
         return await callOpenAI(prompt, apiKey);
@@ -413,30 +533,86 @@ If not applicable, return exactly: NOT_APPLICABLE`;
   };
 
   const callAnthropic = async (prompt, apiKey) => {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 800,
-        temperature: 0.7,
-        messages: [
-          { role: 'user', content: prompt }
-        ]
-      })
-    });
+    console.log('🔵 Anthropic API Call (FlashcardForm) - Starting request');
+    console.log('🔵 API Key format:', apiKey ? `${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}` : 'No API key provided');
+    console.log('🔵 Prompt length:', prompt.length);
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Anthropic API error: ${error.error?.message || 'Unknown error'}`);
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-sonnet-20240229',
+          max_tokens: 800,
+          temperature: 0.7,
+          messages: [
+            { role: 'user', content: prompt }
+          ]
+        })
+      });
+
+      console.log('🔵 Anthropic API Response Status:', response.status);
+      console.log('🔵 Anthropic API Response Headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        let errorDetails = '';
+        
+        try {
+          const errorData = await response.json();
+          console.log('🔴 Anthropic API Error Data:', errorData);
+          
+          if (errorData.error) {
+            errorMessage = errorData.error.message || errorMessage;
+            errorDetails = errorData.error.type || '';
+          }
+          
+          // Specific error handling for common issues
+          if (response.status === 401) {
+            throw new Error(`Authentication Failed: Invalid API key. Please check your Anthropic API key in Settings. (${errorMessage})`);
+          } else if (response.status === 403) {
+            throw new Error(`Permission Denied: Your API key doesn't have permission to access this resource. (${errorMessage})`);
+          } else if (response.status === 429) {
+            throw new Error(`Rate Limited: You've exceeded the API rate limit. Please wait and try again. (${errorMessage})`);
+          } else if (response.status === 400) {
+            throw new Error(`Bad Request: ${errorMessage}. Check your input format.`);
+          } else if (response.status === 500) {
+            throw new Error(`Server Error: Anthropic API is experiencing issues. Please try again later. (${errorMessage})`);
+          } else {
+            throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}${errorDetails ? ` (Type: ${errorDetails})` : ''}`);
+          }
+        } catch (jsonError) {
+          console.log('🔴 Could not parse error response as JSON:', jsonError);
+          throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}. Response could not be parsed.`);
+        }
+      }
+
+      const data = await response.json();
+      console.log('🔵 Anthropic API Success - Response structure:', {
+        hasContent: !!data.content,
+        contentLength: data.content?.length || 0,
+        firstContentType: data.content?.[0]?.type,
+        hasText: !!data.content?.[0]?.text
+      });
+
+      const content = data.content[0]?.text;
+      
+      if (!content) {
+        throw new Error('Anthropic API returned empty content. Please try again.');
+      }
+
+      return content;
+    } catch (networkError) {
+      console.error('🔴 Anthropic API Network Error:', networkError);
+      if (networkError.message.includes('fetch')) {
+        throw new Error('Network error: Could not connect to Anthropic API. Please check your internet connection and try again.');
+      }
+      throw networkError;
     }
-
-    const data = await response.json();
-    return data.content[0]?.text || '';
   };
 
   const callGemini = async (prompt, apiKey) => {
@@ -468,16 +644,14 @@ If not applicable, return exactly: NOT_APPLICABLE`;
   };
 
   // Delete handling functions
-  const handleDeleteClick = () => {
-    setShowDeleteConfirm(true);
-  };
-
-  const handleDeleteConfirm = async () => {
+  const handleDeleteClick = async () => {
     if (!editCard || !onDelete) return;
 
     setIsDeleting(true);
     try {
       await onDelete(editCard.id);
+      // Update original data to prevent auto-save on close after successful delete
+      setOriginalFormData(formData);
       // Close modal - parent will handle navigation
       onClose();
     } catch (error) {
@@ -485,12 +659,7 @@ If not applicable, return exactly: NOT_APPLICABLE`;
       setEnhancementError('Failed to delete card: ' + error.message);
     } finally {
       setIsDeleting(false);
-      setShowDeleteConfirm(false);
     }
-  };
-
-  const handleDeleteCancel = () => {
-    setShowDeleteConfirm(false);
   };
 
   if (!isVisible) {
@@ -624,6 +793,7 @@ If not applicable, return exactly: NOT_APPLICABLE`;
             )}
           </div>
 
+
           {/* Additional Information Field */}
           <div className="form-group">
             <label htmlFor="additional_info">Additional Information</label>
@@ -659,6 +829,7 @@ If not applicable, return exactly: NOT_APPLICABLE`;
             )}
           </div>
 
+
           {/* Enhancement Error Display */}
           {enhancementError && (
             <div className="error-message enhancement-error">
@@ -672,6 +843,22 @@ If not applicable, return exactly: NOT_APPLICABLE`;
               </button>
             </div>
           )}
+
+          {/* Starred Checkbox */}
+          <div className="form-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.starred}
+                onChange={(e) => handleFieldChange('starred', e.target.checked)}
+                disabled={isSubmitting}
+                className="checkbox-input"
+              />
+              <span className="checkbox-text">
+                ⭐ Mark as important (starred)
+              </span>
+            </label>
+          </div>
 
           {/* Form Actions */}
           <div className="form-actions">
@@ -725,55 +912,6 @@ If not applicable, return exactly: NOT_APPLICABLE`;
           </div>
         )}
 
-        {/* Delete Confirmation Dialog */}
-        {showDeleteConfirm && (
-          <div className="delete-confirm-overlay">
-            <div className="delete-confirm-dialog">
-              <div className="delete-confirm-header">
-                <h3>⚠️ Delete Flashcard</h3>
-              </div>
-              <div className="delete-confirm-content">
-                <p>Are you sure you want to delete this flashcard?</p>
-                <div className="delete-preview">
-                  <div className="delete-preview-question">
-                    <strong>Q:</strong> <span dangerouslySetInnerHTML={{ __html: formData.question.substring(0, 100) + (formData.question.length > 100 ? '...' : '') }} />
-                  </div>
-                  <div className="delete-preview-answer">
-                    <strong>A:</strong> <span dangerouslySetInnerHTML={{ __html: formData.answer.substring(0, 100) + (formData.answer.length > 100 ? '...' : '') }} />
-                  </div>
-                </div>
-                <p className="delete-warning">
-                  <strong>This action cannot be undone.</strong>
-                </p>
-              </div>
-              <div className="delete-confirm-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={handleDeleteCancel}
-                  disabled={isDeleting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={handleDeleteConfirm}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <>
-                      <span className="loading-spinner-small"></span>
-                      Deleting...
-                    </>
-                  ) : (
-                    'Delete Card'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

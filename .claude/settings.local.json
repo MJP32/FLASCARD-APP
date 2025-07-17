@@ -29,7 +29,22 @@
       "Bash(test)",
       "Bash(/bin/rm:*)",
       "Bash(SHELL=/bin/bash npm ci)",
-      "Bash(export SHELL=/bin/bash)"
+      "Bash(export SHELL=/bin/bash)",
+      "Bash(timeout 5 npm start:*)",
+      "Bash(npx react-scripts build:*)",
+      "Bash(timeout 10 npm start:*)",
+      "Bash(sed:*)",
+      "Bash(timeout 20s npm start)",
+      "Bash(mkdir:*)",
+      "Bash(npm test:*)",
+      "Bash(timeout 30 npm start)",
+      "Bash(find:*)",
+      "Bash(kill:*)",
+      "Bash(npx babel-node:*)",
+      "Bash(PORT=3001 timeout 30 npm start)",
+      "Bash(npm ls:*)",
+      "Bash(CI=true npm run build)",
+      "Bash(timeout 20 npm start)"
     ],
     "deny": []
   }

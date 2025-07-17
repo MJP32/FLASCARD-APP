@@ -205,7 +205,7 @@ function LoginScreen({
                       onChange={(e) => setResetEmail(e.target.value)}
                       required
                       disabled={currentLoading}
-                      className="backdrop-blur-xl bg-white/20 border border-white/30 rounded-xl w-full py-4 pl-12 pr-4 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-xl placeholder-white/60 disabled:opacity-50 input-glow"
+                      className="backdrop-blur-xl bg-white/20 border border-white/30 rounded-xl w-full py-4 pl-12 pr-4 text-black leading-tight focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-xl placeholder-white/60 disabled:opacity-50 input-glow"
                       placeholder="your@email.com"
                       style={{ backdropFilter: 'blur(12px)' }}
                     />
@@ -267,7 +267,7 @@ function LoginScreen({
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={currentLoading}
-                  className="backdrop-blur-xl bg-white/20 border border-white/30 rounded-xl w-full py-4 pl-12 pr-4 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-xl placeholder-white/60 disabled:opacity-50 input-glow"
+                  className="backdrop-blur-xl bg-white/20 border border-white/30 rounded-xl w-full py-4 pl-12 pr-4 text-black leading-tight focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-xl placeholder-white/60 disabled:opacity-50 input-glow"
                   placeholder="your@email.com"
                   style={{ backdropFilter: 'blur(12px)' }}
                 />
@@ -290,7 +290,7 @@ function LoginScreen({
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={currentLoading}
-                  className="backdrop-blur-xl bg-white/20 border border-white/30 rounded-xl w-full py-4 pl-12 pr-12 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-xl placeholder-white/60 disabled:opacity-50 input-glow"
+                  className="backdrop-blur-xl bg-white/20 border border-white/30 rounded-xl w-full py-4 pl-12 pr-12 text-black leading-tight focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-white/50 transition-all duration-300 shadow-xl placeholder-white/60 disabled:opacity-50 input-glow"
                   placeholder="••••••••"
                   style={{ backdropFilter: 'blur(12px)' }}
                 />

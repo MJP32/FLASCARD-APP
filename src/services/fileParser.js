@@ -22,6 +22,7 @@ export const parseCSV = (csvString) => {
     if (csvString.includes('\0') || csvString.includes('\uFFFD')) {
       throw new Error('CSV file contains invalid characters. This might be a binary file. Please save as CSV format and try again.');
     }
+    
 
     // Split the CSV into rows carefully handling quoted content which may contain newlines
     const getRows = (text) => {
@@ -122,11 +123,14 @@ export const parseCSV = (csvString) => {
     console.log('Rows after removing header:', rows.length);
     const cards = [];
     
-    rows.forEach((row, index) => {
-      if (!row.trim()) return; // Skip empty rows
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      if (!row.trim()) continue; // Skip empty rows
       
-      const fields = parseRow(row);
-      console.log(`Row ${index + 1} parsed into ${fields.length} fields`);
+      try {
+        console.log(`Processing row ${index + 1}/${rows.length}`);
+        const fields = parseRow(row);
+        console.log(`Row ${index + 1} parsed into ${fields.length} fields`);
       
       // Extract fields based on header mapping
       const getField = (name) => {
@@ -144,9 +148,20 @@ export const parseCSV = (csvString) => {
       const levelRaw = getField('level')?.trim().toLowerCase() || 'new';
       const additional_info = getField('additional_info') || '';
       
-      // Validate level value
-      const validLevels = ['new', 'again', 'hard', 'good', 'easy'];
-      const level = validLevels.includes(levelRaw) ? levelRaw : 'new';
+      
+      // Validate level value and map common alternatives
+      const levelMapping = {
+        'beginner': 'new',
+        'intermediate': 'good',
+        'advanced': 'hard',
+        'expert': 'easy',
+        'new': 'new',
+        'again': 'again',
+        'hard': 'hard',
+        'good': 'good',
+        'easy': 'easy'
+      };
+      const level = levelMapping[levelRaw] || 'new';
       
       console.log(`Row ${index + 1} field extraction:`, { 
         question: question?.substring(0, 50),
@@ -199,7 +214,12 @@ export const parseCSV = (csvString) => {
       } else {
         console.warn(`Skipping row ${index + 1} due to missing Question or Answer. Question: "${question}", Answer: "${answer}"`);
       }
-    });
+      } catch (error) {
+        console.error(`Error processing row ${index + 1}:`, error);
+        console.error('Problematic row content:', row);
+        throw new Error(`Failed to parse row ${index + 1}: ${error.message}`);
+      }
+    }
 
     // Validate that we parsed some cards
     if (cards.length === 0) {

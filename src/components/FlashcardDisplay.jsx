@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 /**
  * Component for displaying flashcard content
@@ -6,24 +6,34 @@ import React from 'react';
  * @param {Object} props.card - Current flashcard object
  * @param {boolean} props.showAnswer - Whether to show the answer
  * @param {Function} props.onShowAnswer - Callback to show answer
+ * @param {Function} props.onToggleAnswer - Callback to toggle answer visibility
  * @param {Function} props.onPreviousCard - Callback for previous card navigation
  * @param {Function} props.onNextCard - Callback for next card navigation
  * @param {Function} props.onReviewCard - Callback for card review (again, hard, good, easy)
  * @param {number} props.currentIndex - Current card index
  * @param {number} props.totalCards - Total number of cards
  * @param {boolean} props.isDarkMode - Dark mode state
+ * @param {Function} props.onUpdateCardNotes - Callback to update card notes
+ * @param {Function} props.onToggleStarCard - Callback to toggle star status
+ * @param {Function} props.onEditCard - Callback to edit the current card
+ * @param {Function} props.onGenerateQuestions - Callback to generate questions based on current card
  * @returns {JSX.Element} Flashcard display component
  */
 const FlashcardDisplay = ({
   card,
   showAnswer,
   onShowAnswer,
+  onToggleAnswer,
   onPreviousCard,
   onNextCard,
   onReviewCard,
   currentIndex,
   totalCards,
-  isDarkMode
+  isDarkMode,
+  onUpdateCardNotes,
+  onToggleStarCard,
+  onEditCard,
+  onGenerateQuestions
 }) => {
   // Helper function to infer level from FSRS parameters
   const inferLevelFromFSRS = (card) => {
@@ -37,6 +47,11 @@ const FlashcardDisplay = ({
     if (interval >= 4) return 'good';
     return 'new';
   };
+
+  // State for card info visibility
+  const [showCardInfo, setShowCardInfo] = useState(false);
+
+
   if (!card) {
     return (
       <div className={`flashcard-container ${isDarkMode ? 'dark' : ''}`}>
@@ -48,60 +63,49 @@ const FlashcardDisplay = ({
     );
   }
 
-  const handleKeyDown = (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      if (!showAnswer) {
-        onShowAnswer();
-      }
-    } else if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      onPreviousCard();
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      onNextCard();
-    } else if (showAnswer && onReviewCard) {
-      // Review shortcuts only work when answer is shown
-      switch (event.key) {
-        case '1':
-          event.preventDefault();
-          onReviewCard('again');
-          break;
-        case '2':
-          event.preventDefault();
-          onReviewCard('hard');
-          break;
-        case '3':
-          event.preventDefault();
-          onReviewCard('good');
-          break;
-        case '4':
-          event.preventDefault();
-          onReviewCard('easy');
-          break;
-        default:
-          break;
-      }
-    }
-  };
+  // Keyboard handling is done at the App level to avoid conflicts
+  // This component only needs to display the UI
 
   return (
     <div 
       className={`flashcard-container ${isDarkMode ? 'dark' : ''}`}
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
     >
       {/* Card Info Header - Must be first for absolute positioning */}
       <div className="card-info-header">
-        {/* Category Badge */}
-        {card.category && (
-          <div className="category-badge">
-            {card.category}
-          </div>
-        )}
+        {/* Card Action Buttons - Top Left */}
+        <div className="card-action-buttons">
+          {/* Edit Card Button */}
+          {onEditCard && (
+            <button 
+              className="card-action-btn edit-btn"
+              onClick={() => onEditCard(card)}
+              aria-label="Edit card"
+              title="Edit this card"
+            >
+              ✏️ Edit
+            </button>
+          )}
+          
+          {/* Generate Questions Button */}
+          {onGenerateQuestions && (
+            <button 
+              className="card-action-btn generate-btn"
+              onClick={() => onGenerateQuestions()}
+              aria-label="Generate questions"
+              title="Generate related questions"
+            >
+              🤖 Generate
+            </button>
+          )}
+        </div>
         
-        {/* Subcategory and Level Info */}
+        {/* Category, Subcategory, Level, and Star - Horizontally Aligned */}
         <div className="card-tags">
+          {card.category && (
+            <div className="category-badge">
+              {card.category}
+            </div>
+          )}
           {card.sub_category && (
             <span className="subcategory-tag">
               📂 {card.sub_category}
@@ -110,8 +114,20 @@ const FlashcardDisplay = ({
           <span className="level-tag" data-level={inferLevelFromFSRS(card)}>
             📊 {inferLevelFromFSRS(card).charAt(0).toUpperCase() + inferLevelFromFSRS(card).slice(1)}
           </span>
+          {/* Star Toggle Button - Next to Level */}
+          {onToggleStarCard && (
+            <button 
+              className={`star-toggle-btn-inline ${card.starred ? 'starred' : ''}`}
+              onClick={() => onToggleStarCard(card.id)}
+              aria-label={card.starred ? "Remove star" : "Add star"}
+              title={card.starred ? "Remove star" : "Mark as important"}
+            >
+              {card.starred ? '★' : '☆'}
+            </button>
+          )}
         </div>
       </div>
+
 
       {/* Card Counter */}
       <div className="card-counter">
@@ -151,68 +167,31 @@ const FlashcardDisplay = ({
               </div>
             )}
 
-            {/* Review Buttons */}
-            {onReviewCard && (
-              <div className="review-buttons">
-                <h3 className="section-label">How well did you know this?</h3>
-                <div className="review-button-group">
-                  <button 
-                    className="review-btn again-btn"
-                    onClick={() => onReviewCard('again')}
-                    title="Completely forgot (1)"
-                  >
-                    <span className="btn-emoji">😵</span>
-                    <span className="btn-text">Again</span>
-                    <span className="btn-shortcut">1</span>
-                  </button>
-                  
-                  <button 
-                    className="review-btn hard-btn"
-                    onClick={() => onReviewCard('hard')}
-                    title="Hard to remember (2)"
-                  >
-                    <span className="btn-emoji">😓</span>
-                    <span className="btn-text">Hard</span>
-                    <span className="btn-shortcut">2</span>
-                  </button>
-                  
-                  <button 
-                    className="review-btn good-btn"
-                    onClick={() => onReviewCard('good')}
-                    title="Remembered with effort (3)"
-                  >
-                    <span className="btn-emoji">😊</span>
-                    <span className="btn-text">Good</span>
-                    <span className="btn-shortcut">3</span>
-                  </button>
-                  
-                  <button 
-                    className="review-btn easy-btn"
-                    onClick={() => onReviewCard('easy')}
-                    title="Easy to remember (4)"
-                  >
-                    <span className="btn-emoji">😎</span>
-                    <span className="btn-text">Easy</span>
-                    <span className="btn-shortcut">4</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>
 
       {/* Bottom Controls Section */}
       <div className="flashcard-bottom">
-        {/* Show Answer Button */}
-        {!showAnswer && (
+        {/* Show/Hide Answer Button */}
+        {onToggleAnswer ? (
           <button 
-            className="show-answer-btn"
-            onClick={onShowAnswer}
-            aria-label="Show answer"
+            className="show-answer-btn toggle-answer-btn"
+            onClick={onToggleAnswer}
+            aria-label={showAnswer ? "Hide answer" : "Show answer"}
           >
-            Show Answer
+            {showAnswer ? "Hide Answer" : "Show Answer"}
           </button>
+        ) : (
+          !showAnswer && (
+            <button 
+              className="show-answer-btn"
+              onClick={onShowAnswer}
+              aria-label="Show answer"
+            >
+              Show Answer
+            </button>
+          )
         )}
 
         {/* Navigation Controls */}
@@ -236,35 +215,67 @@ const FlashcardDisplay = ({
           </button>
         </div>
 
-        {/* Card Metadata */}
-        <div className="card-metadata">
-          {card.dueDate && (
-            <div className="due-date">
-              Due: {new Date(card.dueDate).toLocaleDateString()}
-            </div>
-          )}
-          {card.lastReviewed && (
-            <div className="last-reviewed">
-              Last reviewed: {new Date(card.lastReviewed).toLocaleDateString()}
-            </div>
-          )}
-          {card.reviewCount !== undefined && (
-            <div className="review-count">
-              Reviews: {card.reviewCount}
-            </div>
-          )}
-        </div>
 
         {/* Keyboard Shortcuts Hint */}
         <div className="keyboard-hints">
           <small>
-            Use <kbd>Space</kbd> or <kbd>Enter</kbd> to show answer, 
-            <kbd>←</kbd>/<kbd>→</kbd> arrows to navigate
+            <kbd>Space</kbd>/<kbd>Enter</kbd> toggle answer • <kbd>←</kbd>/<kbd>→</kbd> navigate • <kbd>E</kbd> edit card • <kbd>G</kbd> generate questions
             {showAnswer && onReviewCard && (
-              <>, <kbd>1</kbd>-<kbd>4</kbd> for review</>
+              <> • <kbd>1</kbd>-<kbd>4</kbd> review</>
             )}
           </small>
         </div>
+      </div>
+
+      {/* Card Info Button - Bottom Right */}
+      <div className="card-info-container">
+        <button 
+          className="card-info-button"
+          onClick={() => setShowCardInfo(!showCardInfo)}
+          title="Card Information"
+        >
+          ℹ️ Card Info
+        </button>
+        
+        {showCardInfo && (
+          <div className="card-info-dropdown">
+            {card.createdAt && (
+              <div className="card-info-item">
+                <strong>Created:</strong> {new Date(card.createdAt.toDate ? card.createdAt.toDate() : card.createdAt).toLocaleDateString()}
+              </div>
+            )}
+            {card.dueDate && (
+              <div className="card-info-item">
+                <strong>Due:</strong> {new Date(card.dueDate.toDate ? card.dueDate.toDate() : card.dueDate).toLocaleDateString()}
+              </div>
+            )}
+            {card.lastReviewed && (
+              <div className="card-info-item">
+                <strong>Last reviewed:</strong> {new Date(card.lastReviewed.toDate ? card.lastReviewed.toDate() : card.lastReviewed).toLocaleDateString()}
+              </div>
+            )}
+            {card.reviewCount !== undefined && (
+              <div className="card-info-item">
+                <strong>Reviews:</strong> {card.reviewCount}
+              </div>
+            )}
+            {card.difficulty !== undefined && (
+              <div className="card-info-item">
+                <strong>Difficulty:</strong> {card.difficulty.toFixed(1)}
+              </div>
+            )}
+            {card.interval !== undefined && (
+              <div className="card-info-item">
+                <strong>Interval:</strong> {card.interval} day{card.interval !== 1 ? 's' : ''}
+              </div>
+            )}
+            {card.easeFactor !== undefined && (
+              <div className="card-info-item">
+                <strong>Ease Factor:</strong> {card.easeFactor.toFixed(2)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

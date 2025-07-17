@@ -10,6 +10,7 @@ import ImportExportModal from './components/ImportExportModal';
 import GenerateQuestionsModal from './components/GenerateQuestionsModal';
 import ManageCardsModal from './components/ManageCardsModal';
 import Calendar from './Calendar';
+import RichTextEditor from './RichTextEditor';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -19,6 +20,10 @@ import { useSettings } from './hooks/useSettings';
 // Utils and Constants
 import { SUCCESS_MESSAGES, ERROR_MESSAGES, DEFAULT_FSRS_PARAMS } from './utils/constants';
 import { debugFirestore, checkFirestoreRules } from './utils/firebaseDebug';
+import { debugDueCards } from './utils/debugDueCards';
+import { addDebugAutoAdvanceToWindow } from './utils/debugAutoAdvance';
+import { addDebugCountingToWindow } from './utils/debugCounting';
+import './utils/testAutoAdvance'; // Adds window.testAutoAdvance() function
 
 // Styles
 import './App.css';
@@ -74,6 +79,22 @@ function App() {
   });
   const [selectedProvider, setSelectedProvider] = useState(localStorage.getItem('selected_ai_provider') || 'openai');
 
+  // Session-wide notes states
+  const [notes, setNotes] = useState(() => localStorage.getItem('flashcard_session_notes') || '');
+  const [showNotesDropdown, setShowNotesDropdown] = useState(false);
+
+  // Streak tracking state
+  const [streakDays, setStreakDays] = useState(0);
+  
+  // Track initial due cards count for the day
+  const [initialDueCardsCount, setInitialDueCardsCount] = useState(0);
+  const [cardsCompletedToday, setCardsCompletedToday] = useState(0);
+  const [initialCategoryStats, setInitialCategoryStats] = useState({});
+  const [categoryCompletedCounts, setCategoryCompletedCounts] = useState({});
+  const [initialSubCategoryStats, setInitialSubCategoryStats] = useState({});
+  const [subCategoryCompletedCounts, setSubCategoryCompletedCounts] = useState({});
+
+
   // Initialize Firebase
   useEffect(() => {
     try {
@@ -110,6 +131,7 @@ function App() {
     selectedSubCategory,
     selectedLevel,
     showDueTodayOnly,
+    showStarredOnly,
     categorySortBy,
     isLoading: flashcardsLoading,
     error: flashcardsError,
@@ -117,6 +139,7 @@ function App() {
     getCategories,
     getSubCategories,
     getSubCategoryStats,
+    getAllSubCategoryStats,
     getLevels,
     getCategoryStats,
     getCardsDueToday,
@@ -129,16 +152,24 @@ function App() {
     setSelectedSubCategory,
     setSelectedLevel,
     setShowDueTodayOnly,
+    setShowStarredOnly,
     setCategorySortBy,
     setCurrentCardIndex,
     nextCard,
     prevCard,
+    addToNavigationHistory,
     getNextCategoryWithDueCards,
+    getNextSubCategoryWithLeastCards,
     addFlashcard,
     updateFlashcard,
     deleteFlashcard,
     bulkImportFlashcards,
-    clearError: clearFlashcardsError
+    toggleStarCard,
+    clearError: clearFlashcardsError,
+    // Debug functions
+    manualTriggerAutoAdvance,
+    debugCurrentFilterState,
+    debugSubCategoryTracking
   } = useFlashcards(firebaseApp, userId);
 
   const {
@@ -154,6 +185,37 @@ function App() {
     resetFsrsParams,
     clearError: clearSettingsError
   } = useSettings(firebaseApp, userId);
+
+  // Get computed values (must be before any useEffect that uses them)
+  const categoryStats = getCategoryStats();
+  const currentCard = getCurrentCard();
+  const categories = getCategories();
+  const subCategories = getSubCategories();
+  const subCategoryStats = getSubCategoryStats();
+  const levels = getLevels();
+
+  // Initialize debug utilities (development only)
+  useEffect(() => {
+    if (flashcards && userId && manualTriggerAutoAdvance && debugCurrentFilterState && debugSubCategoryTracking) {
+      const flashcardHook = {
+        flashcards,
+        filteredFlashcards,
+        selectedCategory,
+        selectedSubCategory,
+        selectedLevel,
+        showDueTodayOnly,
+        manualTriggerAutoAdvance,
+        debugCurrentFilterState,
+        debugSubCategoryTracking,
+        getSubCategories,
+        getSubCategoryStats
+      };
+      addDebugAutoAdvanceToWindow(flashcardHook);
+      
+      // Add counting debug utilities
+      addDebugCountingToWindow(flashcards, userId, categoryStats, getSubCategoryStats(), selectedCategory);
+    }
+  }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, manualTriggerAutoAdvance, debugCurrentFilterState, debugSubCategoryTracking, getSubCategories, getSubCategoryStats, categoryStats]);
 
   // Sync login screen visibility with authentication state
   useEffect(() => {
@@ -403,11 +465,39 @@ function App() {
       console.log('📝 Updating card with data:', updateData);
       console.log(`📅 Next review: ${interval} days from now (${dueDate.toLocaleDateString()})`);
       
+      // Add current card to navigation history before updating it
+      // This ensures we can navigate back to this card even if it gets filtered out
+      addToNavigationHistory(card);
+      
       // Update the card
       await updateFlashcard(card.id, updateData);
       
       console.log('✅ Card review successful!');
       setMessage(`Card reviewed as ${rating.toUpperCase()}! Next review in ${interval} day${interval !== 1 ? 's' : ''}.`);
+      
+      // Increment completed cards count
+      const newCompletedCount = cardsCompletedToday + 1;
+      setCardsCompletedToday(newCompletedCount);
+      
+      // Increment category-specific completed count
+      const cardCategory = card.category || 'Uncategorized';
+      const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+      const subCategoryKey = `${cardCategory}::${cardSubCategory}`;
+      
+      const newCategoryCompleted = { ...categoryCompletedCounts };
+      const newSubCategoryCompleted = { ...subCategoryCompletedCounts };
+      
+      newCategoryCompleted[cardCategory] = (newCategoryCompleted[cardCategory] || 0) + 1;
+      newSubCategoryCompleted[subCategoryKey] = (newSubCategoryCompleted[subCategoryKey] || 0) + 1;
+      
+      setCategoryCompletedCounts(newCategoryCompleted);
+      setSubCategoryCompletedCounts(newSubCategoryCompleted);
+      
+      if (userId) {
+        localStorage.setItem(`flashcard_completed_today_${userId}`, newCompletedCount.toString());
+        localStorage.setItem(`flashcard_category_completed_${userId}`, JSON.stringify(newCategoryCompleted));
+        localStorage.setItem(`flashcard_subcategory_completed_${userId}`, JSON.stringify(newSubCategoryCompleted));
+      }
       
       // Hide answer and move to next card
       setShowAnswer(false);
@@ -554,9 +644,9 @@ function App() {
         case ' ':
         case 'Enter':
           event.preventDefault();
-          if (!showAnswer) {
-            setShowAnswer(true);
-          }
+          // Toggle answer visibility
+          console.log('Toggle answer:', showAnswer, '->', !showAnswer);
+          setShowAnswer(prev => !prev);
           break;
         case 'ArrowLeft':
         case 'p':
@@ -607,6 +697,19 @@ function App() {
           setShowSettingsModal(true);
           break;
         case 'e':
+          // Edit current card if available
+          if (getCurrentCard()) {
+            event.preventDefault();
+            handleEditCard(getCurrentCard());
+          }
+          break;
+        case 'g':
+          // Generate questions if available
+          event.preventDefault();
+          setShowGenerateModal(true);
+          break;
+        case 'i':
+          // Import/Export modal
           event.preventDefault();
           setShowImportExportModal(true);
           break;
@@ -621,6 +724,7 @@ function App() {
           setShowImportExportModal(false);
           setShowCalendarModal(false);
           setShowManageCardsModal(false);
+          setShowGenerateModal(false);
           setIsEditingCard(false);
           setEditCardData(null);
           break;
@@ -631,15 +735,24 @@ function App() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showAnswer, nextCard, prevCard, setShowAnswer, handleReviewCard, getCurrentCard]);
+  }, [showAnswer, nextCard, prevCard, setShowAnswer, handleReviewCard, getCurrentCard, handleEditCard]);
 
-  // Get computed values (must be before conditional returns)
-  const currentCard = getCurrentCard();
-  const categories = getCategories();
-  const subCategories = getSubCategories();
-  const subCategoryStats = getSubCategoryStats();
-  const levels = getLevels();
-  const categoryStats = getCategoryStats();
+  // Computed values now declared earlier in the component
+
+  // Save notes to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem('flashcard_session_notes', notes);
+  }, [notes]);
+
+  // Handle notes text change
+  const handleNotesChange = (value) => {
+    setNotes(value);
+  };
+
+  // Clear notes
+  const handleClearNotes = () => {
+    setNotes('');
+  };
   
   // Get due cards for easy access
   const pastDueCards = getPastDueCards();
@@ -647,6 +760,129 @@ function App() {
   const allDueCards = getAllDueCards();
   const filteredDueCards = getFilteredDueCards();
   const cardsReviewedToday = getCardsReviewedToday();
+
+  // Load streak from localStorage on mount
+  useEffect(() => {
+    if (userId) {
+      const savedStreak = localStorage.getItem(`streak_${userId}`) || '0';
+      setStreakDays(parseInt(savedStreak, 10));
+    }
+  }, [userId]);
+
+  // Initialize daily due cards count
+  useEffect(() => {
+    if (userId && allDueCards.length > 0 && categoryStats && subCategoryStats) {
+      const today = new Date().toDateString();
+      const storedDate = localStorage.getItem(`flashcard_due_date_${userId}`);
+      const storedCount = localStorage.getItem(`flashcard_initial_due_${userId}`);
+      const storedCompleted = localStorage.getItem(`flashcard_completed_today_${userId}`);
+      const storedCategoryStats = localStorage.getItem(`flashcard_initial_category_stats_${userId}`);
+      const storedCategoryCompleted = localStorage.getItem(`flashcard_category_completed_${userId}`);
+      const storedSubCategoryStats = localStorage.getItem(`flashcard_initial_subcategory_stats_${userId}`);
+      const storedSubCategoryCompleted = localStorage.getItem(`flashcard_subcategory_completed_${userId}`);
+      
+      // If it's a new day or first time, reset counts
+      if (storedDate !== today) {
+        const newInitialCount = allDueCards.length;
+        const newCategoryStats = categoryStats;
+        const newSubCategoryStats = getAllSubCategoryStats();
+        
+        console.log('🔄 COUNTING-INIT: Setting initial stats for new day');
+        console.log('🔄 Initial category stats:', newCategoryStats);
+        console.log('🔄 Initial subcategory stats keys:', Object.keys(newSubCategoryStats));
+        console.log('🔄 Total due cards:', newInitialCount);
+        
+        setInitialDueCardsCount(newInitialCount);
+        setCardsCompletedToday(0);
+        setInitialCategoryStats(newCategoryStats);
+        setCategoryCompletedCounts({});
+        setInitialSubCategoryStats(newSubCategoryStats);
+        setSubCategoryCompletedCounts({});
+        localStorage.setItem(`flashcard_due_date_${userId}`, today);
+        localStorage.setItem(`flashcard_initial_due_${userId}`, newInitialCount.toString());
+        localStorage.setItem(`flashcard_completed_today_${userId}`, '0');
+        localStorage.setItem(`flashcard_initial_category_stats_${userId}`, JSON.stringify(newCategoryStats));
+        localStorage.setItem(`flashcard_category_completed_${userId}`, JSON.stringify({}));
+        localStorage.setItem(`flashcard_initial_subcategory_stats_${userId}`, JSON.stringify(newSubCategoryStats));
+        localStorage.setItem(`flashcard_subcategory_completed_${userId}`, JSON.stringify({}));
+      } else {
+        // Restore counts from localStorage
+        setInitialDueCardsCount(parseInt(storedCount) || allDueCards.length);
+        setCardsCompletedToday(parseInt(storedCompleted) || 0);
+        setInitialCategoryStats(storedCategoryStats ? JSON.parse(storedCategoryStats) : categoryStats);
+        setCategoryCompletedCounts(storedCategoryCompleted ? JSON.parse(storedCategoryCompleted) : {});
+        setInitialSubCategoryStats(storedSubCategoryStats ? JSON.parse(storedSubCategoryStats) : getAllSubCategoryStats());
+        setSubCategoryCompletedCounts(storedSubCategoryCompleted ? JSON.parse(storedSubCategoryCompleted) : {});
+      }
+    }
+  }, [userId, allDueCards.length, categoryStats, getAllSubCategoryStats]);
+
+  // Fix completion count inconsistencies - DISABLED to prevent infinite loop
+  useEffect(() => {
+    // Disabled to prevent infinite loop - use window.debugCounting.reset() instead
+    return;
+  }, []);
+
+  // Check and update streak when all cards are completed
+  useEffect(() => {
+    if (!userId || !flashcards.length) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayString = today.toDateString();
+    
+    // Check if all cards have been completed today
+    const allCardsCompleted = allDueCards.length === 0 && flashcards.length > 0;
+    
+    if (allCardsCompleted) {
+      const lastCompletionDate = localStorage.getItem(`lastCompletion_${userId}`);
+      const lastStreakUpdate = localStorage.getItem(`lastStreakUpdate_${userId}`);
+      
+      // Only update streak once per day
+      if (lastStreakUpdate !== todayString) {
+        let newStreak = streakDays;
+        
+        if (lastCompletionDate) {
+          const lastDate = new Date(lastCompletionDate);
+          const yesterday = new Date(today);
+          yesterday.setDate(yesterday.getDate() - 1);
+          
+          // If last completion was yesterday, increment streak
+          if (lastDate.toDateString() === yesterday.toDateString()) {
+            newStreak = streakDays + 1;
+          } else if (lastDate.toDateString() === todayString) {
+            // Already completed today, keep current streak
+            newStreak = streakDays;
+          } else {
+            // Gap in completions, reset streak to 1
+            newStreak = 1;
+          }
+        } else {
+          // First completion ever
+          newStreak = 1;
+        }
+        
+        setStreakDays(newStreak);
+        localStorage.setItem(`streak_${userId}`, newStreak.toString());
+        localStorage.setItem(`lastCompletion_${userId}`, todayString);
+        localStorage.setItem(`lastStreakUpdate_${userId}`, todayString);
+      }
+    }
+  }, [userId, allDueCards.length, flashcards.length, streakDays]);
+
+  // Auto-switch to "All" if selected category has no due cards (using stable counting)
+  useEffect(() => {
+    if (!showDueTodayOnly || selectedCategory === 'All') return;
+    
+    const initialStats = initialCategoryStats[selectedCategory] || { total: 0, due: 0 };
+    const completedCount = categoryCompletedCounts[selectedCategory] || 0;
+    const adjustedDueCount = Math.max(0, initialStats.due - completedCount);
+    
+    if (adjustedDueCount === 0) {
+      console.log(`📂 Category "${selectedCategory}" has no due cards remaining, switching to "All"`);
+      setSelectedCategory('All');
+    }
+  }, [selectedCategory, showDueTodayOnly, setSelectedCategory, initialCategoryStats, categoryCompletedCounts]);
   
   // Log due cards info on initial load (useful for debugging)
   useEffect(() => {
@@ -668,32 +904,62 @@ function App() {
         dueDate: card.dueDate 
       }))
     });
-  }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory]);
+    
+    // Run detailed debug when due cards are expected but not showing
+    if (showDueTodayOnly && filteredFlashcards.length === 0 && allDueCards.length > 0) {
+      console.log('⚠️ WARNING: Due cards exist but none are showing!');
+      debugDueCards(flashcards, selectedCategory, selectedSubCategory);
+    }
+  }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory, flashcards]);
 
   // Auto-navigation to next category with due cards
   useEffect(() => {
+    
     // Only auto-navigate when:
     // 1. We're showing due cards only
     // 2. We have a specific category selected (not "All")
     // 3. There are no filtered cards left in the current category
-    // 4. There are still due cards in other categories
+    // 4. There are NO subcategories with due cards in the current category
+    // 5. There are still due cards in other categories
     if (showDueTodayOnly && selectedCategory !== 'All' && filteredFlashcards.length === 0 && allDueCards.length > 0) {
-      const nextCategory = getNextCategoryWithDueCards(selectedCategory);
+      console.log('🔄 Category auto-advance triggered:', {
+        selectedCategory,
+        selectedSubCategory,
+        filteredFlashcardsLength: filteredFlashcards.length,
+        allDueCardsLength: allDueCards.length
+      });
       
-      if (nextCategory) {
-        console.log(`🔄 Auto-navigating from "${selectedCategory}" to "${nextCategory}" (category completed)`);
-        setSelectedCategory(nextCategory);
-        // Ensure we stay in due cards mode
-        setShowDueTodayOnly(true);
-        setMessage(`Switched to "${nextCategory}" category (${selectedCategory} completed) - showing due cards`);
+      // Check if there are any subcategories with due cards in the current category
+      const nextSubCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
+      const hasSubcategoriesWithDueCards = nextSubCategory !== null;
+      
+      console.log('🔄 Subcategory check:', {
+        nextSubCategory,
+        hasSubcategoriesWithDueCards
+      });
+      
+      // Only switch categories if there are no subcategories with due cards left in current category
+      if (!hasSubcategoriesWithDueCards) {
+        const nextCategory = getNextCategoryWithDueCards(selectedCategory);
         
-        // Clear message after 3 seconds
-        setTimeout(() => setMessage(''), 3000);
+        if (nextCategory) {
+          console.log(`🔄 Auto-navigating from "${selectedCategory}" to "${nextCategory}" (category completed)`);
+          setSelectedCategory(nextCategory);
+          // Ensure we stay in due cards mode
+          setShowDueTodayOnly(true);
+          setMessage(`Switched to "${nextCategory}" category (${selectedCategory} completed) - showing due cards`);
+          
+          // Clear message after 3 seconds
+          setTimeout(() => setMessage(''), 3000);
+        } else {
+          console.log('🎉 All categories completed!');
+        }
       } else {
-        console.log('🎉 All categories completed!');
+        console.log('🔄 Current category still has subcategories with due cards, not switching category');
+        console.log('🔄 Should advance to subcategory:', nextSubCategory);
       }
     }
-  }, [showDueTodayOnly, selectedCategory, filteredFlashcards.length, allDueCards.length, getNextCategoryWithDueCards, setSelectedCategory, setShowDueTodayOnly]);
+  }, [showDueTodayOnly, selectedCategory, selectedSubCategory, filteredFlashcards.length, allDueCards.length, getNextCategoryWithDueCards, getNextSubCategoryWithLeastCards, setSelectedCategory, setShowDueTodayOnly]);
 
   // Debug logging for loading state
   console.log('App loading state:', {
@@ -752,12 +1018,30 @@ function App() {
   // Convert flashcards to calendar dates format
   const getCalendarDates = () => {
     const dateMap = new Map();
+    const completionMap = new Map();
     
     flashcards.forEach(card => {
-      if (card.dueDate) {
+      // Track completion dates
+      if (card.lastReviewed && card.active !== false) {
+        const lastReviewDate = card.lastReviewed instanceof Date ? card.lastReviewed : card.lastReviewed.toDate();
+        const reviewDateKey = lastReviewDate.toDateString();
+        
+        if (completionMap.has(reviewDateKey)) {
+          completionMap.get(reviewDateKey).completedCount++;
+        } else {
+          completionMap.set(reviewDateKey, {
+            date: new Date(lastReviewDate.getFullYear(), lastReviewDate.getMonth(), lastReviewDate.getDate()),
+            completedCount: 1
+          });
+        }
+      }
+      
+      // Only include active cards with due dates
+      if (card.dueDate && card.active !== false) {
         const dueDate = card.dueDate instanceof Date ? card.dueDate : card.dueDate.toDate();
         const dateKey = dueDate.toDateString(); // Groups by day, ignoring time
         
+        // Count all cards with due dates (including future dates)
         if (dateMap.has(dateKey)) {
           dateMap.get(dateKey).cardCount++;
         } else {
@@ -769,90 +1053,50 @@ function App() {
       }
     });
     
-    return Array.from(dateMap.values());
+    // Merge completion data into calendar dates
+    const allDates = Array.from(dateMap.values());
+    completionMap.forEach((completion, dateKey) => {
+      const existingDate = allDates.find(d => d.date.toDateString() === dateKey);
+      if (existingDate) {
+        existingDate.completedCount = completion.completedCount;
+      } else {
+        // Add completion-only dates (days with completions but no current due cards)
+        allDates.push({
+          date: completion.date,
+          cardCount: 0,
+          completedCount: completion.completedCount
+        });
+      }
+    });
+    
+    return allDates;
   };
   
   const calendarDates = getCalendarDates();
 
   return (
-    <div className={`app ${isDarkMode ? 'dark' : ''}`}>
+    <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
+      
       {/* Header */}
       <header className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}>
         <div className={`header-layout ${isHeaderCollapsed ? 'hidden' : ''}`}>
-          {/* Left Section - Filters */}
+          {/* Left Section - User Welcome */}
           <div className="header-left">
-            <div className="filters-group">
-              <div className="filters-header">
-                <span className="filters-title">🔍 Filters</span>
-              </div>
-              <div className="filters-content">
-                {/* Category Filter */}
-                <div className="filter-item">
-                  <label className="filter-label">Category</label>
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="filter-select category-select"
-                  >
-                    <option value="All">All Categories ({flashcards.length})</option>
-                    {categories.map(category => {
-                      const stats = categoryStats[category] || { total: 0, due: 0 };
-                      return (
-                        <option key={category} value={category}>
-                          {category} ({stats.due}/{stats.total})
-                        </option>
-                      );
-                    })}
-                  </select>
+            {userId && userDisplayName && (
+              <div className="user-welcome-box">
+                <div className="welcome-text">Welcome back!</div>
+                <div className="user-email">{userDisplayName}</div>
+                <div className="streak-info">
+                  🔥 {streakDays} day{streakDays !== 1 ? 's' : ''} streak
                 </div>
-
-                {/* Sub-Category Filter */}
-                {subCategories.length > 0 && (
-                  <div className="filter-item">
-                    <label className="filter-label">Sub-Category</label>
-                    <select
-                      value={selectedSubCategory}
-                      onChange={(e) => setSelectedSubCategory(e.target.value)}
-                      className="filter-select subcategory-select"
-                    >
-                      <option value="All">All Sub-Categories</option>
-                      {subCategories.map(subCategory => {
-                        const stats = subCategoryStats[subCategory] || { total: 0, due: 0 };
-                        return (
-                          <option key={subCategory} value={subCategory}>
-                            {subCategory} ({stats.due}/{stats.total})
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                )}
-
-                {/* Level Filter */}
-                {levels.length > 0 && (
-                  <div className="filter-item">
-                    <label className="filter-label">Level</label>
-                    <select
-                      value={selectedLevel}
-                      onChange={(e) => setSelectedLevel(e.target.value)}
-                      className="filter-select level-select"
-                    >
-                      <option value="All">All Levels</option>
-                      {levels.map(level => (
-                        <option key={level} value={level}>
-                          {level.charAt(0).toUpperCase() + level.slice(1)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Center Section - Logo */}
-          <div className="header-center">
-            <h1 className="app-logo">📚 FSRS Flashcards</h1>
+          {/* Left Section - Logo */}
+          <div className="header-left-logo">
+            <h1 className="app-logo">FSRS Flashcards</h1>
+            <p className="app-subtitle">AI Learning Platform</p>
           </div>
 
           {/* Right Section - Actions */}
@@ -883,6 +1127,8 @@ function App() {
                 >
                   ⚙️ Settings
                 </button>
+                
+                {/* Debug button for troubleshooting */}
               </div>
 
               {/* Card Filter Toggle and Header Controls - Line under action buttons */}
@@ -906,6 +1152,15 @@ function App() {
                     title={`Filtered Due Cards: ${filteredDueCards.length} | Total Due (All Categories): ${allDueCards.length}`}
                   >
                     Due Cards ({filteredDueCards.length})
+                  </button>
+                  <button
+                    className={`toggle-btn ${showStarredOnly ? 'active' : ''}`}
+                    onClick={() => {
+                      setShowStarredOnly(!showStarredOnly);
+                    }}
+                    title={`Show only starred cards: ${showStarredOnly ? 'ON' : 'OFF'}`}
+                  >
+                    ⭐ Starred {showStarredOnly ? 'ON' : 'OFF'}
                   </button>
                 </div>
                 
@@ -950,18 +1205,6 @@ function App() {
             <div className="error-message">
               ❌ {error || flashcardsError || settingsError}
               <button className="close-message" onClick={clearError}>×</button>
-              {flashcardsError && (
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ marginLeft: '10px' }}
-                  onClick={() => {
-                    debugFirestore(firebaseApp);
-                    checkFirestoreRules();
-                  }}
-                >
-                  🔍 Debug Firestore
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -970,6 +1213,8 @@ function App() {
 
       {/* Main Content */}
       <main className="app-main">
+        
+
         {filteredFlashcards.length === 0 ? (
           <div className="no-cards-state">
             {showDueTodayOnly && flashcards.length > 0 && allDueCards.length === 0 ? (
@@ -995,7 +1240,7 @@ function App() {
                   }}>
                     <p>📊 Today's Stats:</p>
                     <p>✅ Cards reviewed today: {cardsReviewedToday.length}</p>
-                    <p>📚 Total cards: {flashcards.length}</p>
+                    <p>📖 Total cards: {flashcards.length}</p>
                     <p>🎯 Streak maintained!</p>
                   </div>
                   <div className="no-cards-actions">
@@ -1037,35 +1282,342 @@ function App() {
           </div>
         ) : (
           <div className="flashcard-area">
-            <FlashcardDisplay
-              card={currentCard}
-              showAnswer={showAnswer}
-              onShowAnswer={() => setShowAnswer(true)}
-              onPreviousCard={prevCard}
-              onNextCard={nextCard}
-              onReviewCard={handleReviewCard}
-              currentIndex={currentCardIndex}
-              totalCards={filteredFlashcards.length}
-              isDarkMode={isDarkMode}
-            />
-            
-            {/* Card Actions */}
-            {currentCard && (
-              <div className="card-actions">
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => handleEditCard(currentCard)}
-                >
-                  ✏️ Edit Card
-                </button>
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => setShowGenerateModal(true)}
-                >
-                  🤖 Generate Questions
-                </button>
+            <div className="flashcard-with-notes-container">
+              {/* Filters Section - Left of flashcard */}
+              <div className="filters-section-left">
+                <div className="filters-group">
+                  <div className="filters-content">
+                    {/* Category Filter Buttons */}
+                    {categories.length > 0 && (
+                      <div className="filter-section">
+                        <label className="filter-label">Categories</label>
+                        <div className="filter-buttons-container">
+                          <button
+                            className={`filter-btn ${selectedCategory === 'All' ? 'active' : ''}`}
+                            onClick={() => setSelectedCategory('All')}
+                          >
+                            All ({showDueTodayOnly ? (() => {
+                              // Calculate total stable due count across all categories
+                              let totalDue = 0;
+                              const categoryBreakdown = {};
+                              
+                              // Get all possible categories from multiple sources
+                              const allPossibleCategories = new Set([
+                                ...Object.keys(initialCategoryStats),
+                                ...Object.keys(categoryStats),
+                                ...categories
+                              ]);
+                              
+                              allPossibleCategories.forEach(category => {
+                                const initialStats = initialCategoryStats[category];
+                                const realTimeStats = categoryStats[category] || { total: 0, due: 0 };
+                                const completedCount = categoryCompletedCounts[category] || 0;
+                                
+                                // Use initialStats if available, otherwise fall back to real-time stats
+                                const dueCount = initialStats ? initialStats.due : realTimeStats.due;
+                                const adjustedCount = Math.max(0, dueCount - completedCount);
+                                
+                                // Include all categories in the total, even if they have 0 due cards
+                                categoryBreakdown[category] = adjustedCount;
+                                totalDue += adjustedCount;
+                              });
+                              
+                              
+                              console.log('🔍 ALL CATEGORY DUE DEBUG:', {
+                                totalDue,
+                                categoryBreakdown,
+                                allPossibleCategories: Array.from(allPossibleCategories),
+                                initialCategoryStatsKeys: Object.keys(initialCategoryStats),
+                                categoryCompletedCounts,
+                                showDueTodayOnly,
+                                selectedCategory
+                              });
+                              
+                              return totalDue;
+                            })() : (() => {
+                              // Calculate stable total count across all categories
+                              let totalCards = 0;
+                              const allPossibleCategories = new Set([
+                                ...Object.keys(initialCategoryStats),
+                                ...Object.keys(categoryStats),
+                                ...categories
+                              ]);
+                              
+                              allPossibleCategories.forEach(category => {
+                                const initialStats = initialCategoryStats[category];
+                                const realTimeStats = categoryStats[category] || { total: 0, due: 0 };
+                                
+                                // Use initialStats if available, otherwise fall back to real-time stats
+                                const totalCount = initialStats ? initialStats.total : realTimeStats.total;
+                                totalCards += totalCount;
+                              });
+                              
+                              console.log('🔍 ALL CATEGORY TOTAL DEBUG:', {
+                                totalCards,
+                                flashcardsLength: flashcards.length,
+                                allPossibleCategories: Array.from(allPossibleCategories),
+                                initialCategoryStatsKeys: Object.keys(initialCategoryStats),
+                                categoryStatsKeys: Object.keys(categoryStats),
+                                showDueTodayOnly,
+                                selectedCategory
+                              });
+                              
+                              return totalCards;
+                            })()})
+                          </button>
+                          {(() => {
+                            // Get all categories from both current and initial stats
+                            const allCategories = new Set([
+                              ...categories,
+                              ...Object.keys(initialCategoryStats)
+                            ]);
+                            
+                            // Using real-time stats now
+                            
+                            return Array.from(allCategories).map(category => {
+                              const stats = categoryStats[category] || { total: 0, due: 0 };
+                              const initialStats = initialCategoryStats[category] || { total: 0, due: 0 };
+                              const completedCount = categoryCompletedCounts[category] || 0;
+                              const adjustedDueCount = Math.max(0, initialStats.due - completedCount);
+                              
+                              // Debug logging removed
+                              
+                              // Only show categories that have cards
+                              // Use stable counting system to maintain consistent numbers
+                              // Use initialStats.total for consistent total count display, fallback to real-time stats on first load
+                              const displayCount = showDueTodayOnly ? adjustedDueCount : (initialStats.total || stats.total);
+                              
+                              // Debug individual category counts
+                              if (showDueTodayOnly && displayCount > 0) {
+                                console.log(`📊 Category "${category}" - Initial: ${initialStats.due}, Completed: ${completedCount}, Adjusted: ${adjustedDueCount}`);
+                              }
+                              
+                              if (displayCount === 0) return null;
+                              
+                              return (
+                                <button
+                                  key={category}
+                                  className={`filter-btn ${selectedCategory === category ? 'active' : ''}`}
+                                  onClick={() => setSelectedCategory(category)}
+                                >
+                                  {category} ({showDueTodayOnly ? adjustedDueCount : (initialStats.total || stats.total)})
+                                </button>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sub-Category Filter Buttons */}
+                    {subCategories.length > 0 && (
+                      <div className="filter-section subcategory-section">
+                        <label className="filter-label">Sub-Categories</label>
+                        <div className="filter-buttons-container">
+                          <button
+                            className={`filter-btn ${selectedSubCategory === 'All' ? 'active' : ''}`}
+                            onClick={() => setSelectedSubCategory('All')}
+                          >
+                            All
+                          </button>
+                          {(() => {
+                            // Get all subcategories - both from current stats and initial stats
+                            const allSubcategoriesForCategory = new Set(subCategories);
+                            
+                            // Add any subcategories from initial stats that might not be in current list
+                            if (selectedCategory === 'All') {
+                              // For "All" category, we need to get all subcategories from all categories
+                              Object.keys(initialSubCategoryStats).forEach(key => {
+                                const [cat, subCat] = key.split('::');
+                                if (subCat) {
+                                  allSubcategoriesForCategory.add(subCat);
+                                }
+                              });
+                            } else {
+                              Object.keys(initialSubCategoryStats).forEach(key => {
+                                if (key.startsWith(`${selectedCategory}::`)) {
+                                  const subCategory = key.split('::')[1];
+                                  allSubcategoriesForCategory.add(subCategory);
+                                }
+                              });
+                            }
+                            
+                            return Array.from(allSubcategoriesForCategory).map(subCategory => {
+                              const stats = subCategoryStats[subCategory] || { total: 0, due: 0 };
+                              
+                              let adjustedDueCount = 0;
+                              if (selectedCategory === 'All') {
+                                // For "All" category, sum up due counts from all categories that have this subcategory
+                                Object.keys(initialSubCategoryStats).forEach(key => {
+                                  const [cat, subCat] = key.split('::');
+                                  if (subCat === subCategory) {
+                                    const initialStats = initialSubCategoryStats[key] || { total: 0, due: 0 };
+                                    const completedCount = subCategoryCompletedCounts[key] || 0;
+                                    adjustedDueCount += Math.max(0, initialStats.due - completedCount);
+                                  }
+                                });
+                              } else {
+                                const subCategoryKey = `${selectedCategory}::${subCategory}`;
+                                const initialStats = initialSubCategoryStats[subCategoryKey] || { total: 0, due: 0 };
+                                const completedCount = subCategoryCompletedCounts[subCategoryKey] || 0;
+                                adjustedDueCount = Math.max(0, initialStats.due - completedCount);
+                              }
+                              
+                              
+                              // Only show subcategories that have cards
+                              // Use stable counting system to maintain consistent numbers
+                              const displayCount = showDueTodayOnly ? adjustedDueCount : stats.total;
+                              if (displayCount === 0) return null;
+                              
+                              return (
+                                <button
+                                  key={subCategory}
+                                  className={`filter-btn ${selectedSubCategory === subCategory ? 'active' : ''}`}
+                                  onClick={() => setSelectedSubCategory(subCategory)}
+                                >
+                                  {subCategory} ({showDueTodayOnly ? adjustedDueCount : stats.total})
+                                </button>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Level Filter Buttons */}
+                    {levels.length > 0 && (
+                      <div className="filter-section level-section">
+                        <label className="filter-label">Levels</label>
+                        <div className="filter-buttons-container">
+                          <button
+                            className={`filter-btn ${selectedLevel === 'All' ? 'active' : ''}`}
+                            onClick={() => setSelectedLevel('All')}
+                          >
+                            All
+                          </button>
+                          {levels.map(level => (
+                            <button
+                              key={level}
+                              className={`filter-btn ${selectedLevel === level ? 'active' : ''}`}
+                              onClick={() => setSelectedLevel(level)}
+                            >
+                              {level.charAt(0).toUpperCase() + level.slice(1)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+
+                {/* Review Panel - Always visible when there's a current card */}
+                {currentCard && (
+                  <div className="review-panel-below-categories">
+                    <div className="review-panel-frame">
+                      <h3 className="review-panel-title">Rate Your Knowledge</h3>
+                      <div className="review-button-grid">
+                        <button 
+                          className="review-btn again-btn"
+                          onClick={() => handleReviewCard('again')}
+                          title="Completely forgot (1)"
+                        >
+                          <span className="btn-emoji">😵</span>
+                          <span className="btn-text">Again</span>
+                          <span className="btn-shortcut">1</span>
+                        </button>
+                        
+                        <button 
+                          className="review-btn hard-btn"
+                          onClick={() => handleReviewCard('hard')}
+                          title="Hard to remember (2)"
+                        >
+                          <span className="btn-emoji">😓</span>
+                          <span className="btn-text">Hard</span>
+                          <span className="btn-shortcut">2</span>
+                        </button>
+                        
+                        <button 
+                          className="review-btn good-btn"
+                          onClick={() => handleReviewCard('good')}
+                          title="Remembered with effort (3)"
+                        >
+                          <span className="btn-emoji">😊</span>
+                          <span className="btn-text">Good</span>
+                          <span className="btn-shortcut">3</span>
+                        </button>
+                        
+                        <button 
+                          className="review-btn easy-btn"
+                          onClick={() => handleReviewCard('easy')}
+                          title="Easy to remember (4)"
+                        >
+                          <span className="btn-emoji">😎</span>
+                          <span className="btn-text">Easy</span>
+                          <span className="btn-shortcut">4</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+
+              <div className="flashcard-main-content">
+                <FlashcardDisplay
+                  card={currentCard}
+                  showAnswer={showAnswer}
+                  onShowAnswer={() => setShowAnswer(true)}
+                  onToggleAnswer={() => setShowAnswer(!showAnswer)}
+                  onPreviousCard={prevCard}
+                  onNextCard={nextCard}
+                  onReviewCard={handleReviewCard}
+                  currentIndex={currentCardIndex}
+                  totalCards={filteredFlashcards.length}
+                  isDarkMode={isDarkMode}
+                  onToggleStarCard={toggleStarCard}
+                  onEditCard={handleEditCard}
+                  onGenerateQuestions={() => setShowGenerateModal(true)}
+                />
+              </div>
+              
+              {/* Right Side Content - Notes and Review Panel */}
+              <div className="right-side-content">
+                {/* Session Notes - Always visible */}
+                <div className="notes-section-permanent">
+                  <div className="notes-header">
+                    <h4>📝 Notes</h4>
+                    <button 
+                      className="notes-action-btn clear-btn"
+                      onClick={handleClearNotes}
+                      disabled={notes.length === 0}
+                      title="Clear notes"
+                    >
+                      🗑️ Clear
+                    </button>
+                  </div>
+                  
+                  <RichTextEditor
+                    value={notes}
+                    onChange={handleNotesChange}
+                    placeholder="Take notes for your study session..."
+                    className="notes-textarea-permanent"
+                    minHeight="500px"
+                  />
+                  
+                  <div className="notes-footer">
+                    <div className="notes-char-count">
+                      {(() => {
+                        // Get text length from HTML content
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = notes;
+                        const textLength = tempDiv.textContent || tempDiv.innerText || '';
+                        return textLength.length;
+                      })()}/5000 characters
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>

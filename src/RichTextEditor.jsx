@@ -1824,34 +1824,14 @@ greetUser("World");</div>
           </button>
         </div>
 
-        {/* Other Actions */}
+        {/* Other Actions - Removed unwanted buttons */}
         <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={insertDropdown}
-            className="px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-sm"
-            title="Insert Dropdown"
-          >
-            📋
-          </button>
-          <button
-            type="button"
-            onClick={insertAdvancedCodeBlock}
-            className="px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-sm"
-            title="Code Block with Syntax Highlighting"
-          >
-            💻
-          </button>
-          <button
-            type="button"
-            onClick={insertImage}
-            className="px-2 py-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-sm"
-            title="Insert Image"
-          >
-            🖼️
-          </button>
+          {/* Removed Insert Dropdown, Code Block, and Insert Image buttons */}
         </div>
       </div>
+
+      {/* Separator between toolbar and text area */}
+      <div className="border-t border-gray-300 dark:border-gray-600 my-2"></div>
 
       {/* Editor */}
       <div
@@ -2012,7 +1992,6 @@ greetUser("World");</div>
         className="p-4 focus:outline-none dark:bg-gray-800 dark:text-white"
         style={{ 
           minHeight: minHeight,
-          maxHeight: '400px',
           overflowY: 'auto'
         }}
       />

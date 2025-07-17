@@ -26,6 +26,7 @@ const GenerateQuestionsModal = ({
   const [selectedQuestions, setSelectedQuestions] = useState(new Set());
   const [error, setError] = useState('');
   const [step, setStep] = useState('input'); // 'input', 'generating', 'results'
+  const [openDropdowns, setOpenDropdowns] = useState(new Set());
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -34,8 +35,20 @@ const GenerateQuestionsModal = ({
       setSelectedQuestions(new Set());
       setError('');
       setStep('input');
+      setOpenDropdowns(new Set());
     }
   }, [isVisible]);
+
+  // Toggle dropdown visibility
+  const toggleDropdown = (index) => {
+    const newOpen = new Set(openDropdowns);
+    if (newOpen.has(index)) {
+      newOpen.delete(index);
+    } else {
+      newOpen.add(index);
+    }
+    setOpenDropdowns(newOpen);
+  };
 
   // Simple similarity calculation between two strings (0-1)
   const calculateSimilarity = (str1, str2) => {
@@ -321,6 +334,16 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
   }
 ]`;
 
+    // Validate API key before making calls
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error(`${provider.charAt(0).toUpperCase() + provider.slice(1)} API key is required. Please add your API key in Settings.`);
+    }
+
+    // Validate API key format
+    if (provider === 'anthropic' && !apiKey.startsWith('sk-ant-')) {
+      throw new Error('Invalid Anthropic API key format. API key should start with "sk-ant-"');
+    }
+
     let response;
     
     switch (provider) {
@@ -376,37 +399,91 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
   };
 
   const callAnthropic = async (prompt, apiKey) => {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 1000,
-        temperature: 0.9,
-        messages: [
-          { role: 'user', content: prompt }
-        ]
-      })
-    });
+    console.log('🔵 Anthropic API Call - Starting request');
+    console.log('🔵 API Key format:', apiKey ? `${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}` : 'No API key provided');
+    console.log('🔵 Prompt length:', prompt.length);
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Anthropic API error: ${error.error?.message || 'Unknown error'}`);
-    }
-
-    const data = await response.json();
-    const content = data.content[0]?.text;
-    
     try {
-      return parseAIResponse(content);
-    } catch (e) {
-      console.error('Anthropic response parsing error:', e);
-      console.error('Raw content:', content);
-      throw new Error('Failed to parse AI response. Please try again.');
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-sonnet-20240229',
+          max_tokens: 1000,
+          temperature: 0.9,
+          messages: [
+            { role: 'user', content: prompt }
+          ]
+        })
+      });
+
+      console.log('🔵 Anthropic API Response Status:', response.status);
+      console.log('🔵 Anthropic API Response Headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        let errorDetails = '';
+        
+        try {
+          const errorData = await response.json();
+          console.log('🔴 Anthropic API Error Data:', errorData);
+          
+          if (errorData.error) {
+            errorMessage = errorData.error.message || errorMessage;
+            errorDetails = errorData.error.type || '';
+          }
+          
+          // Specific error handling for common issues
+          if (response.status === 401) {
+            throw new Error(`Authentication Failed: Invalid API key. Please check your Anthropic API key in Settings. (${errorMessage})`);
+          } else if (response.status === 403) {
+            throw new Error(`Permission Denied: Your API key doesn't have permission to access this resource. (${errorMessage})`);
+          } else if (response.status === 429) {
+            throw new Error(`Rate Limited: You've exceeded the API rate limit. Please wait and try again. (${errorMessage})`);
+          } else if (response.status === 400) {
+            throw new Error(`Bad Request: ${errorMessage}. Check your input format.`);
+          } else if (response.status === 500) {
+            throw new Error(`Server Error: Anthropic API is experiencing issues. Please try again later. (${errorMessage})`);
+          } else {
+            throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}${errorDetails ? ` (Type: ${errorDetails})` : ''}`);
+          }
+        } catch (jsonError) {
+          console.log('🔴 Could not parse error response as JSON:', jsonError);
+          throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}. Response could not be parsed.`);
+        }
+      }
+
+      const data = await response.json();
+      console.log('🔵 Anthropic API Success - Response structure:', {
+        hasContent: !!data.content,
+        contentLength: data.content?.length || 0,
+        firstContentType: data.content?.[0]?.type,
+        hasText: !!data.content?.[0]?.text
+      });
+
+      const content = data.content[0]?.text;
+      
+      if (!content) {
+        throw new Error('Anthropic API returned empty content. Please try again.');
+      }
+
+      try {
+        return parseAIResponse(content);
+      } catch (e) {
+        console.error('🔴 Anthropic response parsing error:', e);
+        console.error('🔴 Raw content:', content);
+        throw new Error('Failed to parse AI response. Please try again.');
+      }
+    } catch (networkError) {
+      console.error('🔴 Anthropic API Network Error:', networkError);
+      if (networkError.message.includes('fetch')) {
+        throw new Error('Network error: Could not connect to Anthropic API. Please check your internet connection and try again.');
+      }
+      throw networkError;
     }
   };
 
@@ -552,12 +629,26 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
                         <div className="question-text">
                           <strong>Q:</strong> {q.question}
                         </div>
-                        <div className="answer-text">
-                          <strong>A:</strong> {q.answer}
-                        </div>
-                        {q.reasoning && (
-                          <div className="reasoning-text">
-                            <em>Why: {q.reasoning}</em>
+                        <button 
+                          className="answer-dropdown-toggle"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            toggleDropdown(index);
+                          }}
+                          type="button"
+                        >
+                          {openDropdowns.has(index) ? '▼' : '▶'} Show Answer & Reasoning
+                        </button>
+                        {openDropdowns.has(index) && (
+                          <div className="answer-dropdown-content">
+                            <div className="answer-text">
+                              <strong>A:</strong> {q.answer}
+                            </div>
+                            {q.reasoning && (
+                              <div className="reasoning-text">
+                                <em>Why: {q.reasoning}</em>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
