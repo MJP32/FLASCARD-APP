@@ -1,0 +1,76 @@
+DEBUG: Java & Programming Category Selection Issue
+==================================================
+
+The user reports that Java and Programming categories don't work when clicked, while other categories work fine.
+
+Run these debug commands in the browser console:
+
+1. Check for case sensitivity or special characters in category names:
+
+// Get all flashcards and check their categories
+const allCards = window.flashcards || [];
+const categoryMap = {};
+allCards.forEach(card => {
+  const cat = card.category || 'Uncategorized';
+  if (!categoryMap[cat]) {
+    categoryMap[cat] = {
+      count: 0,
+      exactName: cat,
+      hasSpecialChars: /[^\w\s-]/.test(cat),
+      hasLeadingTrailingSpace: cat !== cat.trim()
+    };
+  }
+  categoryMap[cat].count++;
+});
+console.log('Category Analysis:', categoryMap);
+
+// Look specifically for Java and Programming
+console.log('Java variants:', Object.keys(categoryMap).filter(k => k.toLowerCase().includes('java')));
+console.log('Programming variants:', Object.keys(categoryMap).filter(k => k.toLowerCase().includes('programming')));
+
+2. Test the actual filter function:
+
+// Manually test filtering for Java category
+const testFilter = (categoryName) => {
+  const filtered = allCards.filter(card => {
+    const cardCategory = card.category || 'Uncategorized';
+    return cardCategory === categoryName;
+  });
+  console.log(`Cards in "${categoryName}":`, filtered.length);
+  if (filtered.length > 0) {
+    console.log('Sample card:', filtered[0]);
+  }
+};
+
+testFilter('Java');
+testFilter('Programming');
+testFilter('java'); // lowercase test
+testFilter('JAVA'); // uppercase test
+testFilter(' Java'); // with space
+testFilter('Java '); // trailing space
+
+3. Check what happens when clicking the buttons:
+
+// Add temporary event listener to see what's passed to setSelectedCategory
+const origLog = console.log;
+let clickLog = [];
+
+// Override console.log temporarily
+console.log = function(...args) {
+  if (args[0] && args[0].includes && args[0].includes('setSelectedCategory')) {
+    clickLog.push(args);
+  }
+  origLog.apply(console, args);
+};
+
+// Now click the Java and Programming buttons manually
+
+// After clicking, check what was logged:
+console.log = origLog; // Restore original
+console.log('Click events:', clickLog);
+
+This will help identify if the issue is:
+- Case sensitivity in category names
+- Hidden characters (spaces, special chars)
+- Mismatch between button text and actual category values
+- The click handler not being called properly

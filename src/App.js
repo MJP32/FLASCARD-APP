@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 
 // Components
@@ -23,6 +23,7 @@ import { debugFirestore, checkFirestoreRules } from './utils/firebaseDebug';
 import { debugDueCards } from './utils/debugDueCards';
 import { addDebugAutoAdvanceToWindow } from './utils/debugAutoAdvance';
 import { addDebugCountingToWindow } from './utils/debugCounting';
+import { debugCategories } from './utils/debugCategories';
 import './utils/testAutoAdvance'; // Adds window.testAutoAdvance() function
 
 // Styles
@@ -82,9 +83,17 @@ function App() {
   // Session-wide notes states
   const [notes, setNotes] = useState(() => localStorage.getItem('flashcard_session_notes') || '');
   const [showNotesDropdown, setShowNotesDropdown] = useState(false);
+  const [notesCopied, setNotesCopied] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
 
   // Streak tracking state
   const [streakDays, setStreakDays] = useState(0);
+  
+  // Track if we've checked for default cards creation
+  const [hasCheckedForDefaults, setHasCheckedForDefaults] = useState(false);
+  
+  // Track if anonymous warning has been dismissed
+  const [isAnonymousWarningDismissed, setIsAnonymousWarningDismissed] = useState(false);
   
   // Track initial due cards count for the day
   const [initialDueCardsCount, setInitialDueCardsCount] = useState(0);
@@ -93,6 +102,24 @@ function App() {
   const [categoryCompletedCounts, setCategoryCompletedCounts] = useState({});
   const [initialSubCategoryStats, setInitialSubCategoryStats] = useState({});
   const [subCategoryCompletedCounts, setSubCategoryCompletedCounts] = useState({});
+  const [lastManualCategoryChange, setLastManualCategoryChange] = useState(0);
+  const [isManualCategorySelection, setIsManualCategorySelection] = useState(false);
+  
+  // Collapsible sections state - auto-collapse on mobile
+  const [isCategoriesCollapsed, setIsCategoriesCollapsed] = useState(window.innerWidth <= 768);
+  const [isSubCategoriesCollapsed, setIsSubCategoriesCollapsed] = useState(window.innerWidth <= 768);
+  const [isLevelsCollapsed, setIsLevelsCollapsed] = useState(window.innerWidth <= 768);
+  const [isNotesCollapsed, setIsNotesCollapsed] = useState(window.innerWidth <= 768);
+  const [areNotesToolbarHidden, setAreNotesToolbarHidden] = useState(false);
+  
+  // Debug collapse states
+  console.log('Collapse states:', {
+    isCategoriesCollapsed,
+    isSubCategoriesCollapsed,
+    isLevelsCollapsed,
+    isNotesCollapsed,
+    areNotesToolbarHidden
+  });
 
 
   // Initialize Firebase
@@ -111,6 +138,7 @@ function App() {
   const {
     userId,
     userDisplayName,
+    isAnonymous,
     isAuthReady,
     authError,
     isLoading: authLoading,
@@ -159,6 +187,7 @@ function App() {
     prevCard,
     addToNavigationHistory,
     getNextCategoryWithDueCards,
+    getNextCategoryWithLeastCards,
     getNextSubCategoryWithLeastCards,
     addFlashcard,
     updateFlashcard,
@@ -194,6 +223,17 @@ function App() {
   const subCategoryStats = getSubCategoryStats();
   const levels = getLevels();
 
+  // Get all categories (not filtered by due date) as fallback
+  const allCategories = useMemo(() => {
+    const activeCards = flashcards.filter(card => card.active !== false);
+    return [...new Set(activeCards.map(card => card.category || 'Uncategorized'))];
+  }, [flashcards]);
+
+  // Use categories from due filter, or all categories if showing all cards
+  const displayCategories = categories.length > 0 ? categories : (!showDueTodayOnly ? allCategories : []);
+
+
+
   // Initialize debug utilities (development only)
   useEffect(() => {
     if (flashcards && userId && manualTriggerAutoAdvance && debugCurrentFilterState && debugSubCategoryTracking) {
@@ -214,6 +254,24 @@ function App() {
       
       // Add counting debug utilities
       addDebugCountingToWindow(flashcards, userId, categoryStats, getSubCategoryStats(), selectedCategory);
+      
+      // Add category debug utility to window (but don't call it automatically)
+      window.debugCategories = () => debugCategories(flashcards);
+
+      // Add hook functions to window for communication between App.js and useFlashcards.js
+      window.flashcardHook = {
+        setLastCardCompletionTime: (timestamp) => {
+          // This will be called from App.js when a card is completed
+          console.log('🔄 Card completion timestamp set:', timestamp);
+        }
+      };
+
+      // Log category debug info once when flashcards change
+      if (flashcards && flashcards.length > 0 && !window._hasLoggedCategories) {
+        console.log('\n🔍 CATEGORY DEBUG - Check terminal for details\n');
+        debugCategories(flashcards);
+        window._hasLoggedCategories = true;
+      }
     }
   }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, manualTriggerAutoAdvance, debugCurrentFilterState, debugSubCategoryTracking, getSubCategories, getSubCategoryStats, categoryStats]);
 
@@ -224,13 +282,54 @@ function App() {
         // User is authenticated, hide login screen
         setShowLoginScreen(false);
         console.log('User authenticated, hiding login screen');
+        // Reset the default cards check for this new user
+        setHasCheckedForDefaults(false);
+        // Reset anonymous warning dismissal for new user
+        setIsAnonymousWarningDismissed(false);
       } else {
         // No user, show login screen
         setShowLoginScreen(true);
         console.log('No user found, showing login screen');
+        // Reset the check when logging out
+        setHasCheckedForDefaults(false);
+        // Reset anonymous warning dismissal when logging out
+        setIsAnonymousWarningDismissed(false);
       }
     }
   }, [isAuthReady, userId]);
+
+  // Debug: Monitor selectedCategory changes - DISABLED
+  // useEffect(() => {
+  //   console.log('🔍 selectedCategory changed to:', selectedCategory);
+  // }, [selectedCategory]);
+
+  // Create default flashcards for new users
+  useEffect(() => {
+    console.log('🔍 Default cards useEffect triggered:', {
+      isAuthReady,
+      userId,
+      hasAddFlashcard: !!addFlashcard,
+      flashcardsLength: flashcards.length,
+      hasCheckedForDefaults
+    });
+    
+    // Only run when user is authenticated, we have the addFlashcard function, and we haven't checked yet
+    if (isAuthReady && userId && addFlashcard && !hasCheckedForDefaults) {
+      console.log('🔍 Conditions met, setting timer for default card creation');
+      setHasCheckedForDefaults(true); // Mark that we've checked to prevent multiple runs
+      
+      // Small delay to ensure Firestore listener has had time to populate flashcards
+      const timer = setTimeout(() => {
+        console.log('🔍 Timer fired, calling createDefaultFlashcards');
+        createDefaultFlashcards(userId);
+      }, 2000); // Increased to 2 seconds
+      
+      return () => {
+        console.log('🔍 Cleaning up timer');
+        clearTimeout(timer);
+      };
+    }
+  }, [isAuthReady, userId, addFlashcard, flashcards.length, hasCheckedForDefaults]);
 
   // Handle authentication
   const handleLogin = async (loginType, emailVal = '', passwordVal = '') => {
@@ -471,13 +570,24 @@ function App() {
       
       // Update the card
       await updateFlashcard(card.id, updateData);
-      
+
       console.log('✅ Card review successful!');
+      console.log('📅 Card new due date:', dueDate);
+      console.log('📅 Is card still due today?', dueDate <= new Date());
+      console.log('🔍 Current card ID:', card.id);
+      console.log('🔍 Update data applied:', updateData);
+
       setMessage(`Card reviewed as ${rating.toUpperCase()}! Next review in ${interval} day${interval !== 1 ? 's' : ''}.`);
-      
+
       // Increment completed cards count
       const newCompletedCount = cardsCompletedToday + 1;
       setCardsCompletedToday(newCompletedCount);
+
+      // Mark that a card was just completed (for auto-advance logic)
+      // This is passed to the useFlashcards hook to prevent auto-advance without user activity
+      if (window.flashcardHook && window.flashcardHook.setLastCardCompletionTime) {
+        window.flashcardHook.setLastCardCompletionTime(Date.now());
+      }
       
       // Increment category-specific completed count
       const cardCategory = card.category || 'Uncategorized';
@@ -502,10 +612,16 @@ function App() {
       // Hide answer and move to next card
       setShowAnswer(false);
       
-      // Add a small delay before moving to next card for better UX
+      // Let the filtering effect handle navigation automatically, but add a backup
+      // The useFlashcards hook should detect that the current card is no longer available
+      // and automatically move to the next card via smart index management
+      console.log('🔄 Card review completed, waiting for automatic navigation...');
+
+      // Force navigation to next card after a brief delay
       setTimeout(() => {
+        console.log('🔄 FORCING NAVIGATION: Moving to next card');
         nextCard();
-      }, 500);
+      }, 100);
       
       clearMessage();
       
@@ -593,6 +709,81 @@ function App() {
     }
   };
 
+  // Create default flashcards for new users
+  const createDefaultFlashcards = async (currentUserId) => {
+    console.log('🔍 createDefaultFlashcards called with:', {
+      currentUserId,
+      hasAddFlashcard: !!addFlashcard,
+      flashcardsLength: flashcards.length
+    });
+
+    if (!currentUserId || !addFlashcard) {
+      console.log('❌ Cannot create default cards: missing userId or addFlashcard function', {
+        currentUserId: !!currentUserId,
+        addFlashcard: !!addFlashcard
+      });
+      return;
+    }
+
+    // Check if defaults have already been created for this user
+    const defaultsKey = `defaultCards_${currentUserId}`;
+    const hasDefaults = localStorage.getItem(defaultsKey);
+    
+    console.log('🔍 Checking localStorage for defaults:', { defaultsKey, hasDefaults });
+    
+    if (hasDefaults) {
+      console.log('📋 Default cards already created for this user');
+      return;
+    }
+
+    // Check if user already has flashcards
+    console.log('🔍 Checking flashcards length:', flashcards.length);
+    if (flashcards.length > 0) {
+      console.log('📋 User already has flashcards, skipping default creation');
+      localStorage.setItem(defaultsKey, 'true'); // Mark as having defaults to avoid future checks
+      return;
+    }
+
+    console.log('📋 Creating default flashcards for new user:', currentUserId);
+
+    const defaultCards = [
+      {
+        question: "What is 2+2?",
+        answer: "4",
+        category: "Math",
+        sub_category: "Arithmetic", 
+        level: "new",
+        additional_info: "Basic addition"
+      },
+      {
+        question: "Capital of France?",
+        answer: "Paris",
+        category: "Geography",
+        sub_category: "Europe",
+        level: "easy", 
+        additional_info: "Located in Western Europe"
+      }
+    ];
+
+    try {
+      let createdCount = 0;
+      for (const cardData of defaultCards) {
+        await addFlashcard(cardData);
+        createdCount++;
+      }
+      
+      // Mark defaults as created
+      localStorage.setItem(defaultsKey, 'true');
+      
+      console.log(`✅ Successfully created ${createdCount} default flashcards`);
+      setMessage(`Welcome! We've added ${createdCount} sample cards to get you started.`);
+      clearMessage();
+      
+    } catch (error) {
+      console.error('❌ Error creating default flashcards:', error);
+      // Don't show error to user - this is a nice-to-have feature
+    }
+  };
 
   // Handle edit card
   const handleEditCard = (card) => {
@@ -873,16 +1064,36 @@ function App() {
   // Auto-switch to "All" if selected category has no due cards (using stable counting)
   useEffect(() => {
     if (!showDueTodayOnly || selectedCategory === 'All') return;
-    
+
+    // TEMPORARILY DISABLE CATEGORY AUTO-SWITCH TO DEBUG SWITCHING
+    const categoryAutoSwitchDisabled = true;
+
+    // Don't auto-switch if user is manually selecting categories
+    if (isManualCategorySelection) {
+      console.log(`📂 Skipping auto-switch for "${selectedCategory}" - manual category selection in progress`);
+      return;
+    }
+
+    // Don't auto-switch if user manually selected a category in the last 10 seconds
+    const timeSinceManualChange = Date.now() - lastManualCategoryChange;
+    if (timeSinceManualChange < 10000) {
+      console.log(`📂 Skipping auto-switch for "${selectedCategory}" - manual selection too recent (${timeSinceManualChange}ms ago)`);
+      return;
+    }
+
     const initialStats = initialCategoryStats[selectedCategory] || { total: 0, due: 0 };
     const completedCount = categoryCompletedCounts[selectedCategory] || 0;
     const adjustedDueCount = Math.max(0, initialStats.due - completedCount);
-    
+
     if (adjustedDueCount === 0) {
-      console.log(`📂 Category "${selectedCategory}" has no due cards remaining, switching to "All"`);
-      setSelectedCategory('All');
+      if (categoryAutoSwitchDisabled) {
+        console.log(`🚫 CATEGORY AUTO-SWITCH: Would switch "${selectedCategory}" to "All" but auto-switch is disabled`);
+      } else {
+        console.log(`📂 Category "${selectedCategory}" has no due cards remaining, switching to "All"`);
+        setSelectedCategory('All');
+      }
     }
-  }, [selectedCategory, showDueTodayOnly, setSelectedCategory, initialCategoryStats, categoryCompletedCounts]);
+  }, [selectedCategory, showDueTodayOnly, setSelectedCategory, initialCategoryStats, categoryCompletedCounts, lastManualCategoryChange, isManualCategorySelection]);
   
   // Log due cards info on initial load (useful for debugging)
   useEffect(() => {
@@ -914,14 +1125,19 @@ function App() {
 
   // Auto-navigation to next category with due cards
   useEffect(() => {
-    
+
+    // TEMPORARILY DISABLE CATEGORY AUTO-NAVIGATION TO DEBUG SWITCHING
+    const categoryAutoNavigationDisabled = true;
+
     // Only auto-navigate when:
     // 1. We're showing due cards only
     // 2. We have a specific category selected (not "All")
     // 3. There are no filtered cards left in the current category
     // 4. There are NO subcategories with due cards in the current category
     // 5. There are still due cards in other categories
-    if (showDueTodayOnly && selectedCategory !== 'All' && filteredFlashcards.length === 0 && allDueCards.length > 0) {
+    // 6. User hasn't manually selected a category recently
+    const timeSinceManualChange = Date.now() - lastManualCategoryChange;
+    if (showDueTodayOnly && selectedCategory !== 'All' && filteredFlashcards.length === 0 && allDueCards.length > 0 && !isManualCategorySelection && timeSinceManualChange > 10000 && !categoryAutoNavigationDisabled) {
       console.log('🔄 Category auto-advance triggered:', {
         selectedCategory,
         selectedSubCategory,
@@ -932,12 +1148,30 @@ function App() {
       // Check if there are any subcategories with due cards in the current category
       const nextSubCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
       const hasSubcategoriesWithDueCards = nextSubCategory !== null;
-      
+
       console.log('🔄 Subcategory check:', {
         nextSubCategory,
-        hasSubcategoriesWithDueCards
+        hasSubcategoriesWithDueCards,
+        currentSubCategory: selectedSubCategory
       });
-      
+
+      // If there are subcategories with due cards, advance to the next subcategory instead of switching categories
+      if (hasSubcategoriesWithDueCards) {
+        console.log(`🔄 Auto-advancing to next subcategory: "${nextSubCategory}" within category "${selectedCategory}"`);
+
+        // Use a delay to ensure state stability and prevent conflicts with useFlashcards auto-advance
+        // This should rarely run since useFlashcards handles subcategory auto-advance
+        setTimeout(() => {
+          setSelectedSubCategory(nextSubCategory);
+          setMessage(`Switched to "${nextSubCategory}" subcategory - showing due cards`);
+
+          // Clear message after 3 seconds
+          setTimeout(() => setMessage(''), 3000);
+        }, 300);
+
+        return; // Don't switch categories
+      }
+
       // Only switch categories if there are no subcategories with due cards left in current category
       if (!hasSubcategoriesWithDueCards) {
         const nextCategory = getNextCategoryWithDueCards(selectedCategory);
@@ -959,7 +1193,7 @@ function App() {
         console.log('🔄 Should advance to subcategory:', nextSubCategory);
       }
     }
-  }, [showDueTodayOnly, selectedCategory, selectedSubCategory, filteredFlashcards.length, allDueCards.length, getNextCategoryWithDueCards, getNextSubCategoryWithLeastCards, setSelectedCategory, setShowDueTodayOnly]);
+  }, [showDueTodayOnly, selectedCategory, selectedSubCategory, filteredFlashcards.length, allDueCards.length, getNextCategoryWithDueCards, getNextSubCategoryWithLeastCards, setSelectedCategory, setShowDueTodayOnly, lastManualCategoryChange, isManualCategorySelection]);
 
   // Debug logging for loading state
   console.log('App loading state:', {
@@ -1094,7 +1328,17 @@ function App() {
           </div>
 
           {/* Left Section - Logo */}
-          <div className="header-left-logo">
+          <div 
+            className="header-left-logo clickable-logo"
+            onClick={() => {
+              setShowSettingsModal(true);
+              // Toggle interval settings to show FSRS explanation
+              if (!showIntervalSettings) {
+                toggleIntervalSettings();
+              }
+            }}
+            title="Click to learn about FSRS algorithm"
+          >
             <h1 className="app-logo">FSRS Flashcards</h1>
             <p className="app-subtitle">AI Learning Platform</p>
           </div>
@@ -1104,34 +1348,34 @@ function App() {
             <div className="actions-toggle-section">
               {/* Action Buttons */}
               <div className="action-buttons">
-                <button 
+                <button
                   className="btn btn-secondary"
                   onClick={() => setShowManageCardsModal(true)}
                   title="Manage cards (M)"
                 >
                   📋 Manage Cards
                 </button>
-                
-                <button 
+
+                <button
                   className="btn btn-secondary"
                   onClick={() => setShowCalendarModal(true)}
                   title="View calendar"
                 >
                   📅 Calendar
                 </button>
-                
-                <button 
+
+                <button
                   className="btn btn-secondary"
                   onClick={() => setShowSettingsModal(true)}
                   title="Settings (S)"
                 >
                   ⚙️ Settings
                 </button>
-                
+
                 {/* Debug button for troubleshooting */}
               </div>
 
-              {/* Card Filter Toggle and Header Controls - Line under action buttons */}
+              {/* Card Filter Toggle - Line under action buttons */}
               <div className="toggle-controls-row">
                 <div className="card-filter-toggle">
                   <button
@@ -1164,14 +1408,14 @@ function App() {
                   </button>
                 </div>
                 
-                {/* Header Toggle */}
+                {/* Header Toggle Arrow */}
                 <button 
-                  className="header-toggle-btn-inline"
+                  className="header-arrow-toggle"
                   onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-                  aria-label={isHeaderCollapsed ? 'Expand header' : 'Collapse header'}
-                  title={isHeaderCollapsed ? 'Show header controls' : 'Hide header controls'}
+                  aria-label="Collapse header"
+                  title="Hide header controls"
                 >
-                  {isHeaderCollapsed ? '📤 Show Controls' : '📥 Hide Controls'}
+                  ▲
                 </button>
               </div>
             </div>
@@ -1181,13 +1425,13 @@ function App() {
         {/* Show toggle button when header is collapsed */}
         {isHeaderCollapsed && (
           <div className="collapsed-header-controls">
-            <button 
-              className="header-toggle-btn-collapsed"
+            <button
+              className="header-toggle-btn-collapsed collapse-toggle header-collapse-toggle"
               onClick={() => setIsHeaderCollapsed(false)}
               aria-label="Expand header"
               title="Show header controls"
             >
-              📤 Show Controls
+              ▼
             </button>
           </div>
         )}
@@ -1214,6 +1458,34 @@ function App() {
       {/* Main Content */}
       <main className="app-main">
         
+        {/* Anonymous User Warning */}
+        {isAnonymous && !isAnonymousWarningDismissed && (
+          <div className="anonymous-warning">
+            <div className="warning-content">
+              <span className="warning-icon">⚠️</span>
+              <div className="warning-text">
+                <strong>Anonymous Session</strong>
+                <p>You're using anonymous mode. Your flashcards and progress will not be saved permanently. Consider creating an account to save your progress.</p>
+              </div>
+              <div className="warning-actions">
+                <button 
+                  className="warning-dismiss-btn"
+                  onClick={() => setShowLoginScreen(true)}
+                  title="Switch to account login"
+                >
+                  Sign In
+                </button>
+                <button 
+                  className="warning-close-btn"
+                  onClick={() => setIsAnonymousWarningDismissed(true)}
+                  title="Close this warning"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {filteredFlashcards.length === 0 ? (
           <div className="no-cards-state">
@@ -1270,6 +1542,39 @@ function App() {
                   }
                 </p>
                 <div className="no-cards-actions">
+                  {selectedCategory !== 'All' && showDueTodayOnly && (
+                    <>
+                      <button 
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          const nextCategory = getNextCategoryWithLeastCards(selectedCategory);
+                          if (nextCategory) {
+                            console.log(`🔄 Manual navigation to next category: ${nextCategory}`);
+                            setSelectedCategory(nextCategory);
+                            setSelectedSubCategory('All');
+                            setMessage(`Switched to "${nextCategory}" category`);
+                            setTimeout(() => setMessage(''), 3000);
+                          } else {
+                            setMessage('No other categories with due cards available');
+                            setTimeout(() => setMessage(''), 3000);
+                          }
+                        }}
+                      >
+                        ⏭️ Next Category
+                      </button>
+                      <button 
+                        className="btn btn-outline"
+                        onClick={() => {
+                          setSelectedCategory('All');
+                          setSelectedSubCategory('All');
+                          setMessage('Switched to All categories');
+                          setTimeout(() => setMessage(''), 3000);
+                        }}
+                      >
+                        📂 All Categories
+                      </button>
+                    </>
+                  )}
                   <button 
                     className="btn btn-primary"
                     onClick={() => setShowManageCardsModal(true)}
@@ -1288,119 +1593,84 @@ function App() {
                 <div className="filters-group">
                   <div className="filters-content">
                     {/* Category Filter Buttons */}
-                    {categories.length > 0 && (
-                      <div className="filter-section">
-                        <label className="filter-label">Categories</label>
+                    {(displayCategories.length > 0) && (
+                      <div className={`filter-section ${isCategoriesCollapsed ? 'collapsed' : ''}`}>
+                        <button
+                          className="collapse-toggle panel-collapse-toggle"
+                          onClick={() => {
+                            console.log('Categories collapse clicked, current state:', isCategoriesCollapsed);
+                            setIsCategoriesCollapsed(!isCategoriesCollapsed);
+                          }}
+                          aria-label={isCategoriesCollapsed ? "Expand categories" : "Collapse categories"}
+                        >
+                          {isCategoriesCollapsed ? '▼' : '▲'}
+                        </button>
+                        <div className="filter-section-header">
+                          <label className="filter-label">Categories</label>
+                        </div>
                         <div className="filter-buttons-container">
                           <button
                             className={`filter-btn ${selectedCategory === 'All' ? 'active' : ''}`}
                             onClick={() => setSelectedCategory('All')}
                           >
-                            All ({showDueTodayOnly ? (() => {
-                              // Calculate total stable due count across all categories
-                              let totalDue = 0;
-                              const categoryBreakdown = {};
-                              
-                              // Get all possible categories from multiple sources
-                              const allPossibleCategories = new Set([
-                                ...Object.keys(initialCategoryStats),
-                                ...Object.keys(categoryStats),
-                                ...categories
-                              ]);
-                              
-                              allPossibleCategories.forEach(category => {
-                                const initialStats = initialCategoryStats[category];
-                                const realTimeStats = categoryStats[category] || { total: 0, due: 0 };
-                                const completedCount = categoryCompletedCounts[category] || 0;
-                                
-                                // Use initialStats if available, otherwise fall back to real-time stats
-                                const dueCount = initialStats ? initialStats.due : realTimeStats.due;
-                                const adjustedCount = Math.max(0, dueCount - completedCount);
-                                
-                                // Include all categories in the total, even if they have 0 due cards
-                                categoryBreakdown[category] = adjustedCount;
-                                totalDue += adjustedCount;
-                              });
-                              
-                              
-                              console.log('🔍 ALL CATEGORY DUE DEBUG:', {
-                                totalDue,
-                                categoryBreakdown,
-                                allPossibleCategories: Array.from(allPossibleCategories),
-                                initialCategoryStatsKeys: Object.keys(initialCategoryStats),
-                                categoryCompletedCounts,
-                                showDueTodayOnly,
-                                selectedCategory
-                              });
-                              
-                              return totalDue;
-                            })() : (() => {
-                              // Calculate stable total count across all categories
-                              let totalCards = 0;
-                              const allPossibleCategories = new Set([
-                                ...Object.keys(initialCategoryStats),
-                                ...Object.keys(categoryStats),
-                                ...categories
-                              ]);
-                              
-                              allPossibleCategories.forEach(category => {
-                                const initialStats = initialCategoryStats[category];
-                                const realTimeStats = categoryStats[category] || { total: 0, due: 0 };
-                                
-                                // Use initialStats if available, otherwise fall back to real-time stats
-                                const totalCount = initialStats ? initialStats.total : realTimeStats.total;
-                                totalCards += totalCount;
-                              });
-                              
-                              console.log('🔍 ALL CATEGORY TOTAL DEBUG:', {
-                                totalCards,
-                                flashcardsLength: flashcards.length,
-                                allPossibleCategories: Array.from(allPossibleCategories),
-                                initialCategoryStatsKeys: Object.keys(initialCategoryStats),
-                                categoryStatsKeys: Object.keys(categoryStats),
-                                showDueTodayOnly,
-                                selectedCategory
-                              });
-                              
-                              return totalCards;
-                            })()})
+                            All ({filteredFlashcards.length})
                           </button>
                           {(() => {
-                            // Get all categories from both current and initial stats
-                            const allCategories = new Set([
-                              ...categories,
-                              ...Object.keys(initialCategoryStats)
-                            ]);
-                            
-                            // Using real-time stats now
-                            
-                            return Array.from(allCategories).map(category => {
-                              const stats = categoryStats[category] || { total: 0, due: 0 };
-                              const initialStats = initialCategoryStats[category] || { total: 0, due: 0 };
-                              const completedCount = categoryCompletedCounts[category] || 0;
-                              const adjustedDueCount = Math.max(0, initialStats.due - completedCount);
-                              
-                              // Debug logging removed
-                              
-                              // Only show categories that have cards
-                              // Use stable counting system to maintain consistent numbers
-                              // Use initialStats.total for consistent total count display, fallback to real-time stats on first load
-                              const displayCount = showDueTodayOnly ? adjustedDueCount : (initialStats.total || stats.total);
-                              
-                              // Debug individual category counts
-                              if (showDueTodayOnly && displayCount > 0) {
-                                console.log(`📊 Category "${category}" - Initial: ${initialStats.due}, Completed: ${completedCount}, Adjusted: ${adjustedDueCount}`);
+                            // Use displayCategories which includes fallback for all cards mode
+
+                            return displayCategories.map(category => {
+                              // Count actual cards in this category from ALL flashcards (not filtered)
+                              // Apply the same base filters as the main filtering logic
+                              let categoryCards = flashcards.filter(card => {
+                                // Only count active cards
+                                if (card.active === false) return false;
+                                // Match the category
+                                return (card.category || 'Uncategorized') === category;
+                              });
+
+                              // If showing due cards only, filter by due date
+                              if (showDueTodayOnly) {
+                                const now = new Date();
+                                const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                                categoryCards = categoryCards.filter(card => {
+                                  let dueDate = card.dueDate || new Date(0);
+                                  if (dueDate && typeof dueDate.toDate === 'function') {
+                                    dueDate = dueDate.toDate();
+                                  }
+                                  return dueDate < endOfToday;
+                                });
                               }
-                              
-                              if (displayCount === 0) return null;
+
+                              // If showing starred only, filter by starred
+                              if (showStarredOnly) {
+                                categoryCards = categoryCards.filter(card => card.starred === true);
+                              }
+
+                              const actualCardsInCategory = categoryCards.length;
+
+                              // Skip categories with no actual cards
+                              if (actualCardsInCategory === 0) {
+                                return null;
+                              }
                               
                               return (
                                 <button
                                   key={category}
                                   className={`filter-btn ${selectedCategory === category ? 'active' : ''}`}
-                                  onClick={() => setSelectedCategory(category)}
+                                  onClick={() => {
+                                    console.log(`🔍 Manual category selection: "${category}"`);
+                                    setSelectedCategory(category);
+                                    setLastManualCategoryChange(Date.now());
+                                    setIsManualCategorySelection(true);
+
+                                    // Clear the manual selection flag after 15 seconds
+                                    setTimeout(() => {
+                                      setIsManualCategorySelection(false);
+                                      console.log(`🔍 Manual category selection protection expired for "${category}"`);
+                                    }, 15000);
+                                  }}
                                 >
-                                  {category} ({showDueTodayOnly ? adjustedDueCount : (initialStats.total || stats.total)})
+                                  {category} ({actualCardsInCategory})
                                 </button>
                               );
                             });
@@ -1411,8 +1681,20 @@ function App() {
 
                     {/* Sub-Category Filter Buttons */}
                     {subCategories.length > 0 && (
-                      <div className="filter-section subcategory-section">
-                        <label className="filter-label">Sub-Categories</label>
+                      <div className={`filter-section subcategory-section ${isSubCategoriesCollapsed ? 'collapsed' : ''}`}>
+                        <button
+                          className="collapse-toggle panel-collapse-toggle"
+                          onClick={() => {
+                            console.log('Subcategories collapse clicked, current state:', isSubCategoriesCollapsed);
+                            setIsSubCategoriesCollapsed(!isSubCategoriesCollapsed);
+                          }}
+                          aria-label={isSubCategoriesCollapsed ? "Expand subcategories" : "Collapse subcategories"}
+                        >
+                          {isSubCategoriesCollapsed ? '▼' : '▲'}
+                        </button>
+                        <div className="filter-section-header">
+                          <label className="filter-label">Sub-Categories</label>
+                        </div>
                         <div className="filter-buttons-container">
                           <button
                             className={`filter-btn ${selectedSubCategory === 'All' ? 'active' : ''}`}
@@ -1421,53 +1703,44 @@ function App() {
                             All
                           </button>
                           {(() => {
-                            // Get all subcategories - both from current stats and initial stats
-                            const allSubcategoriesForCategory = new Set(subCategories);
-                            
-                            // Add any subcategories from initial stats that might not be in current list
-                            if (selectedCategory === 'All') {
-                              // For "All" category, we need to get all subcategories from all categories
-                              Object.keys(initialSubCategoryStats).forEach(key => {
-                                const [cat, subCat] = key.split('::');
-                                if (subCat) {
-                                  allSubcategoriesForCategory.add(subCat);
-                                }
+                            // Use filtered subcategories from getSubCategories()
+                            return subCategories.map(subCategory => {
+                              // Count actual cards in this subcategory from ALL flashcards (not filtered)
+                              // Apply the same base filters as the main filtering logic
+                              let subCategoryCards = flashcards.filter(card => {
+                                // Only count active cards
+                                if (card.active === false) return false;
+                                // Match the selected category (if not 'All')
+                                if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+                                // Match the subcategory
+                                const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+                                return cardSubCategory === subCategory;
                               });
-                            } else {
-                              Object.keys(initialSubCategoryStats).forEach(key => {
-                                if (key.startsWith(`${selectedCategory}::`)) {
-                                  const subCategory = key.split('::')[1];
-                                  allSubcategoriesForCategory.add(subCategory);
-                                }
-                              });
-                            }
-                            
-                            return Array.from(allSubcategoriesForCategory).map(subCategory => {
-                              const stats = subCategoryStats[subCategory] || { total: 0, due: 0 };
-                              
-                              let adjustedDueCount = 0;
-                              if (selectedCategory === 'All') {
-                                // For "All" category, sum up due counts from all categories that have this subcategory
-                                Object.keys(initialSubCategoryStats).forEach(key => {
-                                  const [cat, subCat] = key.split('::');
-                                  if (subCat === subCategory) {
-                                    const initialStats = initialSubCategoryStats[key] || { total: 0, due: 0 };
-                                    const completedCount = subCategoryCompletedCounts[key] || 0;
-                                    adjustedDueCount += Math.max(0, initialStats.due - completedCount);
+
+                              // If showing due cards only, filter by due date
+                              if (showDueTodayOnly) {
+                                const now = new Date();
+                                const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                                subCategoryCards = subCategoryCards.filter(card => {
+                                  let dueDate = card.dueDate || new Date(0);
+                                  if (dueDate && typeof dueDate.toDate === 'function') {
+                                    dueDate = dueDate.toDate();
                                   }
+                                  return dueDate < endOfToday;
                                 });
-                              } else {
-                                const subCategoryKey = `${selectedCategory}::${subCategory}`;
-                                const initialStats = initialSubCategoryStats[subCategoryKey] || { total: 0, due: 0 };
-                                const completedCount = subCategoryCompletedCounts[subCategoryKey] || 0;
-                                adjustedDueCount = Math.max(0, initialStats.due - completedCount);
                               }
-                              
-                              
-                              // Only show subcategories that have cards
-                              // Use stable counting system to maintain consistent numbers
-                              const displayCount = showDueTodayOnly ? adjustedDueCount : stats.total;
-                              if (displayCount === 0) return null;
+
+                              // If showing starred only, filter by starred
+                              if (showStarredOnly) {
+                                subCategoryCards = subCategoryCards.filter(card => card.starred === true);
+                              }
+
+                              const actualCardsInSubCategory = subCategoryCards.length;
+
+                              // Skip subcategories with no actual cards
+                              if (actualCardsInSubCategory === 0) {
+                                return null;
+                              }
                               
                               return (
                                 <button
@@ -1475,7 +1748,7 @@ function App() {
                                   className={`filter-btn ${selectedSubCategory === subCategory ? 'active' : ''}`}
                                   onClick={() => setSelectedSubCategory(subCategory)}
                                 >
-                                  {subCategory} ({showDueTodayOnly ? adjustedDueCount : stats.total})
+                                  {subCategory} ({actualCardsInSubCategory})
                                 </button>
                               );
                             });
@@ -1486,8 +1759,20 @@ function App() {
 
                     {/* Level Filter Buttons */}
                     {levels.length > 0 && (
-                      <div className="filter-section level-section">
-                        <label className="filter-label">Levels</label>
+                      <div className={`filter-section level-section ${isLevelsCollapsed ? 'collapsed' : ''}`}>
+                        <button
+                          className="collapse-toggle panel-collapse-toggle"
+                          onClick={() => {
+                            console.log('Levels collapse clicked, current state:', isLevelsCollapsed);
+                            setIsLevelsCollapsed(!isLevelsCollapsed);
+                          }}
+                          aria-label={isLevelsCollapsed ? "Expand levels" : "Collapse levels"}
+                        >
+                          {isLevelsCollapsed ? '▼' : '▲'}
+                        </button>
+                        <div className="filter-section-header">
+                          <label className="filter-label">Levels</label>
+                        </div>
                         <div className="filter-buttons-container">
                           <button
                             className={`filter-btn ${selectedLevel === 'All' ? 'active' : ''}`}
@@ -1583,37 +1868,79 @@ function App() {
               {/* Right Side Content - Notes and Review Panel */}
               <div className="right-side-content">
                 {/* Session Notes - Always visible */}
-                <div className="notes-section-permanent">
+                <div className={`notes-section-permanent ${isNotesCollapsed ? 'collapsed' : ''}`}>
                   <div className="notes-header">
                     <h4>📝 Notes</h4>
-                    <button 
-                      className="notes-action-btn clear-btn"
-                      onClick={handleClearNotes}
-                      disabled={notes.length === 0}
-                      title="Clear notes"
+                    <button
+                      className="collapse-toggle notes-collapse-toggle"
+                      onClick={() => {
+                        console.log('Notes collapse clicked, current state:', isNotesCollapsed);
+                        setIsNotesCollapsed(!isNotesCollapsed);
+                      }}
+                      aria-label={isNotesCollapsed ? "Expand notes" : "Collapse notes"}
                     >
-                      🗑️ Clear
+                      {isNotesCollapsed ? '▼' : '▲'}
                     </button>
                   </div>
                   
-                  <RichTextEditor
-                    value={notes}
-                    onChange={handleNotesChange}
-                    placeholder="Take notes for your study session..."
-                    className="notes-textarea-permanent"
-                    minHeight="500px"
-                  />
+                  <div className="notes-content">
+                    <div className="notes-content-wrapper">
+                      <div className="notes-editor-container">
+                        <RichTextEditor
+                          value={notes}
+                          onChange={handleNotesChange}
+                          placeholder="Take notes for your study session..."
+                          className="notes-textarea-permanent"
+                          minHeight="700px"
+                          hideToolbar={areNotesToolbarHidden}
+                        />
+                        {/* Notes Toolbar Toggle Arrow - positioned at top right of editor */}
+                        <button 
+                          className="notes-buttons-toggle"
+                          onClick={() => setAreNotesToolbarHidden(!areNotesToolbarHidden)}
+                          aria-label={areNotesToolbarHidden ? "Show toolbar" : "Hide toolbar"}
+                          title={areNotesToolbarHidden ? "Show text edit buttons" : "Hide text edit buttons"}
+                        >
+                          {areNotesToolbarHidden ? '▼' : '▲'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   
                   <div className="notes-footer">
-                    <div className="notes-char-count">
-                      {(() => {
-                        // Get text length from HTML content
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = notes;
-                        const textLength = tempDiv.textContent || tempDiv.innerText || '';
-                        return textLength.length;
-                      })()}/5000 characters
-                    </div>
+                      <button 
+                        className="notes-footer-btn copy-btn"
+                        onClick={() => {
+                          // Copy notes content to clipboard
+                          const tempDiv = document.createElement('div');
+                          tempDiv.innerHTML = notes;
+                          const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                          navigator.clipboard.writeText(textContent).then(() => {
+                            setNotesCopied(true);
+                            setTimeout(() => setNotesCopied(false), 2000);
+                          }).catch(err => {
+                            console.error('Failed to copy notes:', err);
+                          });
+                        }}
+                        disabled={notes.length === 0}
+                        title="Copy notes to clipboard"
+                      >
+                        {notesCopied ? '✅ Copied!' : '📋 Copy'}
+                      </button>
+                      <button 
+                        className="notes-footer-btn save-btn"
+                        onClick={() => {
+                          // Save notes to local storage or trigger save
+                          if (userId) {
+                            localStorage.setItem(`flashcard_notes_${userId}`, notes);
+                            setNotesSaved(true);
+                            setTimeout(() => setNotesSaved(false), 2000);
+                          }
+                        }}
+                        title="Save notes"
+                      >
+                        {notesSaved ? '✅ Saved!' : '💾 Save'}
+                      </button>
                   </div>
                 </div>
               </div>

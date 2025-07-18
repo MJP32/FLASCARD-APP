@@ -1,0 +1,77 @@
+SPECIFIC CATEGORY DEBUG - JAVA & PROGRAMMING
+=============================================
+
+Some categories work fine, but Java and Programming categories don't work when selected.
+
+Run these debug commands in your browser console (F12 → Console tab):
+
+1. Check category data and filtering:
+
+// Check what categories are available
+console.log('Available categories:', window.debugFlashcards?.getCurrentState?.() || 'Debug not available');
+
+// Check flashcards by category
+const flashcardsData = [];
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  const text = btn.textContent.trim();
+  const match = text.match(/^(.+?)\s*\((\d+)\)$/);
+  if (match) {
+    const [, category, count] = match;
+    flashcardsData.push({ category, count: parseInt(count), active: btn.classList.contains('active') });
+  }
+});
+console.log('Category buttons data:', flashcardsData);
+
+2. Test specific category selection:
+
+// Test Java category
+const javaBtn = Array.from(document.querySelectorAll('.filter-btn')).find(btn => btn.textContent.includes('Java'));
+if (javaBtn) {
+  console.log('Before clicking Java - Selected category:', window.debugFlashcards?.getCurrentState?.()?.selectedCategory);
+  javaBtn.click();
+  setTimeout(() => {
+    console.log('After clicking Java - Selected category:', window.debugFlashcards?.getCurrentState?.()?.selectedCategory);
+    console.log('Filtered flashcards count:', window.debugFlashcards?.getCurrentState?.()?.filteredFlashcards);
+  }, 100);
+} else {
+  console.log('Java button not found');
+}
+
+// Test Programming category
+const programmingBtn = Array.from(document.querySelectorAll('.filter-btn')).find(btn => btn.textContent.includes('Programming'));
+if (programmingBtn) {
+  console.log('Before clicking Programming - Selected category:', window.debugFlashcards?.getCurrentState?.()?.selectedCategory);
+  programmingBtn.click();
+  setTimeout(() => {
+    console.log('After clicking Programming - Selected category:', window.debugFlashcards?.getCurrentState?.()?.selectedCategory);
+    console.log('Filtered flashcards count:', window.debugFlashcards?.getCurrentState?.()?.filteredFlashcards);
+  }, 100);
+} else {
+  console.log('Programming button not found');
+}
+
+3. Check for case sensitivity or special characters:
+
+// Check actual flashcard data for Java and Programming
+const allFlashcards = window.debugFlashcards?.getCurrentState?.() || {};
+console.log('Debug state available:', !!window.debugFlashcards);
+
+// Alternative method to check flashcards
+const categoryStats = {};
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  const text = btn.textContent.trim();
+  const match = text.match(/^(.+?)\s*\((\d+)\)$/);
+  if (match) {
+    const [, category, count] = match;
+    categoryStats[category] = count;
+  }
+});
+console.log('Category statistics:', categoryStats);
+
+4. Check if categories have actual cards:
+
+// This will help identify if the issue is with filtering
+console.log('Current URL params:', window.location.search);
+console.log('Current hash:', window.location.hash);
+
+Copy and paste ALL the console output into a text file in the output folder.

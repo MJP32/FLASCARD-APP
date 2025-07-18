@@ -7,8 +7,10 @@ const RichTextEditor = ({
   placeholder = 'Enter text...', 
   className = '',
   style = {},
-  minHeight = '150px'
+  minHeight = '150px',
+  hideToolbar = false
 }) => {
+  console.log('🔍 RichTextEditor props:', { className, minHeight, hasNotesClass: className?.includes('notes-textarea-permanent') });
   const editorRef = useRef(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
@@ -1598,9 +1600,21 @@ greetUser("World");</div>
   // Removed complex document-level handler - using simple approach now
 
   return (
-    <div className={`rich-text-editor ${className} border rounded-lg overflow-hidden`} style={style}>
+    <div className={`rich-text-editor ${className?.includes('notes-textarea-permanent') ? 'border-0' : 'border rounded-lg'} overflow-hidden`} style={{
+      ...style,
+      ...(className?.includes('notes-textarea-permanent') ? { 
+        minHeight: '700px', 
+        height: 'auto',
+        flex: '1',
+        display: 'flex',
+        flexDirection: 'column',
+        borderRadius: '0'
+      } : {})
+    }}>
       {/* Toolbar */}
-      <div className="bg-gray-50 dark:bg-gray-700 p-3 border-b flex flex-wrap gap-1 items-center">
+      {!hideToolbar && (
+        <>
+        <div className="bg-gray-50 dark:bg-gray-700 p-3 border-b flex flex-wrap gap-1 items-center">
         {/* Text Formatting */}
         <div className="flex gap-1 mr-3">
           <button
@@ -1828,16 +1842,19 @@ greetUser("World");</div>
         <div className="flex gap-1">
           {/* Removed Insert Dropdown, Code Block, and Insert Image buttons */}
         </div>
-      </div>
+        </div>
 
-      {/* Separator between toolbar and text area */}
-      <div className="border-t border-gray-300 dark:border-gray-600 my-2"></div>
+        {/* Separator between toolbar and text area */}
+        <div className="border-t border-gray-300 dark:border-gray-600 my-3 mx-2"></div>
+        </>
+      )}
 
       {/* Editor */}
       <div
         ref={editorRef}
         contentEditable={true}
         suppressContentEditableWarning={true}
+        id={className?.includes('notes-textarea-permanent') ? 'notes-editor-debug' : undefined}
         onInput={handleInput}
         onKeyDown={(e) => {
           console.log('Key pressed:', e.key, 'Target:', e.target, 'Classes:', e.target.classList?.value);
@@ -1989,10 +2006,12 @@ greetUser("World");</div>
             }
           }, 100);
         }}
-        className="p-4 focus:outline-none dark:bg-gray-800 dark:text-white"
-        style={{ 
-          minHeight: minHeight,
-          overflowY: 'auto'
+        className={`p-4 focus:outline-none dark:bg-gray-800 dark:text-white ${className || ''}`}
+        style={{
+          overflowY: 'auto',
+          minHeight: className?.includes('notes-textarea-permanent') ? '650px' : minHeight,
+          height: className?.includes('notes-textarea-permanent') ? 'auto' : 'auto',
+          flex: className?.includes('notes-textarea-permanent') ? '1' : 'none'
         }}
       />
 

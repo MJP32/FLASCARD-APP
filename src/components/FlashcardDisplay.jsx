@@ -136,16 +136,18 @@ const FlashcardDisplay = ({
 
       {/* Main Content Area */}
       <div className="flashcard-content">
-        {/* Question Section */}
-        <div className="flashcard-section question-section">
-          <h3 className="section-label">Question</h3>
-          <div 
-            className="content"
-            dangerouslySetInnerHTML={{ __html: card.question || 'No question provided' }}
-          />
-        </div>
+        {/* Question Section - Only show when answer is not shown */}
+        {!showAnswer && (
+          <div className="flashcard-section question-section">
+            <h3 className="section-label">Question</h3>
+            <div 
+              className="content"
+              dangerouslySetInnerHTML={{ __html: card.question || 'No question provided' }}
+            />
+          </div>
+        )}
 
-        {/* Answer Section */}
+        {/* Answer Section - Show when answer is shown */}
         {showAnswer && (
           <>
             <div className="flashcard-section answer-section">
@@ -156,14 +158,21 @@ const FlashcardDisplay = ({
               />
             </div>
 
-            {/* Additional Info Section */}
+            {/* Additional Info Section - Show as dropdown/collapsible */}
             {card.additional_info && (
               <div className="flashcard-section additional-info-section">
-                <h3 className="section-label">Additional Information</h3>
-                <div 
-                  className="content"
-                  dangerouslySetInnerHTML={{ __html: card.additional_info }}
-                />
+                <details className="additional-info-dropdown">
+                  <summary className="additional-info-header">
+                    <span className="dropdown-icon">▶</span>
+                    Additional Information
+                  </summary>
+                  <div className="additional-info-content">
+                    <div 
+                      className="content"
+                      dangerouslySetInnerHTML={{ __html: card.additional_info }}
+                    />
+                  </div>
+                </details>
               </div>
             )}
 
@@ -173,28 +182,7 @@ const FlashcardDisplay = ({
 
       {/* Bottom Controls Section */}
       <div className="flashcard-bottom">
-        {/* Show/Hide Answer Button */}
-        {onToggleAnswer ? (
-          <button 
-            className="show-answer-btn toggle-answer-btn"
-            onClick={onToggleAnswer}
-            aria-label={showAnswer ? "Hide answer" : "Show answer"}
-          >
-            {showAnswer ? "Hide Answer" : "Show Answer"}
-          </button>
-        ) : (
-          !showAnswer && (
-            <button 
-              className="show-answer-btn"
-              onClick={onShowAnswer}
-              aria-label="Show answer"
-            >
-              Show Answer
-            </button>
-          )
-        )}
-
-        {/* Navigation Controls */}
+        {/* Navigation Controls - Arranged horizontally */}
         <div className="navigation-controls">
           <button 
             className="nav-btn prev-btn"
@@ -204,6 +192,27 @@ const FlashcardDisplay = ({
           >
             ← Previous
           </button>
+          
+          {/* Show/Hide Answer Button - Center */}
+          {onToggleAnswer ? (
+            <button 
+              className="show-answer-btn toggle-answer-btn"
+              onClick={onToggleAnswer}
+              aria-label={showAnswer ? "Hide answer" : "Show answer"}
+            >
+              {showAnswer ? "Hide Answer" : "Show Answer"}
+            </button>
+          ) : (
+            !showAnswer && (
+              <button 
+                className="show-answer-btn"
+                onClick={onShowAnswer}
+                aria-label="Show answer"
+              >
+                Show Answer
+              </button>
+            )
+          )}
           
           <button 
             className="nav-btn next-btn"

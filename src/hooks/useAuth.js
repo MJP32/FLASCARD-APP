@@ -18,6 +18,7 @@ export const useAuth = (firebaseApp) => {
   const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
   const [userDisplayName, setUserDisplayName] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authError, setAuthError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,13 +33,15 @@ export const useAuth = (firebaseApp) => {
     // Set up auth state listener
     const unsubscribe = onAuthStateChanged(authInstance, (user) => {
       if (user) {
-        console.log('🔐 User authenticated:', { uid: user.uid, email: user.email });
+        console.log('🔐 User authenticated:', { uid: user.uid, email: user.email, isAnonymous: user.isAnonymous });
         setUserId(user.uid);
         setUserDisplayName(user.email || 'Anonymous User');
+        setIsAnonymous(user.isAnonymous);
       } else {
         console.log('🔐 User signed out');
         setUserId(null);
         setUserDisplayName('');
+        setIsAnonymous(false);
       }
       setIsAuthReady(true);
     });
@@ -173,6 +176,7 @@ export const useAuth = (firebaseApp) => {
     auth,
     userId,
     userDisplayName,
+    isAnonymous,
     isAuthReady,
     authError,
     isLoading,

@@ -1,0 +1,59 @@
+STOP CONSOLE SPAM - QUICK FIX
+==============================
+
+The console is constantly updating due to excessive re-rendering. Here's how to stop it:
+
+METHOD 1 - PAUSE THE CONSOLE:
+1. In Chrome DevTools Console, look for the "Pause" button (usually looks like ||)
+2. Or right-click in the console and select "Freeze on any XHR/fetch"
+3. Or press Ctrl+\ (Windows) or Cmd+\ (Mac) to pause JavaScript execution
+
+METHOD 2 - FILTER CONSOLE:
+1. In the Console tab, find the "Filter" box
+2. Type: -DEBUG
+3. This will hide all messages containing "DEBUG"
+
+METHOD 3 - CLEAR AND RUN SINGLE COMMAND:
+1. Clear console: Ctrl+L or click the 🚫 button
+2. Quickly paste and run this single command:
+
+// This captures the state without continuous logging
+(() => {
+  const state = {
+    categories: Array.from(document.querySelectorAll('.filter-btn')).map(btn => {
+      const text = btn.textContent.trim();
+      return {
+        text,
+        active: btn.classList.contains('active'),
+        element: btn
+      };
+    })
+  };
+  
+  // Test Java category
+  const javaBtn = state.categories.find(c => c.text.includes('Java'));
+  if (javaBtn) {
+    console.log('FOUND JAVA:', javaBtn.text);
+    javaBtn.element.click();
+    console.log('CLICKED JAVA');
+  }
+  
+  // Test Programming category  
+  const progBtn = state.categories.find(c => c.text.includes('Programming'));
+  if (progBtn) {
+    console.log('FOUND PROGRAMMING:', progBtn.text);
+    progBtn.element.click();
+    console.log('CLICKED PROGRAMMING');
+  }
+  
+  console.log('ALL CATEGORIES:', state.categories.map(c => c.text));
+})();
+
+METHOD 4 - USE BREAKPOINT:
+1. Right-click on a category button that doesn't work (like Java)
+2. Select "Inspect"
+3. In Elements panel, right-click the element
+4. Break on > Attribute modifications
+5. Click the button - debugger will pause
+
+Copy whatever output you can capture!

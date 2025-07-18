@@ -1,0 +1,62 @@
+CATEGORY SELECTION DEBUG - CONSOLE COMMANDS
+============================================
+
+The category buttons are not working properly. Here are the debug commands to run in your browser console:
+
+1. First, open the Browser Console:
+   - Press F12 on your keyboard
+   - OR right-click on the page and select "Inspect"
+   - Click on the "Console" tab
+
+2. Run these commands ONE AT A TIME (copy and paste each one, then press Enter):
+
+// Check if debug functions are available
+window.debugFlashcards
+
+// Test basic category selection
+document.querySelector('.filter-btn[data-category="Math"]')?.click()
+
+// Check all category buttons
+document.querySelectorAll('.filter-btn').forEach((btn, i) => {
+  console.log(`Button ${i}:`, btn.textContent.trim(), 'onClick:', btn.onclick, 'disabled:', btn.disabled, 'style:', btn.style.cssText);
+});
+
+// Test React event handlers
+document.querySelectorAll('.filter-btn').forEach((btn, i) => {
+  const events = getEventListeners ? getEventListeners(btn) : 'getEventListeners not available';
+  console.log(`Button ${i} events:`, events);
+});
+
+// Check if buttons are actually clickable
+document.querySelectorAll('.filter-btn').forEach((btn, i) => {
+  const rect = btn.getBoundingClientRect();
+  console.log(`Button ${i} position:`, {
+    text: btn.textContent.trim(),
+    visible: rect.width > 0 && rect.height > 0,
+    position: rect,
+    computedStyle: window.getComputedStyle(btn).pointerEvents
+  });
+});
+
+// Force click test
+const mathBtn = Array.from(document.querySelectorAll('.filter-btn')).find(btn => btn.textContent.includes('Math'));
+if (mathBtn) {
+  console.log('Found Math button, forcing click:', mathBtn);
+  mathBtn.click();
+} else {
+  console.log('Math button not found');
+}
+
+// Check React internal state
+const root = document.querySelector('#root');
+if (root && root._reactInternalFiber) {
+  console.log('React fiber available');
+} else if (root && root._reactInternalInstance) {
+  console.log('React instance available');
+} else {
+  console.log('React internals not accessible');
+}
+
+3. After running these commands, copy ALL the console output and paste it into a text file in the output folder.
+
+The debug output will help identify why the category buttons are not responding to clicks.

@@ -45,6 +45,9 @@ const SettingsModal = ({
   const [feedbackStatus, setFeedbackStatus] = useState(null);
   const [showFeedbackSection, setShowFeedbackSection] = useState(false);
   const [showStudyGuideModal, setShowStudyGuideModal] = useState(false);
+  const [showInviteSection, setShowInviteSection] = useState(false);
+  const [showAccountSection, setShowAccountSection] = useState(false);
+  const [showAppearanceSection, setShowAppearanceSection] = useState(false);
 
   // Calculate card rating statistics
   const calculateRatingStats = () => {
@@ -216,7 +219,32 @@ const SettingsModal = ({
         <div className="modal-body">
           {/* Account Section */}
           <section className="settings-section">
-            <h3>👤 Account</h3>
+            <div className="section-header-with-checkbox">
+              <div className="checkbox-container">
+                <input
+                  type="checkbox"
+                  id="show-account-section"
+                  checked={showAccountSection}
+                  onChange={(e) => setShowAccountSection(e.target.checked)}
+                />
+                <label htmlFor="show-account-section">
+                  <h3>👤 Account</h3>
+                </label>
+              </div>
+              <button 
+                className="btn btn-info btn-small"
+                onClick={() => setShowAccountSection(!showAccountSection)}
+              >
+                {showAccountSection ? '👤 Hide' : '👤'} Account Info
+              </button>
+            </div>
+            
+            <p className="section-description">
+              View your account information, study statistics, and manage your session.
+            </p>
+            
+            {showAccountSection && (
+              <div className="account-section-content">
             <div className="account-info">
               <div className="account-details">
                 <div className="account-item">
@@ -320,32 +348,59 @@ const SettingsModal = ({
                 🚪 Sign Out
               </button>
             </div>
+              </div>
+            )}
           </section>
 
           {/* Appearance Section */}
           <section className="settings-section">
-            <h3>🎨 Appearance</h3>
-            <div className="setting-item">
-              <div className="toggle-setting">
-                <div className="toggle-info">
-                  <span className="toggle-label">Theme</span>
-                  <span className="toggle-description">
-                    {isDarkMode ? 'Dark mode is enabled' : 'Light mode is enabled'}
-                  </span>
-                </div>
-                <div className="theme-toggle">
-                  <span className="theme-label light">☀️ Light</span>
-                  <button
-                    className={`toggle-switch ${isDarkMode ? 'dark' : 'light'}`}
-                    onClick={onToggleDarkMode}
-                    aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
-                  >
-                    <div className="toggle-slider"></div>
-                  </button>
-                  <span className="theme-label dark">🌙 Dark</span>
+            <div className="section-header-with-checkbox">
+              <div className="checkbox-container">
+                <input
+                  type="checkbox"
+                  id="show-appearance-section"
+                  checked={showAppearanceSection}
+                  onChange={(e) => setShowAppearanceSection(e.target.checked)}
+                />
+                <label htmlFor="show-appearance-section">
+                  <h3>🎨 Appearance</h3>
+                </label>
+              </div>
+              <button 
+                className="btn btn-info btn-small"
+                onClick={() => setShowAppearanceSection(!showAppearanceSection)}
+              >
+                {showAppearanceSection ? '🎨 Hide' : '🎨'} Theme Settings
+              </button>
+            </div>
+            
+            <p className="section-description">
+              Customize the visual appearance and theme of the application.
+            </p>
+            
+            {showAppearanceSection && (
+              <div className="setting-item">
+                <div className="toggle-setting">
+                  <div className="toggle-info">
+                    <span className="toggle-label">Theme</span>
+                    <span className="toggle-description">
+                      {isDarkMode ? 'Dark mode is enabled' : 'Light mode is enabled'}
+                    </span>
+                  </div>
+                  <div className="theme-toggle">
+                    <span className="theme-label light">☀️ Light</span>
+                    <button
+                      className={`toggle-switch ${isDarkMode ? 'dark' : 'light'}`}
+                      onClick={onToggleDarkMode}
+                      aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
+                    >
+                      <div className="toggle-slider"></div>
+                    </button>
+                    <span className="theme-label dark">🌙 Dark</span>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </section>
 
           {/* Study Settings Section */}
@@ -984,6 +1039,120 @@ const SettingsModal = ({
                       Simply send the email to complete the submission.
                     </small>
                   </p>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Invite & Share Section */}
+          <section className="settings-section">
+            <div className="section-header-with-checkbox">
+              <div className="checkbox-container">
+                <input
+                  type="checkbox"
+                  id="show-invite-section"
+                  checked={showInviteSection}
+                  onChange={(e) => setShowInviteSection(e.target.checked)}
+                />
+                <label htmlFor="show-invite-section">
+                  <h3>🤝 Invite & Share</h3>
+                </label>
+              </div>
+              <button 
+                className="btn btn-info btn-small"
+                onClick={() => setShowInviteSection(!showInviteSection)}
+              >
+                {showInviteSection ? '🔗 Hide' : '🔗'} Share Options
+              </button>
+            </div>
+            
+            <p className="section-description">
+              Share this flashcard app with friends and colleagues to help them learn more effectively!
+            </p>
+            
+            {showInviteSection && (
+              <div className="invite-section">
+                <div className="share-options">
+                  <div className="share-option">
+                    <h4>📧 Email</h4>
+                    <p className="share-description">Send an invitation via email</p>
+                    <button 
+                      className="btn btn-primary share-btn"
+                      onClick={() => {
+                        const subject = encodeURIComponent('Check out this amazing flashcard app!');
+                        const body = encodeURIComponent(`Hi! I've been using this fantastic flashcard app for studying and thought you might find it useful too.\n\nIt uses the FSRS algorithm for optimal spaced repetition, has a great dark mode, and makes studying much more effective.\n\nCheck it out at: ${window.location.origin}\n\nHappy studying!`);
+                        window.open(`mailto:?subject=${subject}&body=${body}`);
+                      }}
+                    >
+                      📧 Share via Email
+                    </button>
+                  </div>
+
+                  <div className="share-option">
+                    <h4>🔗 Copy Link</h4>
+                    <p className="share-description">Copy the app link to share anywhere</p>
+                    <button 
+                      className="btn btn-secondary share-btn"
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.origin);
+                        // You could add a toast notification here
+                        const btn = document.activeElement;
+                        const originalText = btn.textContent;
+                        btn.textContent = '✅ Copied!';
+                        setTimeout(() => {
+                          btn.textContent = originalText;
+                        }, 2000);
+                      }}
+                    >
+                      📋 Copy Link
+                    </button>
+                  </div>
+
+                  <div className="share-option">
+                    <h4>📱 Social Media</h4>
+                    <p className="share-description">Share on your favorite social platforms</p>
+                    <div className="social-buttons">
+                      <button 
+                        className="btn btn-social twitter"
+                        onClick={() => {
+                          const text = encodeURIComponent('Just discovered this amazing flashcard app with FSRS algorithm for optimal spaced repetition! 🧠✨');
+                          const url = encodeURIComponent(window.location.origin);
+                          window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank');
+                        }}
+                      >
+                        🐦 Twitter
+                      </button>
+                      <button 
+                        className="btn btn-social facebook"
+                        onClick={() => {
+                          const url = encodeURIComponent(window.location.origin);
+                          window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
+                        }}
+                      >
+                        📘 Facebook
+                      </button>
+                      <button 
+                        className="btn btn-social linkedin"
+                        onClick={() => {
+                          const url = encodeURIComponent(window.location.origin);
+                          const title = encodeURIComponent('Amazing Flashcard App with FSRS Algorithm');
+                          window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}&title=${title}`, '_blank');
+                        }}
+                      >
+                        💼 LinkedIn
+                      </button>
+                      <button 
+                        className="btn btn-social reddit"
+                        onClick={() => {
+                          const url = encodeURIComponent(window.location.origin);
+                          const title = encodeURIComponent('Check out this flashcard app with FSRS algorithm for optimal spaced repetition');
+                          window.open(`https://reddit.com/submit?url=${url}&title=${title}`, '_blank');
+                        }}
+                      >
+                        🤖 Reddit
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

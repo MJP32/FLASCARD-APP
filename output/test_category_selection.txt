@@ -1,0 +1,56 @@
+TEST CATEGORY SELECTION - JAVA & PROGRAMMING
+============================================
+
+Now that console spam is disabled, reload the page and run this test:
+
+1. First, check which categories are available:
+
+// Get all category buttons and their text
+const categoryButtons = Array.from(document.querySelectorAll('.filter-btn')).map(btn => ({
+  text: btn.textContent.trim(),
+  active: btn.classList.contains('active')
+}));
+console.log('Available categories:', categoryButtons);
+
+2. Test clicking Java category:
+
+// Find and click Java button
+const javaBtn = Array.from(document.querySelectorAll('.filter-btn')).find(btn => 
+  btn.textContent.includes('Java') && !btn.textContent.includes('JavaScript')
+);
+if (javaBtn) {
+  console.log('Found Java button:', javaBtn.textContent);
+  javaBtn.click();
+  setTimeout(() => {
+    const activeBtn = document.querySelector('.filter-btn.active');
+    console.log('Active button after clicking Java:', activeBtn?.textContent);
+  }, 500);
+}
+
+3. Test clicking Programming category:
+
+// Find and click Programming button
+const progBtn = Array.from(document.querySelectorAll('.filter-btn')).find(btn => 
+  btn.textContent.includes('Programming')
+);
+if (progBtn) {
+  console.log('Found Programming button:', progBtn.textContent);
+  progBtn.click();
+  setTimeout(() => {
+    const activeBtn = document.querySelector('.filter-btn.active');
+    console.log('Active button after clicking Programming:', activeBtn?.textContent);
+  }, 500);
+}
+
+4. Check if the issue is with exact category names:
+
+// This will show you the exact category names
+const exactCategories = Array.from(document.querySelectorAll('.filter-btn'))
+  .map(btn => {
+    const match = btn.textContent.match(/^(.+?)\s*\(/);
+    return match ? match[1] : null;
+  })
+  .filter(Boolean);
+console.log('Exact category names:', exactCategories);
+
+Copy the output and let me know what you see!

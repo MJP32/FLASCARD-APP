@@ -31,8 +31,20 @@ export const useFlashcards = (firebaseApp, userId) => {
   const [navigationHistory, setNavigationHistory] = useState([]);
   const [historyPosition, setHistoryPosition] = useState(-1);
   const [selectedCategory, setSelectedCategory] = useState('All');
+
+
   const [selectedSubCategory, setSelectedSubCategory] = useState('All');
+
+
   const [lastManualSubCategoryChange, setLastManualSubCategoryChange] = useState(0);
+  const [lastCardCompletionTime, setLastCardCompletionTime] = useState(0);
+
+  // Connect to window object for communication with App.js
+  useEffect(() => {
+    if (window.flashcardHook) {
+      window.flashcardHook.setLastCardCompletionTime = setLastCardCompletionTime;
+    }
+  }, []);
   const [selectedLevel, setSelectedLevel] = useState('All');
   const [showDueTodayOnly, setShowDueTodayOnly] = useState(true);
   const [showStarredOnly, setShowStarredOnly] = useState(false);
@@ -45,22 +57,22 @@ export const useFlashcards = (firebaseApp, userId) => {
     const now = new Date();
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     
-    console.log('🔍 FILTER-DEBUG: Current filter state:', {
-      selectedCategory,
-      selectedSubCategory,
-      selectedLevel,
-      showDueTodayOnly,
-      showStarredOnly,
-      totalFlashcards: flashcards.length,
-      activeFlashcards: flashcards.filter(c => c.active !== false).length
-    });
+    // console.log('🔍 FILTER-DEBUG: Current filter state:', {
+    //   selectedCategory,
+    //   selectedSubCategory,
+    //   selectedLevel,
+    //   showDueTodayOnly,
+    //   showStarredOnly,
+    //   totalFlashcards: flashcards.length,
+    //   activeFlashcards: flashcards.filter(c => c.active !== false).length
+    // });
     
     // Check cards in current category
     const categoryCards = flashcards.filter(card => {
       if (card.active === false) return false;
       return selectedCategory === 'All' || card.category === selectedCategory;
     });
-    console.log('🔍 FILTER-DEBUG: Cards in category:', categoryCards.length);
+    // console.log('🔍 FILTER-DEBUG: Cards in category:', categoryCards.length);
     
     // Check cards in current subcategory
     const subCategoryCards = categoryCards.filter(card => {
@@ -68,7 +80,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
       return cardSubCategory === selectedSubCategory;
     });
-    console.log('🔍 FILTER-DEBUG: Cards in subcategory:', subCategoryCards.length);
+    // console.log('🔍 FILTER-DEBUG: Cards in subcategory:', subCategoryCards.length);
     
     // Check due cards in subcategory
     const dueCards = subCategoryCards.filter(card => {
@@ -79,17 +91,17 @@ export const useFlashcards = (firebaseApp, userId) => {
       }
       return dueDate < endOfToday;
     });
-    console.log('🔍 FILTER-DEBUG: Due cards in subcategory:', dueCards.length);
+    // console.log('🔍 FILTER-DEBUG: Due cards in subcategory:', dueCards.length);
     
     // Sample some cards for debugging
-    console.log('🔍 FILTER-DEBUG: Sample subcategory cards:', subCategoryCards.slice(0, 3).map(card => ({
-      question: card.question?.substring(0, 30),
-      category: card.category,
-      sub_category: card.sub_category,
-      dueDate: card.dueDate,
-      active: card.active,
-      isDue: showDueTodayOnly ? ((card.dueDate || new Date(0)) < endOfToday) : 'N/A'
-    })));
+    // console.log('🔍 FILTER-DEBUG: Sample subcategory cards:', subCategoryCards.slice(0, 3).map(card => ({
+    //   question: card.question?.substring(0, 30),
+    //   category: card.category,
+    //   sub_category: card.sub_category,
+    //   dueDate: card.dueDate,
+    //   active: card.active,
+    //   isDue: showDueTodayOnly ? ((card.dueDate || new Date(0)) < endOfToday) : 'N/A'
+    // })));
     
     return { categoryCards: categoryCards.length, subCategoryCards: subCategoryCards.length, dueCards: dueCards.length };
   }, [flashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly]);
@@ -218,7 +230,7 @@ export const useFlashcards = (firebaseApp, userId) => {
    * @returns {string|null} Subcategory with least due cards or null if none available
    */
   const getNextSubCategoryWithLeastCards = useCallback((currentCategory, currentSubCategory) => {
-    console.log('🔍 GET-NEXT-SUBCATEGORY: Starting with params:', { currentCategory, currentSubCategory });
+    //     console.log('🔍 GET-NEXT-SUBCATEGORY: Starting with params:', { currentCategory, currentSubCategory });
     
     // Calculate real-time subcategory stats for the specified category
     const now = new Date();
@@ -228,7 +240,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     
     // First, let's see all cards in this category
     const cardsInCategory = flashcards.filter(card => card.category === currentCategory && card.active !== false);
-    console.log(`🔍 GET-NEXT-SUBCATEGORY: Found ${cardsInCategory.length} active cards in category '${currentCategory}'`);
+    //     console.log(`🔍 GET-NEXT-SUBCATEGORY: Found ${cardsInCategory.length} active cards in category '${currentCategory}'`);
     
     flashcards.forEach(card => {
       // Only consider cards from the specified category
@@ -257,49 +269,49 @@ export const useFlashcards = (firebaseApp, userId) => {
       }
     });
     
-    console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategory stats in category:', subCategoryStats);
+    //     console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategory stats in category:', subCategoryStats);
     
     // Show ALL subcategories, not just those with due cards
     const allSubcategoriesWithCounts = Object.entries(subCategoryStats)
       .sort(([, statsA], [, statsB]) => statsA.due - statsB.due);
     
-    console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategories sorted by due count:', 
-      allSubcategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.due} due, ${stats.total} total`));
+    //     console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategories sorted by due count:', 
+      // allSubcategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.due} due, ${stats.total} total`));
     
     // Get available subcategories with due cards, excluding the current one, sorted by count (least to most)
     const availableSubCategoriesWithCounts = Object.entries(subCategoryStats)
       .filter(([subCat, stats]) => {
         const hasDueCards = stats.due > 0;
         const notCurrentSubCategory = subCat !== currentSubCategory;
-        console.log(`🔍 GET-NEXT-SUBCATEGORY: Checking ${subCat}: hasDueCards=${hasDueCards}, notCurrentSubCategory=${notCurrentSubCategory}, due=${stats.due}`);
+        //         console.log(`🔍 GET-NEXT-SUBCATEGORY: Checking ${subCat}: hasDueCards=${hasDueCards}, notCurrentSubCategory=${notCurrentSubCategory}, due=${stats.due}`);
         return hasDueCards && notCurrentSubCategory;
       })
       .sort((a, b) => {
         const countA = a[1].due;
         const countB = b[1].due;
-        console.log(`🔍 GET-NEXT-SUBCATEGORY: Sorting ${a[0]} (${countA}) vs ${b[0]} (${countB})`);
+        //         console.log(`🔍 GET-NEXT-SUBCATEGORY: Sorting ${a[0]} (${countA}) vs ${b[0]} (${countB})`);
         return countA - countB; // Sort ascending (least to most)
       });
     
     const availableSubCategories = availableSubCategoriesWithCounts.map(([subCat]) => subCat);
     
-    console.log('🔍 GET-NEXT-SUBCATEGORY: Available subcategories with due cards (real-time):', availableSubCategories);
-    console.log('🔍 GET-NEXT-SUBCATEGORY: Sorted subcategories with counts:', availableSubCategoriesWithCounts);
-    console.log('🔍 GET-NEXT-SUBCATEGORY: Current subcategory (excluded from selection):', currentSubCategory);
-    console.log('🔍 GET-NEXT-SUBCATEGORY: Current subcategory due count:', subCategoryStats[currentSubCategory]?.due || 0);
+    //     console.log('🔍 GET-NEXT-SUBCATEGORY: Available subcategories with due cards (real-time):', availableSubCategories);
+    //     console.log('🔍 GET-NEXT-SUBCATEGORY: Sorted subcategories with counts:', availableSubCategoriesWithCounts);
+    //     console.log('🔍 GET-NEXT-SUBCATEGORY: Current subcategory (excluded from selection):', currentSubCategory);
+    //     console.log('🔍 GET-NEXT-SUBCATEGORY: Current subcategory due count:', subCategoryStats[currentSubCategory]?.due || 0);
     
     // If no subcategories have due cards, return null
     if (availableSubCategories.length === 0) {
-      console.log('🔍 GET-NEXT-SUBCATEGORY: ❌ No subcategories with due cards found');
+      //       console.log('🔍 GET-NEXT-SUBCATEGORY: ❌ No subcategories with due cards found');
       return null;
     }
     
     // Return the subcategory with the least cards
     // The list is already sorted by count (ascending), so the first item has the least cards
-    console.log('🔍 Selection process:');
-    console.log('🔍 - Available subcategories (sorted by due count, least to most):', availableSubCategories);
-    console.log('🔍 - Current subcategory:', currentSubCategory);
-    console.log('🔍 - Subcategory due counts:', availableSubCategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.due}`));
+    // console.log('🔍 Selection process:');
+    // console.log('🔍 - Available subcategories (sorted by due count, least to most):', availableSubCategories);
+    // console.log('🔍 - Current subcategory:', currentSubCategory);
+    // console.log('🔍 - Subcategory due counts:', availableSubCategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.due}`));
     
     if (availableSubCategories.length > 0) {
       const nextSubCategory = availableSubCategories[0]; // First in sorted list = least cards
@@ -310,9 +322,9 @@ export const useFlashcards = (firebaseApp, userId) => {
       const minCount = Math.min(...allCounts);
       const isActuallyMinimum = nextSubCategoryCount === minCount;
       
-      console.log(`🔍 GET-NEXT-SUBCATEGORY: ✅ Selected subcategory: ${nextSubCategory} (${nextSubCategoryCount} due cards)`);
-      console.log(`🔍 GET-NEXT-SUBCATEGORY: 📊 Verification: minCount=${minCount}, selected=${nextSubCategoryCount}, isMinimum=${isActuallyMinimum}`);
-      console.log('🔍 GET-NEXT-SUBCATEGORY: 📊 All available options with due counts:', availableSubCategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.due}`));
+      //       console.log(`🔍 GET-NEXT-SUBCATEGORY: ✅ Selected subcategory: ${nextSubCategory} (${nextSubCategoryCount} due cards)`);
+      //       console.log(`🔍 GET-NEXT-SUBCATEGORY: 📊 Verification: minCount=${minCount}, selected=${nextSubCategoryCount}, isMinimum=${isActuallyMinimum}`);
+      //       console.log('🔍 GET-NEXT-SUBCATEGORY: 📊 All available options with due counts:', availableSubCategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.due}`));
       
       if (!isActuallyMinimum) {
         console.error('🚨 ERROR: Selected subcategory does not have the minimum count!');
@@ -320,16 +332,94 @@ export const useFlashcards = (firebaseApp, userId) => {
       
       return nextSubCategory;
     } else {
-      console.log('🔍 GET-NEXT-SUBCATEGORY: ❌ No subcategories with due cards found');
+      //       console.log('🔍 GET-NEXT-SUBCATEGORY: ❌ No subcategories with due cards found');
       return null;
     }
   }, [flashcards, selectedCategory]);
+
+  /**
+   * Get next category with least due cards (for automatic progression)
+   * Excludes the current category and returns the category with the fewest due cards
+   * @param {string} currentCategory - Current category to exclude
+   * @returns {string|null} Category with least due cards or null if none available
+   */
+  const getNextCategoryWithLeastCards = useCallback((currentCategory) => {
+    console.log('🔍 GET-NEXT-CATEGORY: Starting with current category:', currentCategory);
+
+    // Calculate real-time category stats
+    const now = new Date();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const categoryStats = {};
+
+    flashcards.forEach(card => {
+      // Only count active cards
+      if (card.active === false) return;
+
+      const category = card.category || 'Uncategorized';
+
+      if (!categoryStats[category]) {
+        categoryStats[category] = { total: 0, due: 0 };
+      }
+
+      categoryStats[category].total++;
+
+      // Check if card is due
+      let dueDate = card.dueDate || new Date(0);
+      if (dueDate && typeof dueDate.toDate === 'function') {
+        dueDate = dueDate.toDate();
+      }
+      if (dueDate < endOfToday) {
+        categoryStats[category].due++;
+      }
+    });
+
+    console.log('🔍 GET-NEXT-CATEGORY: All category stats:', categoryStats);
+
+    // Get available categories with due cards, excluding the current one, sorted by count (least to most)
+    const availableCategoriesWithCounts = Object.entries(categoryStats)
+      .filter(([category, stats]) => {
+        const hasDueCards = stats.due > 0;
+        const notCurrentCategory = category !== currentCategory;
+        console.log(`🔍 GET-NEXT-CATEGORY: Checking ${category}: hasDueCards=${hasDueCards}, notCurrentCategory=${notCurrentCategory}, due=${stats.due}`);
+        return hasDueCards && notCurrentCategory;
+      })
+      .sort((a, b) => {
+        const countA = a[1].due;
+        const countB = b[1].due;
+        console.log(`🔍 GET-NEXT-CATEGORY: Sorting ${a[0]} (${countA}) vs ${b[0]} (${countB})`);
+        return countA - countB; // Sort ascending (least to most)
+      });
+
+    const availableCategories = availableCategoriesWithCounts.map(([category]) => category);
+
+    console.log('🔍 GET-NEXT-CATEGORY: Available categories with due cards (sorted by count):',
+      availableCategoriesWithCounts.map(([cat, stats]) => `${cat}: ${stats.due} due`));
+
+    // If no categories have due cards, return null
+    if (availableCategories.length === 0) {
+      console.log('🔍 GET-NEXT-CATEGORY: ❌ No categories with due cards found');
+      return null;
+    }
+
+    // Return the category with the least cards
+    const nextCategory = availableCategories[0]; // First in sorted list = least cards
+    const nextCategoryCount = categoryStats[nextCategory].due;
+
+    console.log(`🔍 GET-NEXT-CATEGORY: ✅ Selected category: ${nextCategory} (${nextCategoryCount} due cards)`);
+
+    return nextCategory;
+  }, [flashcards]);
 
   // Filter flashcards based on category, sub-category, level, and due date
   useEffect(() => {
     const previousFilteredLength = filteredFlashcards.length;
     const currentCard = filteredFlashcards[currentCardIndex];
     const currentCardId = currentCard?.id;
+
+    console.log('🔍 FILTERING EFFECT: Starting filter process');
+    console.log('🔍 FILTERING EFFECT: Previous filtered length:', previousFilteredLength);
+    console.log('🔍 FILTERING EFFECT: Current card ID before filtering:', currentCardId);
+    console.log('🔍 FILTERING EFFECT: Current card index:', currentCardIndex);
     
     let filtered = [...flashcards];
 
@@ -358,14 +448,15 @@ export const useFlashcards = (firebaseApp, userId) => {
       console.log(`🔍 Sub-category filter ("${selectedSubCategory}"): ${beforeSubCategoryFilter} → ${filtered.length} cards`);
     }
 
-    // Filter by level only when NOT showing due cards
-    // (We bypass level filter for due cards to ensure all due cards in category/subcategory are shown)
-    if (!showDueTodayOnly && selectedLevel !== 'All') {
+    // Filter by level
+    if (selectedLevel !== 'All') {
+      const beforeLevelFilter = filtered.length;
       filtered = filtered.filter(card => {
         // Get level from card or infer from FSRS parameters
         const cardLevel = card.level || inferLevelFromFSRS(card);
         return cardLevel === selectedLevel;
       });
+      console.log(`🔍 Level filter ("${selectedLevel}"): ${beforeLevelFilter} → ${filtered.length} cards`);
     }
 
     // Filter by due date if enabled
@@ -436,26 +527,50 @@ export const useFlashcards = (firebaseApp, userId) => {
     // Check if current card is no longer in the filtered list (e.g., after review)
     const currentCardStillAvailable = currentCardId && filtered.some(card => card.id === currentCardId);
     
+    // Find the current card's new position in the filtered list
+    const currentCardNewIndex = currentCardId ? filtered.findIndex(card => card.id === currentCardId) : -1;
+
+    console.log('🔍 FILTERING EFFECT: After filtering');
+    console.log('🔍 FILTERING EFFECT: New filtered length:', filtered.length);
+    console.log('🔍 FILTERING EFFECT: Current card still available:', currentCardStillAvailable);
+    console.log('🔍 FILTERING EFFECT: Current card ID:', currentCardId);
+    console.log('🔍 FILTERING EFFECT: Current card new index:', currentCardNewIndex);
+
     setFilteredFlashcards(filtered);
     
     // Smart index management
     if (filtered.length > 0) {
-      if (!currentCardStillAvailable && previousFilteredLength > 0) {
+      // If current card is still available, maintain its position
+      if (currentCardStillAvailable && currentCardNewIndex !== -1) {
+        // Card is still in the list, update to its new position
+        if (currentCardNewIndex !== currentCardIndex) {
+          setCurrentCardIndex(currentCardNewIndex);
+          console.log(`📍 Current card moved to new index: ${currentCardNewIndex}`);
+        }
+      } else if (!currentCardStillAvailable && previousFilteredLength > 0) {
         // Current card was removed (due to review or deletion)
         let newIndex = currentCardIndex;
-        
-        // If we're at or past the end, wrap to beginning or go to previous card
+
+        console.log(`🔄 CARD NAVIGATION: Current card removed, calculating new index`);
+        console.log(`🔄 CARD NAVIGATION: currentCardIndex=${currentCardIndex}, filtered.length=${filtered.length}, previousFilteredLength=${previousFilteredLength}`);
+
+        // If we're at or past the end, wrap to beginning
         if (newIndex >= filtered.length) {
-          newIndex = Math.max(0, filtered.length - 1);
+          newIndex = 0;
+          console.log(`🔄 CARD NAVIGATION: Index ${currentCardIndex} >= ${filtered.length}, wrapping to 0`);
+        } else {
+          // Stay at the same index, which will show the next card that moved into this position
+          console.log(`🔄 CARD NAVIGATION: Staying at index ${newIndex}, which now shows a different card`);
         }
-        
+
         setCurrentCardIndex(newIndex);
-        
+        setShowAnswer(false); // Ensure answer is hidden for the new card
+
         // Different messages for different scenarios
         if (filtered.length < previousFilteredLength) {
-          console.log(`🔄 Card removed (likely deleted), moving to index ${newIndex}`);
+          console.log(`🔄 Card removed (likely completed/deleted), moved to index ${newIndex}`);
         } else {
-          console.log(`🔄 Current card filtered out after review, moving to index ${newIndex}`);
+          console.log(`🔄 Current card filtered out after review, moved to index ${newIndex}`);
         }
       } else if (currentCardIndex >= filtered.length) {
         // Current index is out of bounds, reset to beginning
@@ -467,11 +582,48 @@ export const useFlashcards = (firebaseApp, userId) => {
       setCurrentCardIndex(0);
       console.log('🚫 No cards available after filtering');
       
-      // Auto-advance to next subcategory if we're in due cards mode and have a specific subcategory selected
-      // But only if the user hasn't manually selected a subcategory in the last 2 seconds
-      // NOTE: This delay prevents auto-advance from firing immediately after manual subcategory selection
+      // Auto-advance to next subcategory ONLY when:
+      // 1. We're in due cards mode and have a specific subcategory selected
+      // 2. The user hasn't manually selected a subcategory recently
+      // 3. There are truly no cards left in the current subcategory
+      // 4. This should NOT trigger just from time passing - only from actual card completion
       const timeSinceManualChange = Date.now() - lastManualSubCategoryChange;
       
+      // Debug: Check what cards exist in this subcategory (including future due cards)
+      const allCardsInSubcategory = flashcards.filter(card => {
+        if (card.active === false) return false;
+        if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+        if (selectedSubCategory !== 'All') {
+          const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+          return cardSubCategory === selectedSubCategory;
+        }
+        return true;
+      });
+
+      const dueCardsInSubcategory = allCardsInSubcategory.filter(card => {
+        let dueDate = card.dueDate || new Date(0);
+        if (dueDate && typeof dueDate.toDate === 'function') {
+          dueDate = dueDate.toDate();
+        }
+        const now = new Date();
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        return dueDate < endOfToday;
+      });
+
+      // Calculate timing variables first
+      const timeSinceCardCompletion = Date.now() - lastCardCompletionTime;
+      const recentCardCompletion = timeSinceCardCompletion < 10000; // 10 seconds
+
+      console.log('🔍 AUTO-ADVANCE DEBUG: Subcategory analysis:', {
+        selectedSubCategory,
+        totalCardsInSubcategory: allCardsInSubcategory.length,
+        dueCardsInSubcategory: dueCardsInSubcategory.length,
+        filteredCardsShowing: filtered.length,
+        lastCardCompletionTime: new Date(lastCardCompletionTime).toLocaleTimeString(),
+        timeSinceCardCompletion: timeSinceCardCompletion,
+        recentCardCompletion
+      });
+
       console.log('🔍 AUTO-ADVANCE DEBUG: Checking conditions:', {
         showDueTodayOnly,
         selectedCategory,
@@ -490,7 +642,23 @@ export const useFlashcards = (firebaseApp, userId) => {
       const skipTimeDelay = window.debugFlashcards?.skipTimeDelay || false;
       const timeConditionMet = skipTimeDelay || timeSinceManualChange > 2000;
       
-      if (showDueTodayOnly && selectedCategory !== 'All' && selectedSubCategory !== 'All' && timeConditionMet) {
+      // Additional safety checks: Only auto-advance if:
+      // 1. There are truly no due cards in the current subcategory
+      // 2. A card was completed recently (within last 10 seconds) - prevents auto-advance from just time passing
+      // (timeSinceCardCompletion and recentCardCompletion already defined above)
+
+      const shouldAutoAdvance = showDueTodayOnly &&
+                                selectedCategory !== 'All' &&
+                                selectedSubCategory !== 'All' &&
+                                timeConditionMet &&
+                                filtered.length === 0 &&
+                                dueCardsInSubcategory.length === 0 &&
+                                recentCardCompletion;
+
+      // Re-enable auto-advance with new behavior: go to next category when subcategory is finished
+      const autoAdvanceDisabled = false;
+
+      if (shouldAutoAdvance && !autoAdvanceDisabled) {
         if (skipTimeDelay) {
           console.log('🔍 AUTO-ADVANCE: ⚠️ Time delay skipped for debugging');
         }
@@ -499,21 +667,40 @@ export const useFlashcards = (firebaseApp, userId) => {
           selectedCategory,
           selectedSubCategory,
           timeSinceManualChange,
-          filteredLength: filtered.length
+          filteredLength: filtered.length,
+          dueCardsInSubcategory: dueCardsInSubcategory.length,
+          totalCardsInSubcategory: allCardsInSubcategory.length
         });
-        
+
         // Use a timeout to prevent infinite loops and ensure state stability
+        // NEW BEHAVIOR: When subcategory is finished, go to next category with least cards
         setTimeout(() => {
-          const nextSubCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
-          console.log('🔄 AUTO-ADVANCE: Next subcategory result:', nextSubCategory);
-          
-          if (nextSubCategory) {
-            console.log(`🔄 AUTO-ADVANCE: ✅ Auto-advancing to next subcategory: ${nextSubCategory}`);
-            setSelectedSubCategory(nextSubCategory);
+          console.log('🔄 SUBCATEGORY FINISHED: Current subcategory has no more due cards, finding next category with least cards');
+
+          // Get the next category with the least due cards (excluding current category)
+          const nextCategoryWithLeastCards = getNextCategoryWithLeastCards(selectedCategory);
+
+          if (nextCategoryWithLeastCards) {
+            console.log(`🔄 CATEGORY AUTO-ADVANCE: ✅ Moving to next category with least cards: ${nextCategoryWithLeastCards}`);
+            setSelectedCategory(nextCategoryWithLeastCards);
+
+            // Reset subcategory to 'All' initially, then the auto-manage logic will set it to the subcategory with least cards
+            setSelectedSubCategory('All');
+
+            // Use a small delay to let the category change take effect, then set the subcategory with least cards
+            setTimeout(() => {
+              const nextSubCategoryInNewCategory = getNextSubCategoryWithLeastCards(nextCategoryWithLeastCards, 'All');
+              if (nextSubCategoryInNewCategory) {
+                console.log(`🔄 SUBCATEGORY AUTO-ADVANCE: ✅ Setting subcategory with least cards in new category: ${nextSubCategoryInNewCategory}`);
+                setSelectedSubCategory(nextSubCategoryInNewCategory);
+              }
+            }, 100);
           } else {
-            console.log('🔄 AUTO-ADVANCE: ❌ No more subcategories with due cards in this category');
+            console.log('🔄 CATEGORY AUTO-ADVANCE: ❌ No more categories with due cards available');
           }
-        }, 200);
+        }, 50);
+      } else if (shouldAutoAdvance && autoAdvanceDisabled) {
+        console.log('🚫 AUTO-ADVANCE: DISABLED FOR DEBUGGING - Would have auto-advanced but it\'s disabled');
       } else {
         console.log('🔄 AUTO-ADVANCE: ❌ Conditions not met, skipping auto-advance');
         console.log('🔄 AUTO-ADVANCE: Condition details:', {
@@ -522,7 +709,13 @@ export const useFlashcards = (firebaseApp, userId) => {
           subCategoryNotAll: selectedSubCategory !== 'All',
           timeConditionMet,
           timeSinceManualChange,
-          skipTimeDelay
+          skipTimeDelay,
+          filteredLength: filtered.length,
+          dueCardsInSubcategory: dueCardsInSubcategory.length,
+          recentCardCompletion,
+          timeSinceCardCompletion,
+          lastCardCompletionTime: new Date(lastCardCompletionTime).toLocaleTimeString(),
+          allConditionsMet: shouldAutoAdvance
         });
       }
     }
@@ -554,13 +747,16 @@ export const useFlashcards = (firebaseApp, userId) => {
   const getCategories = useCallback(() => {
     let filteredCards = flashcards;
     
-    // If showing due cards only, filter to only include categories with due cards
+    // Apply the same filtering logic as main filteredFlashcards to ensure consistency
+    
+    // 1. Filter out inactive cards
+    filteredCards = filteredCards.filter(card => card.active !== false);
+    
+    // 2. If showing due cards only, filter to only include categories with due cards
     if (showDueTodayOnly) {
       const now = new Date();
       const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      filteredCards = flashcards.filter(card => {
-        // Only include active cards
-        if (card.active === false) return false;
+      filteredCards = filteredCards.filter(card => {
         // Ensure dueDate is a proper Date object for comparison
         let dueDate = card.dueDate || new Date(0);
         if (dueDate && typeof dueDate.toDate === 'function') {
@@ -570,15 +766,18 @@ export const useFlashcards = (firebaseApp, userId) => {
       });
     }
     
+    // 3. If starred filter is enabled, only consider starred cards
+    if (showStarredOnly) {
+      filteredCards = filteredCards.filter(card => card.starred === true);
+    }
+    
     const categories = [...new Set(filteredCards.map(card => card.category || 'Uncategorized'))];
     
     // Sort categories by count (most to least)
     const categoryStats = {};
     filteredCards.forEach(card => {
       const category = card.category || 'Uncategorized';
-      if (card.active !== false) {
-        categoryStats[category] = (categoryStats[category] || 0) + 1;
-      }
+      categoryStats[category] = (categoryStats[category] || 0) + 1;
     });
     
     return categories.sort((a, b) => {
@@ -586,7 +785,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       const countB = categoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, showDueTodayOnly]);
+  }, [flashcards, showDueTodayOnly, showStarredOnly]);
 
   /**
    * Get available sub-categories from flashcards (filtered by selected category and due date)
@@ -759,23 +958,47 @@ export const useFlashcards = (firebaseApp, userId) => {
   // Auto-manage sub-category filter when options change
   useEffect(() => {
     const availableSubCategories = getSubCategories();
-    
+
+    console.log('🔍 AUTO-MANAGE SUBCATEGORY: Checking conditions:', {
+      selectedCategory,
+      selectedSubCategory,
+      availableSubCategories,
+      availableSubCategoriesLength: availableSubCategories.length,
+      isCurrentSubCategoryAvailable: availableSubCategories.includes(selectedSubCategory)
+    });
+
+    // Re-enable auto-manage for the new behavior
+    const autoManageDisabled = false;
+
     if (selectedCategory === 'All') {
       // When category is All, always reset subcategory to All
       if (selectedSubCategory !== 'All') {
-        setSelectedSubCategory('All');
+        if (autoManageDisabled) {
+          console.log('🚫 AUTO-MANAGE: Would reset subcategory to "All" but auto-manage is disabled');
+        } else {
+          console.log('🔄 AUTO-MANAGE: Resetting subcategory to "All" because category is "All"');
+          setSelectedSubCategory('All');
+        }
       }
     } else if (availableSubCategories.length === 0) {
       // No sub-categories available, reset to All
       if (selectedSubCategory !== 'All') {
-        setSelectedSubCategory('All');
-        console.log('🔄 No sub-categories available, resetting to All');
+        if (autoManageDisabled) {
+          console.log('🚫 AUTO-MANAGE: Would reset subcategory to "All" (no subcategories available) but auto-manage is disabled');
+        } else {
+          console.log('🔄 AUTO-MANAGE: No sub-categories available, resetting to All');
+          setSelectedSubCategory('All');
+        }
       }
     } else if (selectedSubCategory !== 'All' && !availableSubCategories.includes(selectedSubCategory)) {
       // Current sub-category no longer available, move to first available or All
       const nextSubCategory = availableSubCategories.length > 0 ? availableSubCategories[0] : 'All';
-      setSelectedSubCategory(nextSubCategory);
-      console.log(`🔄 Sub-category "${selectedSubCategory}" no longer available, moving to "${nextSubCategory}"`);
+      if (autoManageDisabled) {
+        console.log(`🚫 AUTO-MANAGE: Would move from "${selectedSubCategory}" to "${nextSubCategory}" but auto-manage is disabled`);
+      } else {
+        console.log(`🔄 AUTO-MANAGE: Sub-category "${selectedSubCategory}" no longer available, moving to "${nextSubCategory}"`);
+        setSelectedSubCategory(nextSubCategory);
+      }
     }
     // Note: Don't include selectedSubCategory in dependencies to prevent overriding manual selections
   }, [selectedCategory, getSubCategories]);
@@ -997,7 +1220,14 @@ export const useFlashcards = (firebaseApp, userId) => {
    * Navigate to next card
    */
   const nextCard = useCallback(() => {
-    if (filteredFlashcards.length === 0) return;
+    console.log('🔄 nextCard() called');
+    console.log('🔄 filteredFlashcards.length:', filteredFlashcards.length);
+    console.log('🔄 currentCardIndex:', currentCardIndex);
+    
+    if (filteredFlashcards.length === 0) {
+      console.log('🔄 nextCard() returning early - no filtered flashcards');
+      return;
+    }
     
     // Add current card to history before moving
     const currentCard = filteredFlashcards[currentCardIndex];
@@ -1005,9 +1235,10 @@ export const useFlashcards = (firebaseApp, userId) => {
       addToNavigationHistory(currentCard);
     }
     
-    setCurrentCardIndex(prev => 
-      prev >= filteredFlashcards.length - 1 ? 0 : prev + 1
-    );
+    const newIndex = currentCardIndex >= filteredFlashcards.length - 1 ? 0 : currentCardIndex + 1;
+    console.log('🔄 nextCard() setting index from', currentCardIndex, 'to', newIndex);
+    
+    setCurrentCardIndex(newIndex);
     setShowAnswer(false);
   }, [filteredFlashcards, currentCardIndex, addToNavigationHistory]);
 
@@ -1391,6 +1622,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     prevCard,
     addToNavigationHistory,
     getNextCategoryWithDueCards,
+    getNextCategoryWithLeastCards,
     getNextSubCategoryWithLeastCards,
 
     // Database operations
