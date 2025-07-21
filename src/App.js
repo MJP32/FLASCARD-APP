@@ -583,6 +583,9 @@ function App() {
       const newCompletedCount = cardsCompletedToday + 1;
       setCardsCompletedToday(newCompletedCount);
 
+      // Save updated completed count to localStorage
+      localStorage.setItem(`flashcard_completed_today_${userId}`, newCompletedCount.toString());
+
       // Mark that a card was just completed (for auto-advance logic)
       // This is passed to the useFlashcards hook to prevent auto-advance without user activity
       if (window.flashcardHook && window.flashcardHook.setLastCardCompletionTime) {
@@ -602,6 +605,10 @@ function App() {
       
       setCategoryCompletedCounts(newCategoryCompleted);
       setSubCategoryCompletedCounts(newSubCategoryCompleted);
+
+      // Save updated completion counts to localStorage
+      localStorage.setItem(`flashcard_category_completed_${userId}`, JSON.stringify(newCategoryCompleted));
+      localStorage.setItem(`flashcard_subcategory_completed_${userId}`, JSON.stringify(newSubCategoryCompleted));
       
       if (userId) {
         localStorage.setItem(`flashcard_completed_today_${userId}`, newCompletedCount.toString());
@@ -1613,7 +1620,46 @@ function App() {
                             className={`filter-btn ${selectedCategory === 'All' ? 'active' : ''}`}
                             onClick={() => setSelectedCategory('All')}
                           >
-                            All ({filteredFlashcards.length})
+                            All ({(() => {
+                              // Calculate total count across all displayed categories
+                              // This should reflect the sum of all individual category counts shown
+
+                              if (showDueTodayOnly) {
+                                // Sum up the stable due counts from all categories that have due cards
+                                let totalDueAcrossCategories = 0;
+
+                                // Get all categories that have due cards (same logic as displayCategories)
+                                const categoriesWithDue = displayCategories;
+
+                                categoriesWithDue.forEach(category => {
+                                  const initialStats = initialCategoryStats[category] || { total: 0, due: 0 };
+                                  const completedCount = categoryCompletedCounts[category] || 0;
+                                  const adjustedDueCount = Math.max(0, initialStats.due - completedCount);
+                                  totalDueAcrossCategories += adjustedDueCount;
+                                });
+
+                                return totalDueAcrossCategories;
+                              } else {
+                                // Sum up total cards across all displayed categories
+                                let totalAcrossCategories = 0;
+
+                                displayCategories.forEach(category => {
+                                  let categoryCards = flashcards.filter(card => {
+                                    if (card.active === false) return false;
+                                    return (card.category || 'Uncategorized') === category;
+                                  });
+                                  
+                                  // Apply starred filter if enabled - same as individual categories
+                                  if (showStarredOnly) {
+                                    categoryCards = categoryCards.filter(card => card.starred === true);
+                                  }
+                                  
+                                  totalAcrossCategories += categoryCards.length;
+                                });
+
+                                return totalAcrossCategories;
+                              }
+                            })()})
                           </button>
                           {(() => {
                             // Use displayCategories which includes fallback for all cards mode
@@ -1628,25 +1674,22 @@ function App() {
                                 return (card.category || 'Uncategorized') === category;
                               });
 
-                              // If showing due cards only, filter by due date
+                              // Calculate count based on showDueTodayOnly
+                              let actualCardsInCategory;
+                              
                               if (showDueTodayOnly) {
-                                const now = new Date();
-                                const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-                                categoryCards = categoryCards.filter(card => {
-                                  let dueDate = card.dueDate || new Date(0);
-                                  if (dueDate && typeof dueDate.toDate === 'function') {
-                                    dueDate = dueDate.toDate();
-                                  }
-                                  return dueDate < endOfToday;
-                                });
+                                // Use stable counting approach for consistency with "All" category
+                                const initialStats = initialCategoryStats[category] || { total: 0, due: 0 };
+                                const completedCount = categoryCompletedCounts[category] || 0;
+                                actualCardsInCategory = Math.max(0, initialStats.due - completedCount);
+                              } else {
+                                // For non-due mode, count actual cards with filters
+                                // If showing starred only, filter by starred
+                                if (showStarredOnly) {
+                                  categoryCards = categoryCards.filter(card => card.starred === true);
+                                }
+                                actualCardsInCategory = categoryCards.length;
                               }
-
-                              // If showing starred only, filter by starred
-                              if (showStarredOnly) {
-                                categoryCards = categoryCards.filter(card => card.starred === true);
-                              }
-
-                              const actualCardsInCategory = categoryCards.length;
 
                               // Skip categories with no actual cards
                               if (actualCardsInCategory === 0) {
@@ -1842,6 +1885,29 @@ function App() {
                           <span className="btn-shortcut">4</span>
                         </button>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Progress Bar - Shows daily completion progress */}
+                {showDueTodayOnly && (allDueCards.length > 0 || cardsCompletedToday > 0) && (
+                  <div className="daily-progress-section-wide">
+                    <div className="progress-header">
+                      <h4>Daily Progress</h4>
+                      <span className="progress-stats">
+                        {cardsCompletedToday} / {allDueCards.length + cardsCompletedToday} cards completed
+                      </span>
+                    </div>
+                    <div className="progress-bar-container">
+                      <div 
+                        className="progress-bar-fill" 
+                        style={{ 
+                          width: `${Math.min(100, (cardsCompletedToday / (allDueCards.length + cardsCompletedToday)) * 100)}%` 
+                        }}
+                      />
+                    </div>
+                    <div className="progress-percentage">
+                      {Math.round(Math.min(100, (cardsCompletedToday / (allDueCards.length + cardsCompletedToday)) * 100))}%
                     </div>
                   </div>
                 )}
