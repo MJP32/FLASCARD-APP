@@ -1,0 +1,13 @@
+{
+  "name": "flashcard-debug",
+  "version": "1.0.0",
+  "description": "Debug script for flashcard category issues",
+  "main": "debug-local.js",
+  "scripts": {
+    "debug": "node debug-local.js",
+    "test": "node debug-local.js"
+  },
+  "keywords": ["flashcard", "debug", "categories"],
+  "author": "Debug Helper",
+  "license": "MIT"
+}

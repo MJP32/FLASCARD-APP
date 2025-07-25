@@ -33,20 +33,41 @@ const FlashcardForm = ({
     answer: '',
     category: 'Uncategorized',
     sub_category: '',
-    additional_info: '',
     notes: '',
     starred: false
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEnhancingAnswer, setIsEnhancingAnswer] = useState(false);
-  const [isAddingInfo, setIsAddingInfo] = useState(false);
   const [isGeneratingExample, setIsGeneratingExample] = useState(false);
   const [enhancementError, setEnhancementError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGeneratingAiResponse, setIsGeneratingAiResponse] = useState(false);
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [selectedOptions, setSelectedOptions] = useState({
+    keyConcepts: true,
+    example: true,
+    customAi: true
+  });
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [isGeneratingBatch, setIsGeneratingBatch] = useState(false);
   
   // Track original form data to detect changes
   const [originalFormData, setOriginalFormData] = useState(null);
+
+  // Reset checkboxes to checked when modal opens
+  useEffect(() => {
+    if (showGenerateModal) {
+      console.log('🔍 Modal opened, setting checkboxes to true');
+      setSelectedOptions({
+        keyConcepts: true,
+        example: true,
+        customAi: true
+      });
+    }
+  }, [showGenerateModal]);
 
   // Reset form when editCard changes or form becomes visible
   useEffect(() => {
@@ -56,7 +77,6 @@ const FlashcardForm = ({
         answer: editCard.answer || '',
         category: editCard.category || 'Uncategorized',
         sub_category: editCard.sub_category || '',
-        additional_info: editCard.additional_info || '',
         notes: editCard.notes || '',
         starred: editCard.starred || false
       } : {
@@ -64,7 +84,6 @@ const FlashcardForm = ({
         answer: '',
         category: 'Uncategorized',
         sub_category: '',
-        additional_info: '',
         notes: '',
         starred: false
       };
@@ -146,8 +165,7 @@ const FlashcardForm = ({
         question: formData.question.trim(),
         answer: formData.answer.trim(),
         category: formData.category.trim(),
-        sub_category: formData.sub_category.trim() || '',
-        additional_info: formData.additional_info.trim() || null
+        sub_category: formData.sub_category.trim() || ''
       };
 
       await onSubmit(cardData, editCard?.id);
@@ -158,8 +176,7 @@ const FlashcardForm = ({
           question: '',
           answer: '',
           category: 'Uncategorized',
-          sub_category: '',
-          additional_info: ''
+          sub_category: ''
         });
       }
       
@@ -185,8 +202,7 @@ const FlashcardForm = ({
       setFormData({
         question: '',
         answer: '',
-        category: 'Uncategorized',
-        additional_info: ''
+        category: 'Uncategorized'
       });
     }
     setErrors({});
@@ -269,77 +285,6 @@ IMPORTANT: Start your response directly with <ul> or <ol> tag. Do not include an
     }
   };
 
-  const addAdditionalInfo = async () => {
-    if (!formData.question.trim() || !formData.answer.trim()) {
-      setEnhancementError('Both question and answer are required to generate additional information');
-      return;
-    }
-
-    const apiKey = apiKeys[selectedProvider];
-    if (!apiKey) {
-      setEnhancementError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
-      return;
-    }
-
-    setIsAddingInfo(true);
-    setEnhancementError('');
-
-    try {
-      const prompt = `Based on this flashcard, generate additional relevant information that would be useful for learning this topic:
-
-Question: ${formData.question.replace(/<[^>]*>/g, '')}
-Answer: ${formData.answer.replace(/<[^>]*>/g, '')}
-Category: ${formData.category}
-${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
-${formData.additional_info ? `Current Additional Info: ${formData.additional_info.replace(/<[^>]*>/g, '')}` : ''}
-
-Generate additional information using HTML lists with proper indentation for sublists:
-1. Related concepts or background context
-2. Real-world applications or examples
-3. Common misconceptions to avoid
-4. Memory aids or mnemonics (if applicable)
-5. Connections to other topics in this field
-
-IMPORTANT FORMATTING REQUIREMENTS:
-- Use HTML <ul> and <li> tags for lists
-- For sublists, use nested <ul> tags with proper indentation
-- When creating sublists, add a tab (4 spaces) before nested <ul> tags
-- Example format:
-<ul>
-<li><strong>Main Topic:</strong> Description
-    <ul>
-    <li>Subpoint 1: Details</li>
-    <li>Subpoint 2: More details</li>
-    </ul>
-</li>
-<li><strong>Another Topic:</strong> Description</li>
-</ul>
-
-${formData.additional_info ? 'Expand and improve the existing additional information.' : 'Create new additional information content.'}
-
-Return only the additional information content with proper HTML formatting:`;
-
-      const additionalInfo = await callAI(prompt, selectedProvider, apiKey);
-      
-      // Wrap the generated content in a collapsible section
-      const collapsibleContent = `
-<details class="generated-content-section">
-  <summary class="generated-content-header">🧠 Additional Information</summary>
-  <div class="generated-content-body">
-    ${additionalInfo.trim()}
-  </div>
-</details>`;
-
-      const currentInfo = formData.additional_info.trim();
-      const newInfo = currentInfo ? `${currentInfo}\n\n${collapsibleContent}` : collapsibleContent;
-      handleFieldChange('additional_info', newInfo);
-    } catch (error) {
-      console.error('Additional info error:', error);
-      setEnhancementError('Failed to generate additional information: ' + error.message);
-    } finally {
-      setIsAddingInfo(false);
-    }
-  };
 
   /**
    * Generates a code example or practical example based on the flashcard content
@@ -478,6 +423,410 @@ If not applicable, return exactly: NOT_APPLICABLE`;
     } finally {
       // Always reset loading state when operation completes
       setIsGeneratingExample(false);
+    }
+  };
+
+
+  const generateQuestionSummaryHelper = async () => {
+    if (!formData.question.trim()) {
+      throw new Error('Question is required to generate summary');
+    }
+
+    const prompt = `Please create a concise summary of this flashcard question that breaks down what the question is asking about:
+
+Question: ${formData.question.replace(/<[^>]*>/g, '')}
+Category: ${formData.category}
+${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
+
+Create a summary that:
+1. Identifies the main topic or concept being asked about
+2. Highlights key terms or concepts mentioned in the question
+3. Explains what type of information is being requested
+4. Uses clear, concise language with HTML formatting
+
+Format the response using HTML with proper structure:
+- Use <p> tags for paragraphs
+- Use <strong> tags to highlight key concepts
+- Use <ul><li> tags if listing multiple points
+- Keep it focused and informative (2-4 sentences)
+
+Example format:
+<p>This question asks about <strong>key concept</strong> in the context of <strong>specific area</strong>. The question is seeking to understand <strong>what type of information</strong> and how it relates to <strong>broader context</strong>.</p>
+
+Return only the formatted summary content:`;
+
+    return await callAI(prompt, selectedProvider, apiKeys[selectedProvider]);
+  };
+
+
+  /**
+   * Generates multiple AI responses based on selected options
+   */
+  const generateBatchContent = async () => {
+    console.log('🔍 generateBatchContent called with selectedOptions:', selectedOptions);
+    
+    // Validate that at least one option is selected
+    const hasSelections = selectedOptions.keyConcepts || selectedOptions.example || selectedOptions.customAi;
+    if (!hasSelections) {
+      setEnhancementError('Please select at least one content type to generate');
+      return;
+    }
+
+
+    const apiKey = apiKeys[selectedProvider];
+    if (!apiKey) {
+      setEnhancementError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
+      return;
+    }
+
+    setIsGeneratingBatch(true);
+    setEnhancementError('');
+
+    try {
+      let currentAnswer = formData.answer.trim();
+      let hasErrors = false;
+      let errorMessages = [];
+
+      // Generate Key Concepts if selected
+      if (selectedOptions.keyConcepts) {
+        try {
+          const enhancedAnswer = await enhanceAnswerContent();
+          const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">🧠 Key Concepts</summary>
+  <div class="generated-content-body">
+    ${enhancedAnswer.trim()}
+  </div>
+</details>`;
+          currentAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
+        } catch (error) {
+          console.error('Key concepts generation failed:', error);
+          hasErrors = true;
+          errorMessages.push(`Key concepts: ${error.message}`);
+        }
+      }
+
+      // Generate Example if selected
+      if (selectedOptions.example) {
+        try {
+          const exampleContent = await generateExampleContent();
+          if (exampleContent !== 'NOT_APPLICABLE') {
+            const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">💡 Example</summary>
+  <div class="generated-content-body">
+    ${exampleContent.trim()}
+  </div>
+</details>`;
+            currentAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
+          }
+        } catch (error) {
+          console.error('Example generation failed:', error);
+          hasErrors = true;
+          errorMessages.push(`Example: ${error.message}`);
+        }
+      }
+
+      // Generate Question Summary if selected
+      if (selectedOptions.customAi) {
+        try {
+          const questionSummary = await generateQuestionSummaryHelper();
+          const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">📝 Question Summary</summary>
+  <div class="generated-content-body">
+    ${questionSummary.trim()}
+  </div>
+</details>`;
+          currentAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
+        } catch (error) {
+          console.error('Question summary generation failed:', error);
+          hasErrors = true;
+          errorMessages.push(`Question summary: ${error.message}`);
+        }
+      }
+
+
+
+      // Update the answer field with all generated content
+      console.log('🔍 Updating answer field with content length:', currentAnswer.length);
+      handleFieldChange('answer', currentAnswer);
+      
+      // Show errors if any occurred, but still close modal if some content was generated
+      if (hasErrors) {
+        setEnhancementError(`Some content failed to generate: ${errorMessages.join(', ')}`);
+      }
+      
+      // Close the modal and reset selections
+      setShowGenerateModal(false);
+      setSelectedOptions({
+        keyConcepts: true,
+        example: true,
+        customAi: true
+      });
+    } catch (error) {
+      console.error('Batch generation error:', error);
+      setEnhancementError('Failed to generate content: ' + error.message);
+    } finally {
+      setIsGeneratingBatch(false);
+    }
+  };
+
+  // Helper functions for individual content generation
+  const enhanceAnswerContent = async () => {
+    if (!formData.question.trim()) {
+      throw new Error('Question is required for enhancement');
+    }
+
+    const currentAnswer = formData.answer.replace(/<[^>]*>/g, '').trim();
+    const prompt = `${currentAnswer ? 
+      `Please enhance and expand the following flashcard answer by organizing it into a clear list of key concepts with explanations:
+
+Question: ${formData.question.replace(/<[^>]*>/g, '')}
+Current Answer: ${currentAnswer}
+Category: ${formData.category}
+${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
+
+Create an enhanced answer that improves upon the existing content by:` :
+      `Please create a comprehensive answer for this flashcard question by organizing it into a clear list of key concepts with explanations:
+
+Question: ${formData.question.replace(/<[^>]*>/g, '')}
+Category: ${formData.category}
+${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
+
+Create a complete answer that:`}
+1. Organizes information into 3-6 key concepts using HTML lists
+2. Each point should cover one main concept with clear explanation
+3. Include relevant examples, details, or clarifications for each concept
+4. Maintain logical flow from basic to advanced concepts
+5. Keep each point focused and informative (1-2 sentences)
+6. Use HTML formatting with proper tags
+
+REQUIRED FORMAT - Choose one:
+• For general concepts: <ul><li><strong>Concept Name:</strong> Explanation with examples</li></ul>
+• For sequential steps: <ol><li><strong>Step Name:</strong> Description and details</li></ol>
+
+Example output:
+<ul>
+<li><strong>Definition:</strong> Clear explanation of what the concept means with context</li>
+<li><strong>Key Components:</strong> Main parts or elements that make up the concept</li>
+<li><strong>Real-world Application:</strong> How this concept is used in practice with examples</li>
+<li><strong>Important Considerations:</strong> Critical points, limitations, or common misconceptions</li>
+</ul>
+
+IMPORTANT: Start your response directly with <ul> or <ol> tag. Do not include any text before or after the HTML list.`;
+
+    return await callAI(prompt, selectedProvider, apiKeys[selectedProvider]);
+  };
+
+  const generateExampleContent = async () => {
+    if (!formData.question.trim()) {
+      throw new Error('Question is required to generate an example');
+    }
+
+    const currentAnswer = formData.answer.replace(/<[^>]*>/g, '').trim();
+    const prompt = `Based on this flashcard, determine if a code example or practical example would be appropriate:
+
+Question: ${formData.question.replace(/<[^>]*>/g, '')}
+${currentAnswer ? `Answer: ${currentAnswer}` : 'Answer: (To be created)'}
+Category: ${formData.category}
+${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
+
+DECISION CRITERIA:
+1. Generate a Java code example if:
+   - The topic is programming-related
+   - The question asks about implementation, syntax, or algorithms
+   - The answer discusses technical concepts that can be demonstrated in code
+   - The category suggests programming (e.g., Java, Data Structures, Algorithms, OOP, etc.)
+
+2. Generate a practical example if:
+   - The topic is conceptual but not code-related
+   - The question is about theory, principles, or non-coding topics
+   - A real-world scenario would help illustrate the concept
+
+3. Return "NOT_APPLICABLE" if:
+   - The topic is purely definitional or factual
+   - An example would not add value
+   - The question is about historical facts, dates, or names
+
+If a Java code example is appropriate, provide it with:
+- Clean Java code with proper syntax and conventions
+- ABSOLUTELY NO EXPLANATORY COMMENTS in the code
+- NO comments like "// This demonstrates", "// Here we", "// Notice", "// Example of"
+- Write the code as if it were production code - clean and minimal
+- Include the expected output when the code is executed (if applicable)
+- Put ALL explanations in the paragraph below the code block
+- Proper formatting with HTML <pre><code> tags
+
+CRITICAL: Write Java code exactly as a developer would write it in a real project. 
+Do NOT add any teaching comments or explanations inside the code block.
+The code should speak for itself through proper variable names and structure.
+ALWAYS include what output the code produces when executed (if it produces console output).
+
+If a practical example is appropriate, provide it with:
+- A concrete scenario or use case
+- Clear formatting with HTML tags
+- Step-by-step walkthrough if needed
+
+Format Java code examples like this:
+<div class="example-section">
+<h4>Java Example:</h4>
+<pre><code class="language-java">
+public class Student {
+    private String name;
+    private int age;
+    
+    public Student(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+    
+    public String getName() {
+        return name;
+    }
+    
+    public static void main(String[] args) {
+        Student student = new Student("Alice", 20);
+        System.out.println("Student name: " + student.getName());
+    }
+}
+</code></pre>
+<div class="output-section">
+<h5>Output:</h5>
+<pre><code class="output">Student name: Alice</code></pre>
+</div>
+<p>This example demonstrates basic class structure with constructor and getter method.</p>
+</div>
+
+Format practical examples like this:
+<div class="example-section">
+<h4>Practical Example:</h4>
+<p>Your practical example here with clear explanation.</p>
+</div>
+
+If not applicable, return exactly: NOT_APPLICABLE`;
+
+    return await callAI(prompt, selectedProvider, apiKeys[selectedProvider]);
+  };
+
+
+
+  const generateCustomAiContent = async (customPrompt) => {
+    const contextPrompt = `Context Information:
+Question: ${formData.question.replace(/<[^>]*>/g, '')}
+Current Answer: ${formData.answer.replace(/<[^>]*>/g, '')}
+Category: ${formData.category}
+${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
+
+User Request: ${customPrompt}
+
+Please provide a helpful response based on the context above and the user's request. Format your response with appropriate HTML formatting if needed.`;
+
+    const response = await callAI(contextPrompt, selectedProvider, apiKeys[selectedProvider]);
+    
+    // Generate a summary title for the response
+    const summaryPrompt = `Please create a very brief, descriptive title (3-6 words) that summarizes the main topic or purpose of this content:
+
+"${response.replace(/<[^>]*>/g, '').substring(0, 200)}..."
+
+Respond with ONLY the title, no quotes, no extra text. Examples:
+- "Key Programming Concepts"
+- "Common Implementation Mistakes" 
+- "Practical Usage Examples"
+- "Memory Management Tips"`;
+
+    let responseTitle = "AI Response";
+    try {
+      const titleResponse = await callAI(summaryPrompt, selectedProvider, apiKeys[selectedProvider]);
+      responseTitle = titleResponse.trim().replace(/['\"]/g, ''); // Remove quotes if AI adds them
+      // Ensure title isn't too long
+      if (responseTitle.length > 50) {
+        responseTitle = responseTitle.substring(0, 47) + "...";
+      }
+    } catch (titleError) {
+      console.log('Failed to generate title, using default:', titleError);
+      // Keep default title if summary generation fails
+    }
+    
+    return { content: response, title: responseTitle };
+  };
+
+  /**
+   * Generates AI response based on user's custom prompt
+   */
+  const generateAiResponse = async () => {
+    if (!aiPrompt.trim()) {
+      setEnhancementError('Please enter a prompt for the AI');
+      return;
+    }
+
+    const apiKey = apiKeys[selectedProvider];
+    if (!apiKey) {
+      setEnhancementError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
+      return;
+    }
+
+    setIsGeneratingAiResponse(true);
+    setEnhancementError('');
+
+    try {
+      const contextPrompt = `Context Information:
+Question: ${formData.question.replace(/<[^>]*>/g, '')}
+Current Answer: ${formData.answer.replace(/<[^>]*>/g, '')}
+Category: ${formData.category}
+${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
+
+User Request: ${aiPrompt}
+
+Please provide a helpful response based on the context above and the user's request. Format your response with appropriate HTML formatting if needed.`;
+
+      const response = await callAI(contextPrompt, selectedProvider, apiKey);
+      
+      // Generate a summary title for the response
+      const summaryPrompt = `Please create a very brief, descriptive title (3-6 words) that summarizes the main topic or purpose of this content:
+
+"${response.replace(/<[^>]*>/g, '').substring(0, 200)}..."
+
+Respond with ONLY the title, no quotes, no extra text. Examples:
+- "Key Programming Concepts"
+- "Common Implementation Mistakes" 
+- "Practical Usage Examples"
+- "Memory Management Tips"`;
+
+      let responseTitle = "AI Response";
+      try {
+        const titleResponse = await callAI(summaryPrompt, selectedProvider, apiKey);
+        responseTitle = titleResponse.trim().replace(/['"]/g, ''); // Remove quotes if AI adds them
+        // Ensure title isn't too long
+        if (responseTitle.length > 50) {
+          responseTitle = responseTitle.substring(0, 47) + "...";
+        }
+      } catch (titleError) {
+        console.log('Failed to generate title, using default:', titleError);
+        // Keep default title if summary generation fails
+      }
+      
+      // Add the AI response to the answer field
+      const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">🤖 ${responseTitle}</summary>
+  <div class="generated-content-body">
+    ${response.trim()}
+  </div>
+</details>`;
+
+      const currentAnswer = formData.answer.trim();
+      const newAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
+      handleFieldChange('answer', newAnswer);
+      
+      // Close the modal and reset the prompt
+      setShowAiModal(false);
+      setAiPrompt('');
+    } catch (error) {
+      console.error('AI response generation error:', error);
+      setEnhancementError('Failed to generate AI response: ' + error.message);
+    } finally {
+      setIsGeneratingAiResponse(false);
     }
   };
 
@@ -749,85 +1098,33 @@ If not applicable, return exactly: NOT_APPLICABLE`;
             />
             {errors.answer && <span className="error-message">{errors.answer}</span>}
             
-            {/* AI Enhancement Buttons */}
-            {editCard && (
-              <div className="ai-enhancement-buttons">
-                <button
-                  type="button"
-                  className="btn btn-secondary ai-enhance-btn"
-                  onClick={enhanceAnswer}
-                  disabled={isEnhancingAnswer || isAddingInfo || isGeneratingExample || isSubmitting || !formData.question.trim() || !formData.answer.trim()}
-                  title="Use AI to enhance answer and format as key concepts list"
-                >
-                  {isEnhancingAnswer ? (
-                    <>
-                      <span className="loading-spinner-small"></span>
-                      Enhancing...
-                    </>
-                  ) : (
-                    <>
-                      📝 Key Concepts
-                    </>
-                  )}
-                </button>
-                
-                <button
-                  type="button"
-                  className="btn btn-secondary ai-enhance-btn"
-                  onClick={generateExample}
-                  disabled={isEnhancingAnswer || isAddingInfo || isGeneratingExample || isSubmitting || !formData.question.trim() || !formData.answer.trim()}
-                  title="Generate a code example or practical example"
-                >
-                  {isGeneratingExample ? (
-                    <>
-                      <span className="loading-spinner-small"></span>
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      💡 Example
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
+            {/* AI Enhancement Button */}
+            <div className="ai-enhancement-buttons">
+              <button
+                type="button"
+                className="btn btn-primary generate-answer-btn"
+                onClick={() => {
+                  console.log('🔍 Opening modal, current selectedOptions:', selectedOptions);
+                  setShowGenerateModal(true);
+                }}
+                disabled={isEnhancingAnswer || isGeneratingExample || isGeneratingAiResponse || isGeneratingBatch || isSubmitting || !formData.question.trim()}
+                title="Generate AI-enhanced content for this flashcard"
+              >
+                {isGeneratingBatch ? (
+                  <>
+                    <span className="loading-spinner-small"></span>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    🚀 Generate Answer
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
 
-          {/* Additional Information Field */}
-          <div className="form-group">
-            <label htmlFor="additional_info">Additional Information</label>
-            <RichTextEditor
-              value={formData.additional_info}
-              onChange={(value) => handleFieldChange('additional_info', value)}
-              placeholder="Enter additional information (optional)..."
-              minHeight="100px"
-            />
-            
-            {/* AI Additional Info Button */}
-            {editCard && (
-              <div className="ai-enhancement-buttons">
-                <button
-                  type="button"
-                  className="btn btn-secondary ai-enhance-btn"
-                  onClick={addAdditionalInfo}
-                  disabled={isEnhancingAnswer || isAddingInfo || isGeneratingExample || isSubmitting || !formData.question.trim() || !formData.answer.trim()}
-                  title="Use AI to generate or enhance additional information"
-                >
-                  {isAddingInfo ? (
-                    <>
-                      <span className="loading-spinner-small"></span>
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      🧠 Add Additional Info
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
 
 
           {/* Enhancement Error Display */}
@@ -868,7 +1165,7 @@ If not applicable, return exactly: NOT_APPLICABLE`;
                   type="button"
                   className="btn btn-danger delete-card-btn"
                   onClick={handleDeleteClick}
-                  disabled={isSubmitting || isDeleting || isEnhancingAnswer || isAddingInfo || isGeneratingExample}
+                  disabled={isSubmitting || isDeleting || isEnhancingAnswer || isGeneratingExample || isGeneratingAiResponse}
                   title="Delete this card"
                 >
                   {isDeleting ? (
@@ -897,7 +1194,7 @@ If not applicable, return exactly: NOT_APPLICABLE`;
               <button
                 type="submit"
                 className="btn btn-primary"
-                disabled={isSubmitting || isLoading || isDeleting || isEnhancingAnswer || isAddingInfo || isGeneratingExample}
+                disabled={isSubmitting || isLoading || isDeleting || isEnhancingAnswer || isGeneratingExample || isGeneratingAiResponse}
               >
                 {isSubmitting ? 'Saving...' : editCard ? 'Update Card' : 'Create Card'}
               </button>
@@ -913,6 +1210,247 @@ If not applicable, return exactly: NOT_APPLICABLE`;
         )}
 
       </div>
+
+      {/* AI Modal */}
+      {showAiModal && (
+        <div className="modal-overlay ai-modal-overlay">
+          <div className="modal-content ai-modal-content">
+            <div className="modal-header">
+              <h3>Ask AI</h3>
+              <button 
+                className="close-btn"
+                onClick={() => {
+                  setShowAiModal(false);
+                  setAiPrompt('');
+                  setEnhancementError('');
+                }}
+                disabled={isGeneratingAiResponse}
+                aria-label="Close AI modal"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="ai-modal-body">
+              <p className="ai-modal-description">
+                Ask the AI anything about this flashcard. The AI will consider the current question, answer, and category.
+              </p>
+              
+              <div className="form-group">
+                <label htmlFor="aiPrompt">Your question or request:</label>
+                <textarea
+                  id="aiPrompt"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="e.g., 'Explain this concept in simpler terms', 'Add more examples', 'What are common mistakes with this topic?'"
+                  className="ai-prompt-textarea"
+                  rows="4"
+                  disabled={isGeneratingAiResponse}
+                />
+              </div>
+              
+              {enhancementError && (
+                <div className="error-message">
+                  ❌ {enhancementError}
+                </div>
+              )}
+            </div>
+            
+            <div className="ai-modal-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowAiModal(false);
+                  setAiPrompt('');
+                  setEnhancementError('');
+                }}
+                disabled={isGeneratingAiResponse}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={generateAiResponse}
+                disabled={isGeneratingAiResponse || !aiPrompt.trim()}
+              >
+                {isGeneratingAiResponse ? (
+                  <>
+                    <span className="loading-spinner-small"></span>
+                    Generating...
+                  </>
+                ) : (
+                  'Generate Response'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generate Answer Modal */}
+      {showGenerateModal && (
+        <div className="modal-overlay ai-modal-overlay">
+          <div className="modal-content ai-modal-content">
+            <div className="modal-header">
+              <h3>Generate Answer Content</h3>
+              <button 
+                className="close-btn"
+                onClick={() => {
+                  setShowGenerateModal(false);
+                  setSelectedOptions({
+                    keyConcepts: true,
+                    example: true,
+                    customAi: true
+                  });
+                  setEnhancementError('');
+                }}
+                disabled={isGeneratingBatch}
+                aria-label="Close Generate Answer modal"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="ai-modal-body">
+              <p className="ai-modal-description">
+                Select which types of content you'd like to generate for this flashcard:
+              </p>
+              
+              <div style={{ marginBottom: '15px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedOptions({
+                    keyConcepts: true,
+                    example: true,
+                    customAi: true,
+                    additionalInfo: true
+                  })}
+                  disabled={isGeneratingBatch}
+                  style={{ 
+                    fontSize: '14px', 
+                    padding: '6px 16px',
+                    marginRight: '10px'
+                  }}
+                >
+                  ✅ Select All
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedOptions({
+                    keyConcepts: false,
+                    example: false,
+                    customAi: false
+                  })}
+                  disabled={isGeneratingBatch}
+                  style={{ 
+                    fontSize: '14px', 
+                    padding: '6px 16px'
+                  }}
+                >
+                  ❌ Clear All
+                </button>
+              </div>
+              
+              <div className="generate-options">
+                <div className="form-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedOptions.keyConcepts}
+                      defaultChecked={true}
+                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, keyConcepts: e.target.checked }))}
+                      disabled={isGeneratingBatch}
+                      className="checkbox-input"
+                    />
+                    <span className="checkbox-text">
+                      🧠 Key Concepts - Organized list of main concepts
+                    </span>
+                  </label>
+                </div>
+
+                <div className="form-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedOptions.example}
+                      defaultChecked={true}
+                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, example: e.target.checked }))}
+                      disabled={isGeneratingBatch}
+                      className="checkbox-input"
+                    />
+                    <span className="checkbox-text">
+                      💡 Example - Code or practical example
+                    </span>
+                  </label>
+                </div>
+
+                <div className="form-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedOptions.customAi}
+                      defaultChecked={true}
+                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, customAi: e.target.checked }))}
+                      disabled={isGeneratingBatch}
+                      className="checkbox-input"
+                    />
+                    <span className="checkbox-text">
+                      📝 Question Summary - Summary of the question content
+                    </span>
+                  </label>
+                </div>
+
+
+
+              </div>
+              
+              {enhancementError && (
+                <div className="error-message">
+                  ❌ {enhancementError}
+                </div>
+              )}
+            </div>
+            
+            <div className="ai-modal-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowGenerateModal(false);
+                  setSelectedOptions({
+                    keyConcepts: true,
+                    example: true,
+                    customAi: true
+                  });
+                  setEnhancementError('');
+                }}
+                disabled={isGeneratingBatch}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={generateBatchContent}
+                disabled={isGeneratingBatch || (!selectedOptions.keyConcepts && !selectedOptions.example && !selectedOptions.customAi)}
+              >
+                {isGeneratingBatch ? (
+                  <>
+                    <span className="loading-spinner-small"></span>
+                    Generating...
+                  </>
+                ) : (
+                  'Generate Selected Content'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

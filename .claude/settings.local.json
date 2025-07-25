@@ -44,7 +44,10 @@
       "Bash(PORT=3001 timeout 30 npm start)",
       "Bash(npm ls:*)",
       "Bash(CI=true npm run build)",
-      "Bash(timeout 20 npm start)"
+      "Bash(timeout 20 npm start)",
+      "Bash(git config:*)",
+      "Bash(git -c user.name=\"Claude Code\" -c user.email=\"noreply@anthropic.com\" commit -m \"$(cat <<''EOF''\nFix category count inconsistency in due cards mode\n\nIndividual category buttons now use stable counting approach (initialStats.due - completedCount) \nwhen showDueTodayOnly is true, ensuring consistency with \"All\" category count.\n\n🤖 Generated with [Claude Code](https://claude.ai/code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(timeout 15s npm start)"
     ],
     "deny": []
   }

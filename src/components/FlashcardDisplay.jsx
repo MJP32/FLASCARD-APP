@@ -134,11 +134,31 @@ const FlashcardDisplay = ({
         Card {currentIndex + 1} of {totalCards}
       </div>
 
-      {/* Main Content Area */}
-      <div className="flashcard-content">
+      {/* Main Content Area - Clickable */}
+      <div 
+        className="flashcard-content"
+        onClick={() => {
+          if (onToggleAnswer) {
+            onToggleAnswer();
+          } else if (!showAnswer && onShowAnswer) {
+            onShowAnswer();
+          }
+        }}
+        style={{ cursor: 'pointer' }}
+      >
         {/* Question Section - Only show when answer is not shown */}
         {!showAnswer && (
-          <div className="flashcard-section question-section">
+          <div 
+            className="flashcard-section question-section"
+            onClick={() => {
+              if (onToggleAnswer) {
+                onToggleAnswer();
+              } else if (!showAnswer && onShowAnswer) {
+                onShowAnswer();
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
             <h3 className="section-label">Question</h3>
             <div 
               className="content"
@@ -149,34 +169,44 @@ const FlashcardDisplay = ({
 
         {/* Answer Section - Show when answer is shown */}
         {showAnswer && (
-          <>
-            <div className="flashcard-section answer-section">
-              <h3 className="section-label">Answer</h3>
+          <div 
+            className="flashcard-section answer-section"
+            onClick={() => {
+              if (onToggleAnswer) {
+                onToggleAnswer();
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <h3 className="section-label">Answer</h3>
+            <div className="content">
               <div 
-                className="content"
+                className="answer-text"
                 dangerouslySetInnerHTML={{ __html: card.answer || 'No answer provided' }}
               />
+              
+              {/* Additional Info Dropdown - Inside content white box */}
+              {card.additional_info && (
+                <div className="additional-info-wrapper">
+                  <details 
+                    className="additional-info-dropdown"
+                    onClick={(e) => e.stopPropagation()} // Prevent card flip when clicking dropdown
+                  >
+                    <summary className="additional-info-header">
+                      <span className="dropdown-icon">▶</span>
+                      Additional Information
+                    </summary>
+                    <div className="additional-info-content">
+                      <div 
+                        className="additional-info-inner"
+                        dangerouslySetInnerHTML={{ __html: card.additional_info }}
+                      />
+                    </div>
+                  </details>
+                </div>
+              )}
             </div>
-
-            {/* Additional Info Section - Show as dropdown/collapsible */}
-            {card.additional_info && (
-              <div className="flashcard-section additional-info-section">
-                <details className="additional-info-dropdown">
-                  <summary className="additional-info-header">
-                    <span className="dropdown-icon">▶</span>
-                    Additional Information
-                  </summary>
-                  <div className="additional-info-content">
-                    <div 
-                      className="content"
-                      dangerouslySetInnerHTML={{ __html: card.additional_info }}
-                    />
-                  </div>
-                </details>
-              </div>
-            )}
-
-          </>
+          </div>
         )}
       </div>
 
@@ -228,7 +258,7 @@ const FlashcardDisplay = ({
         {/* Keyboard Shortcuts Hint */}
         <div className="keyboard-hints">
           <small>
-            <kbd>Space</kbd>/<kbd>Enter</kbd> toggle answer • <kbd>←</kbd>/<kbd>→</kbd> navigate • <kbd>E</kbd> edit card • <kbd>G</kbd> generate questions
+            Click card or press <kbd>Space</kbd>/<kbd>Enter</kbd> to flip • <kbd>←</kbd>/<kbd>→</kbd> navigate • <kbd>E</kbd> edit card • <kbd>G</kbd> generate questions
             {showAnswer && onReviewCard && (
               <> • <kbd>1</kbd>-<kbd>4</kbd> review</>
             )}

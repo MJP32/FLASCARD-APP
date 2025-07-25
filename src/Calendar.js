@@ -89,8 +89,10 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
     if (due) {
       const modalDataToSet = {
         date: date.toLocaleDateString(),
-        value: due.cardCount > 0 ? due.cardCount : due.completedCount || 0,
-        type: due.cardCount > 0 ? 'cards' : 'completed'
+        dueCount: due.cardCount || 0,
+        completedCount: due.completedCount || 0,
+        type: due.cardCount > 0 ? 'cards' : 'completed',
+        isPast: isPastDay
       };
       console.log('Setting modal data:', modalDataToSet);
       setModalData(modalDataToSet);
@@ -282,13 +284,21 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
             let borderColor = isDarkMode ? '#4b5563' : '#f3f4f6';
             let textColor = isDarkMode ? '#d1d5db' : '#374151';
             let fontWeight = '500';
+            
+            // Check if this is a past day with incomplete cards (excluding today)
+            const isPastDayWithIncompleteCards = day && date && date < today && !isToday && due && due.cardCount > 0;
 
             if (!day) {
               backgroundColor = isDarkMode ? '#1f2937' : '#f9fafb';
+            } else if (isPastDayWithIncompleteCards) {
+              // Light red background for past days with incomplete cards
+              backgroundColor = isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2';
+              borderColor = isDarkMode ? '#ef4444' : '#fca5a5';
+              textColor = isDarkMode ? '#fca5a5' : '#dc2626';
             } else if (isToday) {
-              backgroundColor = isDarkMode ? 'rgba(30, 58, 138, 0.4)' : '#dbeafe';
-              borderColor = isDarkMode ? '#2563eb' : '#93c5fd';
-              textColor = isDarkMode ? '#bfdbfe' : '#1d4ed8';
+              backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.3)' : '#dcfce7';
+              borderColor = isDarkMode ? '#22c55e' : '#86efac';
+              textColor = isDarkMode ? '#86efac' : '#15803d';
               fontWeight = '700';
             } else if (isSelected) {
               backgroundColor = isDarkMode ? 'rgba(30, 58, 138, 0.2)' : '#eff6ff';
@@ -316,13 +326,13 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                 }}
                 onClick={() => handleDayPress(day)}
                 onMouseOver={(e) => {
-                  if (day && !isToday && !isSelected) {
+                  if (day && !isToday && !isSelected && !isPastDayWithIncompleteCards) {
                     e.target.style.backgroundColor = isDarkMode ? '#374151' : '#f9fafb';
                     e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
                   }
                 }}
                 onMouseOut={(e) => {
-                  if (day && !isToday && !isSelected) {
+                  if (day && !isToday && !isSelected && !isPastDayWithIncompleteCards) {
                     e.target.style.backgroundColor = backgroundColor;
                     e.target.style.boxShadow = 'none';
                   }
@@ -338,8 +348,8 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                     }}>
                       {day}
                     </span>
-                    {/* Show badge if cards are due */}
-                    {due && due.cardCount > 0 && (
+                    {/* Show card count in the box for today */}
+                    {isToday && due && due.cardCount > 0 && (
                       <div style={{
                         position: 'absolute',
                         bottom: '4px',
@@ -349,9 +359,7 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                         <div style={{
                           padding: '2px 6px',
                           borderRadius: '9999px',
-                          backgroundColor: date && date > today 
-                            ? (isDarkMode ? '#6b7280' : '#9ca3af') // Gray for future dates
-                            : (isDarkMode ? '#2563eb' : '#3b82f6'), // Blue for due/past dates
+                          backgroundColor: isDarkMode ? '#22c55e' : '#16a34a',
                           color: '#ffffff',
                           fontSize: '12px',
                           fontWeight: '500',
@@ -361,19 +369,127 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                         </div>
                       </div>
                     )}
-                    {/* Show smiley face only for days with completed cards */}
+                    {/* Show completed count for today with cards due */}
+                    {isToday && due && due.completedCount > 0 && due.cardCount > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px'
+                      }}>
+                        <div style={{
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.1)',
+                          color: isDarkMode ? '#86efac' : '#16a34a',
+                          fontSize: '10px',
+                          fontWeight: '600',
+                          border: `1px solid ${isDarkMode ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.2)'}`
+                        }}>
+                          ✓{due.completedCount}
+                        </div>
+                      </div>
+                    )}
+                    {/* Show completed/incomplete breakdown for past days */}
+                    {due && date && date < today && !isToday && (due.cardCount > 0 || due.completedCount > 0) && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '4px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        display: 'flex',
+                        gap: '2px',
+                        alignItems: 'center'
+                      }}>
+                        {due.completedCount > 0 && (
+                          <div style={{
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.8)' : '#16a34a',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600'
+                          }}>
+                            {due.completedCount}
+                          </div>
+                        )}
+                        {due.cardCount > 0 && (
+                          <div style={{
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.8)' : '#dc2626',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600'
+                          }}>
+                            {due.cardCount}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Show badge for future days with cards due (excluding today) */}
+                    {due && date && date > today && (due.cardCount > 0 || due.completedCount > 0) && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '4px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        display: 'flex',
+                        gap: '2px',
+                        alignItems: 'center'
+                      }}>
+                        {due.completedCount > 0 && (
+                          <div style={{
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.7)' : '#16a34a',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600'
+                          }}>
+                            {due.completedCount}
+                          </div>
+                        )}
+                        {due.cardCount > 0 && (
+                          <div style={{
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isDarkMode ? '#6b7280' : '#9ca3af', // Gray for future dates
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600'
+                          }}>
+                            {due.cardCount}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Show smiley face and completed count for days with all cards completed */}
                     {due && due.completedCount > 0 && due.cardCount === 0 && (
                       <div style={{
                         position: 'absolute',
                         bottom: '4px',
                         left: '50%',
-                        transform: 'translateX(-50%)'
+                        transform: 'translateX(-50%)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px'
                       }}>
                         <div style={{
                           fontSize: '16px',
                           filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
                         }}>
                           😊
+                        </div>
+                        <div style={{
+                          padding: '1px 4px',
+                          borderRadius: '4px',
+                          backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.8)' : '#16a34a',
+                          color: '#ffffff',
+                          fontSize: '10px',
+                          fontWeight: '600'
+                        }}>
+                          {due.completedCount}
                         </div>
                       </div>
                     )}
@@ -406,8 +522,8 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
             <div style={{
               width: '16px',
               height: '16px',
-              backgroundColor: isDarkMode ? 'rgba(30, 58, 138, 0.4)' : '#dbeafe',
-              border: `2px solid ${isDarkMode ? '#2563eb' : '#93c5fd'}`,
+              backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.3)' : '#dcfce7',
+              border: `2px solid ${isDarkMode ? '#22c55e' : '#86efac'}`,
               borderRadius: '2px',
               marginRight: '8px'
             }}></div>
@@ -439,19 +555,63 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
             alignItems: 'center'
           }}>
             <div style={{
-              width: '16px',
-              height: '16px',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
               marginRight: '8px',
-              fontSize: '12px'
-            }}>😊</div>
+              gap: '1px'
+            }}>
+              <div style={{
+                fontSize: '12px'
+              }}>😊</div>
+              <div style={{
+                padding: '1px 3px',
+                borderRadius: '3px',
+                backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.8)' : '#16a34a',
+                color: '#ffffff',
+                fontSize: '8px',
+                fontWeight: '600',
+                lineHeight: 1
+              }}>5</div>
+            </div>
             <span style={{
               fontSize: '14px',
               color: isDarkMode ? '#9ca3af' : '#6b7280',
               fontWeight: '500'
             }}>All Done</span>
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <div style={{
+              display: 'flex',
+              gap: '2px',
+              alignItems: 'center',
+              marginRight: '8px'
+            }}>
+              <div style={{
+                padding: '1px 4px',
+                borderRadius: '4px',
+                backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.8)' : '#16a34a',
+                color: '#ffffff',
+                fontSize: '10px',
+                fontWeight: '600'
+              }}>3</div>
+              <div style={{
+                padding: '1px 4px',
+                borderRadius: '4px',
+                backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.8)' : '#dc2626',
+                color: '#ffffff',
+                fontSize: '10px',
+                fontWeight: '600'
+              }}>2</div>
+            </div>
+            <span style={{
+              fontSize: '14px',
+              color: isDarkMode ? '#9ca3af' : '#6b7280',
+              fontWeight: '500'
+            }}>Completed/Incomplete</span>
           </div>
         </div>
       </div>
@@ -489,34 +649,77 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
               margin: '0 0 16px 0'
             }}>{modalData.date}</h2>
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              marginBottom: '16px'
+              marginBottom: '24px'
             }}>
-              {modalData.type === 'completed' ? (
-                <span style={{ fontSize: '24px' }}>😊</span>
-              ) : (
+              {/* Show completion stats if any cards were completed */}
+              {modalData.completedCount > 0 && (
                 <div style={{
-                  width: '16px',
-                  height: '16px',
-                  backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
-                  borderRadius: '50%'
-                }}></div>
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  marginBottom: '16px',
+                  padding: '12px',
+                  backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)',
+                  borderRadius: '8px',
+                  border: `1px solid ${isDarkMode ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.2)'}`
+                }}>
+                  <span style={{ fontSize: '20px' }}>✅</span>
+                  <p style={{
+                    color: isDarkMode ? '#86efac' : '#16a34a',
+                    margin: 0,
+                    fontWeight: '600'
+                  }}>
+                    {modalData.completedCount} card{modalData.completedCount !== 1 ? 's' : ''} completed
+                  </p>
+                </div>
               )}
-              <p style={{
-                color: isDarkMode ? '#d1d5db' : '#6b7280',
-                margin: 0
-              }}>
-                {modalData.type === 'completed' ? (
-                  <span style={{ fontWeight: '600' }}>All caught up! Great job! 🎉</span>
-                ) : (
-                  <>
-                    <span style={{ fontWeight: '600' }}>{(() => { console.log('Calendar Modal - Date:', modalData.date, 'Value:', modalData.value, 'Modal Data:', modalData); return modalData.value; })()}</span> cards due
-                  </>
-                )}
-              </p>
+              
+              {/* Show due cards if any */}
+              {modalData.dueCount > 0 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  padding: '12px',
+                  backgroundColor: modalData.isPast 
+                    ? (isDarkMode ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)')
+                    : (isDarkMode ? 'rgba(37, 99, 235, 0.1)' : 'rgba(37, 99, 235, 0.05)'),
+                  borderRadius: '8px',
+                  border: `1px solid ${modalData.isPast 
+                    ? (isDarkMode ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.2)')
+                    : (isDarkMode ? 'rgba(37, 99, 235, 0.3)' : 'rgba(37, 99, 235, 0.2)')}`
+                }}>
+                  <span style={{ fontSize: '20px' }}>{modalData.isPast ? '❌' : '📚'}</span>
+                  <p style={{
+                    color: modalData.isPast 
+                      ? (isDarkMode ? '#fca5a5' : '#dc2626')
+                      : (isDarkMode ? '#93c5fd' : '#2563eb'),
+                    margin: 0,
+                    fontWeight: '600'
+                  }}>
+                    {modalData.dueCount} card{modalData.dueCount !== 1 ? 's' : ''} {modalData.isPast ? 'not completed' : 'due'}
+                  </p>
+                </div>
+              )}
+              
+              {/* Show all done message if no cards are due */}
+              {modalData.dueCount === 0 && modalData.completedCount > 0 && (
+                <div style={{
+                  textAlign: 'center',
+                  marginTop: '16px'
+                }}>
+                  <span style={{ fontSize: '32px' }}>🎉</span>
+                  <p style={{
+                    color: isDarkMode ? '#d1d5db' : '#6b7280',
+                    margin: '8px 0 0 0',
+                    fontWeight: '600'
+                  }}>
+                    All caught up! Great job!
+                  </p>
+                </div>
+              )}
             </div>
             <button
               style={{

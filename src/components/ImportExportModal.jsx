@@ -789,10 +789,15 @@ const ImportExportModal = ({
                 <textarea
                   id="csv-text"
                   className="csv-textarea"
-                  placeholder={`question,answer,category,sub_category,level,additional_info
+                  placeholder={`Headers are optional! Default column order: question, answer, category, sub_category, level, additional_info
+
+With headers:
+question,answer,category,sub_category,level,additional_info
+"What is React?","A JavaScript library for building user interfaces","Programming","JavaScript","new","Created by Facebook"
+
+Without headers (same result):
 "What is React?","A JavaScript library for building user interfaces","Programming","JavaScript","new","Created by Facebook"
 "Capital of France?","Paris","Geography","Europe","new","Located in Western Europe"
-"2 + 2 = ?","4","Math","Arithmetic","new","Basic addition"
 
 Note: Level can be: new, again, hard, good, easy, beginner, intermediate, or advanced.`}
                   value={csvText}

@@ -764,12 +764,16 @@ const SettingsModal = ({
                 </div>
 
                 <div className="format-example">
-                  <h4>Example CSV:</h4>
+                  <h4>Example CSV (headers optional):</h4>
                   <pre className="code-block">
-{`question,answer,category,sub_category,level,additional_info
+{`Option 1: With headers (recommended)
+question,answer,category,sub_category,level,additional_info
 "What is 2+2?","4","Math","Arithmetic","new","Basic addition"
 "Capital of France?","Paris","Geography","Europe","easy","Located in Western Europe"
-"Conjugate 'ser' in present","soy, eres, es...","Spanish","Verbs","hard","Irregular verb"
+
+Option 2: Without headers (uses default column order)
+"What is 2+2?","4","Math","Arithmetic","new","Basic addition"
+"Capital of France?","Paris","Geography","Europe","easy","Located in Western Europe"
 "<b>Bold text</b>","<i>Italic answer</i>","Formatting","","new","HTML supported"`}
                   </pre>
                 </div>

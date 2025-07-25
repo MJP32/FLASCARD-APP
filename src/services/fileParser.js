@@ -105,25 +105,45 @@ export const parseCSV = (csvString) => {
     console.log('Total rows found:', rows.length);
     console.log('First few rows:', rows.slice(0, 3));
     
-    // Analyze header row to determine column structure
-    const headerRow = rows[0];
-    const headerFields = parseRow(headerRow);
-    console.log('Header fields:', headerFields);
+    // Analyze first row to determine if it's headers or data
+    const firstRow = rows[0];
+    const firstRowFields = parseRow(firstRow);
+    console.log('First row fields:', firstRowFields);
     
-    // Map header names to their indices
-    const headerMap = {};
-    headerFields.forEach((header, index) => {
-      const normalizedHeader = header.toLowerCase().trim().replace(/\s+/g, '_');
-      headerMap[normalizedHeader] = index;
-    });
+    // Check if first row looks like headers (contains common header words)
+    const headerKeywords = ['question', 'answer', 'category', 'sub_category', 'level', 'additional_info'];
+    const looksLikeHeaders = firstRowFields.some(field => 
+      headerKeywords.some(keyword => 
+        field.toLowerCase().trim().replace(/\s+/g, '_').includes(keyword)
+      )
+    );
+    
+    let headerMap = {};
+    let dataStartIndex = 0;
+    
+    if (looksLikeHeaders) {
+      // Use first row as headers
+      console.log('First row detected as headers');
+      firstRowFields.forEach((header, index) => {
+        const normalizedHeader = header.toLowerCase().trim().replace(/\s+/g, '_');
+        headerMap[normalizedHeader] = index;
+      });
+      dataStartIndex = 1; // Skip header row
+    } else {
+      // No headers detected, use default column order
+      console.log('No headers detected, using default column order: question, answer, category, sub_category, level, additional_info');
+      const defaultHeaders = ['question', 'answer', 'category', 'sub_category', 'level', 'additional_info'];
+      defaultHeaders.forEach((header, index) => {
+        headerMap[header] = index;
+      });
+      dataStartIndex = 0; // Start from first row
+    }
     
     console.log('Header mapping:', headerMap);
-    
-    rows.shift(); // Remove header row (first row is headers)
-    console.log('Rows after removing header:', rows.length);
+    console.log('Data starts at row index:', dataStartIndex);
     const cards = [];
     
-    for (let index = 0; index < rows.length; index++) {
+    for (let index = dataStartIndex; index < rows.length; index++) {
       const row = rows[index];
       if (!row.trim()) continue; // Skip empty rows
       
@@ -147,6 +167,16 @@ export const parseCSV = (csvString) => {
       const sub_category = getField('sub_category')?.trim() || '';
       const levelRaw = getField('level')?.trim().toLowerCase() || 'new';
       const additional_info = getField('additional_info') || '';
+      
+      // Debug logging for Amazon LP
+      if (category.toLowerCase().includes('amazon') || category.toLowerCase().includes('lp')) {
+        console.log('🎯 Found Amazon LP card:', {
+          row: index + 1,
+          category,
+          question: question?.substring(0, 50),
+          answer: answer?.substring(0, 50)
+        });
+      }
       
       
       // Validate level value and map common alternatives
@@ -223,8 +253,13 @@ export const parseCSV = (csvString) => {
 
     // Validate that we parsed some cards
     if (cards.length === 0) {
-      const formatExample = 'question,answer,category,sub_category,level,additional_info';
-      throw new Error(`No valid flashcards found in CSV. Please check that your file has the correct format: ${formatExample}`);
+      const formatExample = `Expected format (headers optional):
+question,answer,category,sub_category,level,additional_info
+"What is 2+2?","4","Math","Arithmetic","new","Basic addition"
+
+Or without headers:
+"What is 2+2?","4","Math","Arithmetic","new","Basic addition"`;
+      throw new Error(`No valid flashcards found in CSV. Please check that your file has the correct format:\n${formatExample}`);
     }
     
     return cards;
