@@ -112,6 +112,9 @@ function App() {
   const [subCategoryCompletedCounts, setSubCategoryCompletedCounts] = useState({});
   const [lastManualCategoryChange, setLastManualCategoryChange] = useState(0);
   const [isManualCategorySelection, setIsManualCategorySelection] = useState(false);
+
+  // Category selection state - managed in App.js to avoid circular dependency
+  const [selectedCategory, setSelectedCategory] = useState('All');
   
   // Collapsible sections state - auto-collapse on mobile
   const [isCategoriesCollapsed, setIsCategoriesCollapsed] = useState(window.innerWidth <= 768);
@@ -155,7 +158,6 @@ function App() {
     filteredFlashcards,
     currentCardIndex,
     showAnswer,
-    selectedCategory,
     selectedSubCategory,
     selectedLevel,
     showDueTodayOnly,
@@ -176,7 +178,6 @@ function App() {
     getFilteredDueCards,
     getCardsReviewedToday,
     setShowAnswer,
-    setSelectedCategory,
     setSelectedSubCategory,
     setSelectedLevel,
     setShowDueTodayOnly,
@@ -199,7 +200,7 @@ function App() {
     manualTriggerAutoAdvance,
     debugCurrentFilterState,
     debugSubCategoryTracking
-  } = useFlashcards(firebaseApp, userId, selectedCategory);
+  } = useFlashcards(firebaseApp, userId);
 
   const {
     isDarkMode,
@@ -219,7 +220,7 @@ function App() {
   const categoryStats = getCategoryStats();
   const currentCard = getCurrentCard();
   const categories = getCategories();
-  const subCategories = getSubCategories();
+  const subCategories = getSubCategories(selectedCategory);
   
   // Debug subcategories when they change
   React.useEffect(() => {
@@ -229,7 +230,7 @@ function App() {
       subCategoriesLength: subCategories.length
     });
   }, [selectedCategory, subCategories]);
-  const subCategoryStats = getSubCategoryStats();
+  const subCategoryStats = getSubCategoryStats(selectedCategory);
   const levels = getLevels();
 
   // Get all categories (not filtered by due date) as fallback

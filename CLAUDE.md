@@ -13,38 +13,68 @@ This is a React-based flashcard application with Firebase backend integration. T
 - `npm run build` - Creates production build in `build/` folder
 - `npm run eject` - Ejects from Create React App (one-way operation)
 
-## Architecture
+## Architecture Overview
 
-### Core Components
-- **App.js** - Main application component containing all state management and Firebase integration
-- **LoginScreen.jsx** - Authentication UI with login/register/anonymous options
-- **Calendar.js** - Modal component for viewing flashcard study calendar
-- **firebase.js** - Firebase configuration and initialization
+### Monolithic Component Structure
+The application uses a centralized architecture where **App.js** serves as the primary container for all state management and business logic. This monolithic approach keeps related functionality together but results in a large main component (~27k tokens).
 
-### Key Features
-- Firebase Authentication (email/password and anonymous)
-- Firestore database for flashcard storage
-- FSRS algorithm implementation for spaced repetition
-- CSV import/export functionality using xlsx library
-- Category-based flashcard filtering
-- Dark mode support
-- Calendar view for study tracking
+### Custom Hooks Architecture
+The app leverages three main custom hooks for separation of concerns:
+- **useAuth** (`src/hooks/useAuth.js`) - Firebase authentication management
+- **useFlashcards** (`src/hooks/useFlashcards.js`) - Flashcard CRUD operations and Firestore integration  
+- **useSettings** (`src/hooks/useSettings.js`) - User preferences and FSRS algorithm parameters
 
-### State Management
-All state is managed in App.js using React hooks. Key state includes:
-- Authentication state (userId, auth, isAuthReady)
-- Flashcard data (flashcards, filteredFlashcards, currentCardIndex)
-- UI state (modals, forms, dark mode)
-- FSRS parameters for spaced repetition algorithm
+### Component Structure  
+- **App.js** - Main container with all state management and modal orchestration
+- **LoginScreen.jsx** - Authentication UI (email/password and anonymous login)
+- **FlashcardDisplay.jsx** - Card presentation and review interface
+- **FlashcardForm.jsx** - Card creation and editing forms
+- **SettingsModal.jsx** - FSRS parameters and app configuration
+- **ImportExportModal.jsx** - CSV/Excel file handling
+- **GenerateQuestionsModal.jsx** - AI-powered question generation
+- **ManageCardsModal.jsx** - Bulk card management operations
+- **StudyGuideModal.jsx** - Study guide generation and viewing
+- **Calendar.js** - Study calendar and streak tracking
+- **RichTextEditor.jsx** - Quill-based rich text editing
+
+### Services Layer
+- **exportService.js** - Handles CSV/Excel export functionality
+- **fileParser.js** - Processes uploaded CSV/Excel files for import
 
 ### Firebase Integration
-- Authentication: email/password and anonymous login
-- Firestore: flashcards collection with user-specific documents
-- Real-time listeners for flashcard updates
+- **firebase.js** - Firebase app initialization and configuration
+- **Firestore Collections**: User-scoped flashcard documents with real-time synchronization
+- **Authentication**: Support for email/password and anonymous users
+- **Real-time Updates**: Live synchronization of flashcard changes across sessions
 
-### Dependencies
-- React 18.2.0 with Create React App
-- Firebase 10.14.1 for backend services
-- xlsx 0.18.5 for CSV import/export
-- react-syntax-highlighter 15.5.0 for code display
-- Testing Library suite for component testing
+### FSRS Implementation
+The app implements a complete FSRS (Free Spaced Repetition Scheduler) algorithm:
+- **Default Parameters**: Configurable in `src/utils/constants.js`
+- **Review Responses**: Four-option system (Again, Hard, Good, Easy)
+- **Scheduling Logic**: Integrated into flashcard review workflow
+- **Progress Tracking**: Due date calculation and interval adjustment
+
+### Debugging Infrastructure
+Extensive debugging utilities in `src/utils/` for troubleshooting:
+- **debugCategories.js** - Category filtering and counting issues
+- **debugDueCards.js** - Due date calculation verification
+- **debugAutoAdvance.js** - Auto-advance feature testing
+- **firebaseDebug.js** - Firestore connection and rule testing
+- Multiple specialized debug utilities for specific features
+
+### Key Features
+- Spaced repetition with FSRS algorithm
+- Category and subcategory filtering
+- Rich text editing with code syntax highlighting
+- AI-powered question generation (OpenAI, Anthropic, Gemini)
+- CSV/Excel import/export
+- Study streaks and calendar tracking
+- Session notes and progress tracking
+- Dark mode support
+- Mobile-responsive design
+
+### State Management Patterns
+- Centralized state in App.js with prop drilling to components
+- Local state in custom hooks for domain-specific logic
+- localStorage for user preferences and session data
+- Real-time Firestore listeners for data synchronization

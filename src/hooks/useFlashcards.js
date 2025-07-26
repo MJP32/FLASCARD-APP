@@ -20,10 +20,9 @@ import {
  * Custom hook for flashcard management with Firestore
  * @param {Object} firebaseApp - Initialized Firebase app instance
  * @param {string} userId - Current user ID
- * @param {string} selectedCategory - Currently selected category from App.js
  * @returns {Object} Flashcard state and methods
  */
-export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => {
+export const useFlashcards = (firebaseApp, userId) => {
   const [db, setDb] = useState(null);
   const [flashcards, setFlashcards] = useState([]);
   const [filteredFlashcards, setFilteredFlashcards] = useState([]);
@@ -54,7 +53,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
   const [error, setError] = useState('');
   
   // Debug utility to check current filter state
-  const debugCurrentFilterState = useCallback(() => {
+  const debugCurrentFilterState = useCallback((selectedCategory = 'All') => {
     const now = new Date();
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     
@@ -105,7 +104,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
     // })));
     
     return { categoryCards: categoryCards.length, subCategoryCards: subCategoryCards.length, dueCards: dueCards.length };
-  }, [flashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly]);
 
   // Wrapper for manual subcategory selection
   const setSelectedSubCategoryManual = useCallback((subCategory) => {
@@ -326,7 +325,6 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       //       console.log(`🔍 GET-NEXT-SUBCATEGORY: ✅ Selected subcategory: ${nextSubCategory} (${nextSubCategoryCount} total cards)`);
       //       console.log(`🔍 GET-NEXT-SUBCATEGORY: 📊 Verification: minCount=${minCount}, selected=${nextSubCategoryCount}, isMinimum=${isActuallyMinimum}`);
       //       console.log('🔍 GET-NEXT-SUBCATEGORY: 📊 All available options with total counts:', availableSubCategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.total}`));
-      
       if (!isActuallyMinimum) {
         console.error('🚨 ERROR: Selected subcategory does not have the minimum count!');
       }
@@ -336,7 +334,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       //       console.log('🔍 GET-NEXT-SUBCATEGORY: ❌ No subcategories with due cards found');
       return null;
     }
-  }, [flashcards, selectedCategory]);
+  }, [flashcards]);
 
   /**
    * Get next category with least due cards (for automatic progression)
@@ -435,9 +433,10 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
     }
 
     // Always apply category and subcategory filters
-    if (selectedCategory !== 'All') {
-      filtered = filtered.filter(card => card.category === selectedCategory);
-    }
+    // TODO: selectedCategory filtering moved to App.js
+    // if (selectedCategory !== 'All') {
+    //   filtered = filtered.filter(card => card.category === selectedCategory);
+    // }
 
     // Filter by sub-category
     if (selectedSubCategory !== 'All') {
@@ -466,7 +465,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       const beforeDueFilter = filtered.length;
       console.log('📅 Filtering by due date. Current time:', now);
       console.log('📅 Cards before due filter:', beforeDueFilter);
-      console.log('📅 Selected filters:', { selectedCategory, selectedSubCategory, selectedLevel });
+      console.log('📅 Selected filters:', { selectedSubCategory, selectedLevel });
       
       filtered = filtered.filter(card => {
         // Ensure dueDate is a proper Date object for comparison
@@ -591,7 +590,8 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       // Debug: Check what cards exist in this subcategory (including future due cards)
       const allCardsInSubcategory = flashcards.filter(card => {
         if (card.active === false) return false;
-        if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+        // TODO: selectedCategory filtering moved to App.js
+        // if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
         if (selectedSubCategory !== 'All') {
           const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
           return cardSubCategory === selectedSubCategory;
@@ -625,16 +625,15 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
 
       console.log('🔍 AUTO-ADVANCE DEBUG: Checking conditions:', {
         showDueTodayOnly,
-        selectedCategory,
         selectedSubCategory,
         timeSinceManualChange,
         filteredLength: filtered.length,
         condition1_dueTodayOnly: showDueTodayOnly,
-        condition2_categoryNotAll: selectedCategory !== 'All',
+        condition2_categoryNotAll: true, // TODO: selectedCategory moved to App.js
         condition3_subCategoryNotAll: selectedSubCategory !== 'All',
         condition4_timeDelay: timeSinceManualChange > 2000,
         condition5_noCards: filtered.length === 0,
-        allConditionsMet: showDueTodayOnly && selectedCategory !== 'All' && selectedSubCategory !== 'All' && timeSinceManualChange > 2000 && filtered.length === 0
+        allConditionsMet: showDueTodayOnly && true && selectedSubCategory !== 'All' && timeSinceManualChange > 2000 && filtered.length === 0 // TODO: selectedCategory moved to App.js
       });
       
       // Check if we should skip the time delay for debugging
@@ -647,7 +646,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       // (timeSinceCardCompletion and recentCardCompletion already defined above)
 
       const shouldAutoAdvance = showDueTodayOnly &&
-                                selectedCategory !== 'All' &&
+                                // selectedCategory !== 'All' &&
                                 selectedSubCategory !== 'All' &&
                                 timeConditionMet &&
                                 filtered.length === 0 &&
@@ -663,7 +662,6 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
         }
         console.log('🔄 AUTO-ADVANCE: All conditions met, triggering auto-advance logic');
         console.log('🔄 AUTO-ADVANCE: Current state:', {
-          selectedCategory,
           selectedSubCategory,
           timeSinceManualChange,
           filteredLength: filtered.length,
@@ -677,38 +675,11 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
           console.log('🔄 SUBCATEGORY FINISHED: Current subcategory has no more due cards, finding next subcategory within same category');
 
           // First, try to find another subcategory with due cards in the SAME category
-          const nextSubCategoryInSameCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
+          // TODO: selectedCategory moved to App.js - auto-advance logic needs refactoring
+          // const nextSubCategoryInSameCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
 
-          if (nextSubCategoryInSameCategory) {
-            console.log(`🔄 SUBCATEGORY AUTO-ADVANCE: ✅ Moving to subcategory with least cards within same category: ${nextSubCategoryInSameCategory}`);
-            setSelectedSubCategory(nextSubCategoryInSameCategory);
-          } else {
-            // Only if no subcategories left in current category, then move to next category
-            console.log('🔄 SUBCATEGORY FINISHED: No more subcategories in current category, finding next category with least cards');
-
-            const nextCategoryWithLeastCards = getNextCategoryWithLeastCards(selectedCategory);
-
-            if (nextCategoryWithLeastCards) {
-              console.log(`🔄 CATEGORY AUTO-ADVANCE: ✅ Moving to next category with least cards: ${nextCategoryWithLeastCards}`);
-              // Note: Cannot set selectedCategory directly since it's now a parameter from App.js
-              // App.js will need to handle category changes
-              console.log('🔄 CATEGORY AUTO-ADVANCE: Hook cannot change category directly - App.js must handle this');
-
-              // Reset subcategory to 'All' initially, then the auto-manage logic will set it to the subcategory with least cards
-              setSelectedSubCategory('All');
-
-              // Use a small delay to let the category change take effect, then set the subcategory with least cards
-              setTimeout(() => {
-                const nextSubCategoryInNewCategory = getNextSubCategoryWithLeastCards(nextCategoryWithLeastCards, 'All');
-                if (nextSubCategoryInNewCategory) {
-                  console.log(`🔄 SUBCATEGORY AUTO-ADVANCE: ✅ Setting subcategory with least cards in new category: ${nextSubCategoryInNewCategory}`);
-                  setSelectedSubCategory(nextSubCategoryInNewCategory);
-                }
-              }, 100);
-            } else {
-              console.log('🔄 CATEGORY AUTO-ADVANCE: ❌ No more categories with due cards available');
-            }
-          }
+          // TODO: Auto-advance logic temporarily disabled until selectedCategory refactoring is complete
+          console.log('🔄 AUTO-ADVANCE: Logic disabled until selectedCategory is properly refactored in App.js');
         }, 50);
       } else if (shouldAutoAdvance && autoAdvanceDisabled) {
         console.log('🚫 AUTO-ADVANCE: DISABLED FOR DEBUGGING - Would have auto-advanced but it\'s disabled');
@@ -716,7 +687,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
         console.log('🔄 AUTO-ADVANCE: ❌ Conditions not met, skipping auto-advance');
         console.log('🔄 AUTO-ADVANCE: Condition details:', {
           showDueTodayOnly,
-          categoryNotAll: selectedCategory !== 'All',
+          categoryNotAll: true, // TODO: selectedCategory moved to App.js
           subCategoryNotAll: selectedSubCategory !== 'All',
           timeConditionMet,
           timeSinceManualChange,
@@ -730,7 +701,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
         });
       }
     }
-  }, [flashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly, categorySortBy, lastManualSubCategoryChange]);
+  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly, categorySortBy, lastManualSubCategoryChange]);
 
 
   /**
@@ -826,9 +797,10 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
 
   /**
    * Get available sub-categories from flashcards (filtered by selected category and due date)
+   * @param {string} selectedCategory - Currently selected category
    * @returns {Array<string>} Array of unique sub-categories that have available cards
    */
-  const getSubCategories = useCallback(() => {
+  const getSubCategories = useCallback((selectedCategory = 'All') => {
     let filteredCards = flashcards;
     
     console.log('🔍 getSubCategories called with:', {
@@ -890,7 +862,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       const countB = subCategoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, selectedCategory, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, showDueTodayOnly, showStarredOnly]);
 
   /**
    * Get ALL sub-category statistics without filtering (for initial stats)
@@ -931,9 +903,10 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
 
   /**
    * Get sub-category statistics including due counts (filtered by selected category)
+   * @param {string} selectedCategory - Currently selected category
    * @returns {Object} Sub-category statistics with due counts
    */
-  const getSubCategoryStats = useCallback(() => {
+  const getSubCategoryStats = useCallback((selectedCategory = 'All') => {
     const stats = {};
     const now = new Date();
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -966,13 +939,14 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
     });
     
     return stats;
-  }, [flashcards, selectedCategory]);
+  }, [flashcards]);
 
   /**
    * Get available levels from flashcards (filtered by selected category, sub-category, and due date)
+   * @param {string} selectedCategory - The selected category to filter by
    * @returns {Array<string>} Array of unique levels that have available cards
    */
-  const getLevels = useCallback(() => {
+  const getLevels = useCallback((selectedCategory = 'All') => {
     let filteredCards = flashcards;
     
     // Filter by category
@@ -1005,55 +979,33 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
     )];
     
     return levels.sort();
-  }, [flashcards, selectedCategory, selectedSubCategory, showDueTodayOnly, inferLevelFromFSRS]);
+  }, [flashcards, selectedSubCategory, showDueTodayOnly, inferLevelFromFSRS]);
 
-  // Auto-manage sub-category filter when options change
+  // Auto-manage sub-category filter when options change - simplified since category is managed in App.js
   useEffect(() => {
     const availableSubCategories = getSubCategories();
 
     console.log('🔍 AUTO-MANAGE SUBCATEGORY: Checking conditions:', {
-      selectedCategory,
       selectedSubCategory,
       availableSubCategories,
       availableSubCategoriesLength: availableSubCategories.length,
       isCurrentSubCategoryAvailable: availableSubCategories.includes(selectedSubCategory)
     });
 
-    // Re-enable auto-manage for the new behavior
-    const autoManageDisabled = false;
-
-    if (selectedCategory === 'All') {
-      // When category is All, always reset subcategory to All
-      if (selectedSubCategory !== 'All') {
-        if (autoManageDisabled) {
-          console.log('🚫 AUTO-MANAGE: Would reset subcategory to "All" but auto-manage is disabled');
-        } else {
-          console.log('🔄 AUTO-MANAGE: Resetting subcategory to "All" because category is "All"');
-          setSelectedSubCategory('All');
-        }
-      }
-    } else if (availableSubCategories.length === 0) {
+    if (availableSubCategories.length === 0) {
       // No sub-categories available, reset to All
       if (selectedSubCategory !== 'All') {
-        if (autoManageDisabled) {
-          console.log('🚫 AUTO-MANAGE: Would reset subcategory to "All" (no subcategories available) but auto-manage is disabled');
-        } else {
-          console.log('🔄 AUTO-MANAGE: No sub-categories available, resetting to All');
-          setSelectedSubCategory('All');
-        }
+        console.log('🔄 AUTO-MANAGE: No sub-categories available, resetting to All');
+        setSelectedSubCategory('All');
       }
     } else if (selectedSubCategory !== 'All' && !availableSubCategories.includes(selectedSubCategory)) {
       // Current sub-category no longer available, move to first available or All
       const nextSubCategory = availableSubCategories.length > 0 ? availableSubCategories[0] : 'All';
-      if (autoManageDisabled) {
-        console.log(`🚫 AUTO-MANAGE: Would move from "${selectedSubCategory}" to "${nextSubCategory}" but auto-manage is disabled`);
-      } else {
-        console.log(`🔄 AUTO-MANAGE: Sub-category "${selectedSubCategory}" no longer available, moving to "${nextSubCategory}"`);
-        setSelectedSubCategory(nextSubCategory);
-      }
+      console.log(`🔄 AUTO-MANAGE: Sub-category "${selectedSubCategory}" no longer available, moving to "${nextSubCategory}"`);
+      setSelectedSubCategory(nextSubCategory);
     }
     // Note: Don't include selectedSubCategory in dependencies to prevent overriding manual selections
-  }, [selectedCategory, getSubCategories]);
+  }, [getSubCategories]);
 
   // Auto-manage level filter when options change
   useEffect(() => {
@@ -1071,7 +1023,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       setSelectedLevel(nextLevel);
       console.log(`🔄 Level "${selectedLevel}" no longer available, moving to "${nextLevel}"`);
     }
-  }, [selectedCategory, selectedSubCategory, showDueTodayOnly, getLevels, selectedLevel]);
+  }, [selectedSubCategory, showDueTodayOnly, getLevels, selectedLevel]);
 
   /**
    * Get category statistics
@@ -1454,9 +1406,10 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
 
   /**
    * Get due cards that match current filters (category, subcategory)
+   * @param {string} selectedCategory - The selected category to filter by
    * @returns {Array<Object>} Array of filtered due flashcards
    */
-  const getFilteredDueCards = useCallback(() => {
+  const getFilteredDueCards = useCallback((selectedCategory = 'All') => {
     const now = new Date();
     
     let filtered = flashcards.filter(card => {
@@ -1485,7 +1438,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
     }
 
     return filtered;
-  }, [flashcards, selectedCategory, selectedSubCategory]);
+  }, [flashcards, selectedSubCategory]);
 
   /**
    * Get next category with due cards
@@ -1570,7 +1523,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
   /**
    * Manual trigger for auto-advance (for debugging)
    */
-  const manualTriggerAutoAdvance = useCallback(() => {
+  const manualTriggerAutoAdvance = useCallback((selectedCategory = 'All') => {
     console.log('🔧 MANUAL-TRIGGER: Forcing auto-advance logic...');
     const nextSubCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
     
@@ -1584,12 +1537,12 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
       console.log('🔧 MANUAL-TRIGGER: ❌ No next subcategory found');
       return false;
     }
-  }, [selectedCategory, selectedSubCategory, getNextSubCategoryWithLeastCards]);
+  }, [selectedSubCategory, getNextSubCategoryWithLeastCards]);
   
   /**
    * Debug utility to inspect localStorage subcategory tracking
    */
-  const debugSubCategoryTracking = useCallback(() => {
+  const debugSubCategoryTracking = useCallback((selectedCategory = 'All') => {
     if (!userId) return null;
     
     const storedInitialStats = localStorage.getItem(`flashcard_initial_subcategory_stats_${userId}`);
@@ -1627,7 +1580,7 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
     console.log(`🔍 Stats for category "${selectedCategory}":`, categoryStats);
     
     return { initialStats, completedCounts, currentStats, categoryStats };
-  }, [userId, selectedCategory]);
+  }, [userId]);
 
   return {
     // State
@@ -1635,7 +1588,6 @@ export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => 
     filteredFlashcards,
     currentCardIndex,
     showAnswer,
-    selectedCategory,
     selectedSubCategory,
     selectedLevel,
     showDueTodayOnly,
