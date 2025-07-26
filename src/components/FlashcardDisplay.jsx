@@ -137,7 +137,12 @@ const FlashcardDisplay = ({
       {/* Main Content Area - Clickable */}
       <div 
         className="flashcard-content"
-        onClick={() => {
+        onClick={(e) => {
+          // Don't flip card if clicking on dropdown elements
+          if (e.target.closest('details') || e.target.closest('.additional-info-dropdown')) {
+            return;
+          }
+          
           if (onToggleAnswer) {
             onToggleAnswer();
           } else if (!showAnswer && onShowAnswer) {
@@ -150,7 +155,12 @@ const FlashcardDisplay = ({
         {!showAnswer && (
           <div 
             className="flashcard-section question-section"
-            onClick={() => {
+            onClick={(e) => {
+              // Don't flip card if clicking on dropdown elements
+              if (e.target.closest('details') || e.target.closest('.additional-info-dropdown')) {
+                return;
+              }
+              
               if (onToggleAnswer) {
                 onToggleAnswer();
               } else if (!showAnswer && onShowAnswer) {
@@ -171,7 +181,12 @@ const FlashcardDisplay = ({
         {showAnswer && (
           <div 
             className="flashcard-section answer-section"
-            onClick={() => {
+            onClick={(e) => {
+              // Don't flip card if clicking on dropdown elements
+              if (e.target.closest('details') || e.target.closest('.additional-info-dropdown')) {
+                return;
+              }
+              
               if (onToggleAnswer) {
                 onToggleAnswer();
               }

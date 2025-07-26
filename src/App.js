@@ -19,20 +19,20 @@ import { useSettings } from './hooks/useSettings';
 
 // Utils and Constants
 import { SUCCESS_MESSAGES, ERROR_MESSAGES, DEFAULT_FSRS_PARAMS } from './utils/constants';
-import { debugFirestore, checkFirestoreRules } from './utils/firebaseDebug';
-import { debugDueCards } from './utils/debugDueCards';
-import { addDebugAutoAdvanceToWindow } from './utils/debugAutoAdvance';
-import { addDebugCountingToWindow } from './utils/debugCounting';
-import { debugCategories } from './utils/debugCategories';
-import { debugAmazonLP } from './utils/debugAmazonLP';
-import { debugAllCount } from './utils/debugAllCount';
-import { debugCategorySubcategoryMismatch } from './utils/debugCategorySubcategoryMismatch';
-import { debugEmptyCategories } from './utils/debugEmptyCategories';
-import { debugDueCardsSync } from './utils/debugDueCardsSync';
-import { debugQuiet } from './utils/debugQuiet';
-import { fixDueCardsCount } from './utils/fixDueCardsCount';
-import { makeCategoryDueNow, makeAWSDueNow } from './utils/makeCategoryDueNow';
-import './utils/testAutoAdvance'; // Adds window.testAutoAdvance() function
+import { debugFirestore, checkFirestoreRules } from './debug/utils/firebaseDebug';
+import { debugDueCards } from './debug/utils/debugDueCards';
+import { addDebugAutoAdvanceToWindow } from './debug/utils/debugAutoAdvance';
+import { addDebugCountingToWindow } from './debug/utils/debugCounting';
+import { debugCategories } from './debug/utils/debugCategories';
+import { debugAmazonLP } from './debug/utils/debugAmazonLP';
+import { debugAllCount } from './debug/utils/debugAllCount';
+import { debugCategorySubcategoryMismatch } from './debug/utils/debugCategorySubcategoryMismatch';
+import { debugEmptyCategories } from './debug/utils/debugEmptyCategories';
+import { debugDueCardsSync } from './debug/utils/debugDueCardsSync';
+import { debugQuiet } from './debug/utils/debugQuiet';
+import { fixDueCardsCount } from './debug/utils/fixDueCardsCount';
+import { makeCategoryDueNow, makeAWSDueNow } from './debug/utils/makeCategoryDueNow';
+import './debug/utils/testAutoAdvance'; // Adds window.testAutoAdvance() function
 
 // Styles
 import './App.css';
@@ -1753,13 +1753,13 @@ function App() {
                     Due Cards ({filteredDueCards.length})
                   </button>
                   <button
-                    className={`toggle-btn ${showStarredOnly ? 'active' : ''}`}
+                    className={`toggle-btn star-toggle ${showStarredOnly ? 'active' : ''}`}
                     onClick={() => {
                       setShowStarredOnly(!showStarredOnly);
                     }}
                     title={`Show only starred cards: ${showStarredOnly ? 'ON' : 'OFF'}`}
                   >
-                    ⭐ Starred {showStarredOnly ? 'ON' : 'OFF'}
+                    ⭐
                   </button>
                 </div>
                 
@@ -2250,17 +2250,16 @@ function App() {
                 {/* Review Panel - Always visible when there's a current card */}
                 {currentCard && (
                   <div className="review-panel-below-categories">
-                    <div className="review-panel-frame">
-                      <h3 className="review-panel-title">Rate Your Knowledge</h3>
+                    <div className="review-panel-frame" title="Rate Your Knowledge">
                       <div className="review-button-grid">
                         <button 
                           className="review-btn again-btn"
                           onClick={() => handleReviewCard('again')}
                           title="Completely forgot (1)"
                         >
+                          <span className="btn-number">1</span>
                           <span className="btn-emoji">😵</span>
                           <span className="btn-text">Again</span>
-                          <span className="btn-shortcut">1</span>
                         </button>
                         
                         <button 
@@ -2268,9 +2267,9 @@ function App() {
                           onClick={() => handleReviewCard('hard')}
                           title="Hard to remember (2)"
                         >
+                          <span className="btn-number">2</span>
                           <span className="btn-emoji">😓</span>
                           <span className="btn-text">Hard</span>
-                          <span className="btn-shortcut">2</span>
                         </button>
                         
                         <button 
@@ -2278,9 +2277,9 @@ function App() {
                           onClick={() => handleReviewCard('good')}
                           title="Remembered with effort (3)"
                         >
+                          <span className="btn-number">3</span>
                           <span className="btn-emoji">😊</span>
                           <span className="btn-text">Good</span>
-                          <span className="btn-shortcut">3</span>
                         </button>
                         
                         <button 
@@ -2288,9 +2287,9 @@ function App() {
                           onClick={() => handleReviewCard('easy')}
                           title="Easy to remember (4)"
                         >
+                          <span className="btn-number">4</span>
                           <span className="btn-emoji">😎</span>
                           <span className="btn-text">Easy</span>
-                          <span className="btn-shortcut">4</span>
                         </button>
                       </div>
                     </div>
@@ -2298,7 +2297,7 @@ function App() {
                 )}
 
                 {/* Progress Bar - Shows daily completion progress */}
-                {showDueTodayOnly && (initialDueCardsCount > 0 || cardsCompletedToday > 0) && (
+                {(initialDueCardsCount > 0 || cardsCompletedToday > 0) && (
                   <div className="daily-progress-section-wide">
                     <div className="progress-header">
                       <h4>Daily Progress</h4>
