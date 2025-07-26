@@ -15,14 +15,16 @@ import {
   where, 
   Timestamp 
 } from 'firebase/firestore';
+// import { isAllSelected, filterByMultiSelection } from '../utils/multiSelectionHelpers';
 
 /**
  * Custom hook for flashcard management with Firestore
  * @param {Object} firebaseApp - Initialized Firebase app instance
  * @param {string} userId - Current user ID
+ * @param {Array} selectedCategories - Currently selected categories (array for multi-selection)
  * @returns {Object} Flashcard state and methods
  */
-export const useFlashcards = (firebaseApp, userId) => {
+export const useFlashcards = (firebaseApp, userId, selectedCategory = 'All') => {
   const [db, setDb] = useState(null);
   const [flashcards, setFlashcards] = useState([]);
   const [filteredFlashcards, setFilteredFlashcards] = useState([]);
@@ -30,25 +32,35 @@ export const useFlashcards = (firebaseApp, userId) => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [navigationHistory, setNavigationHistory] = useState([]);
   const [historyPosition, setHistoryPosition] = useState(-1);
-  // Remove internal selectedCategory state - use the one passed from App.js
-
-
   const [selectedSubCategory, setSelectedSubCategory] = useState('All');
-
+  const [selectedLevel, setSelectedLevel] = useState('All');
+  
+  // Debug: Log when selectedLevel changes
+  useEffect(() => {
+    console.log('🔄 LEVEL CHANGED TO:', selectedLevel);
+  }, [selectedLevel]);
+  
 
   const [lastManualSubCategoryChange, setLastManualSubCategoryChange] = useState(0);
   const [lastCardCompletionTime, setLastCardCompletionTime] = useState(0);
+  const [showDueTodayOnly, setShowDueTodayOnly] = useState(true);
+  const [showStarredOnly, setShowStarredOnly] = useState(false);
+  const [categorySortBy, setCategorySortBy] = useState('alphabetical');
 
   // Connect to window object for communication with App.js
   useEffect(() => {
     if (window.flashcardHook) {
       window.flashcardHook.setLastCardCompletionTime = setLastCardCompletionTime;
     }
-  }, []);
-  const [selectedLevel, setSelectedLevel] = useState('All');
-  const [showDueTodayOnly, setShowDueTodayOnly] = useState(true);
-  const [showStarredOnly, setShowStarredOnly] = useState(false);
-  const [categorySortBy, setCategorySortBy] = useState('alphabetical');
+    
+    // Expose state for persistent due count calculation
+    window.flashcardHookState = {
+      selectedSubCategory,
+      selectedLevel,
+      showDueTodayOnly,
+      showStarredOnly
+    };
+  }, [selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -85,10 +97,16 @@ export const useFlashcards = (firebaseApp, userId) => {
     // Check due cards in subcategory
     const dueCards = subCategoryCards.filter(card => {
       if (!showDueTodayOnly) return true;
-      let dueDate = card.dueDate || new Date(0);
+      // Skip cards without valid due dates when filtering by due date (but allow Firestore Timestamps)
+      if (!card.dueDate && card.dueDate !== 0) return false;
+      let dueDate = card.dueDate;
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
+      } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+        dueDate = new Date(dueDate);
       }
+      // Skip invalid dates
+      if (!dueDate || isNaN(dueDate.getTime())) return false;
       return dueDate < endOfToday;
     });
     // console.log('🔍 FILTER-DEBUG: Due cards in subcategory:', dueCards.length);
@@ -432,11 +450,15 @@ export const useFlashcards = (firebaseApp, userId) => {
       console.log(`🔍 Active filter: ${beforeActiveFilter} → ${afterActiveFilter} cards (removed ${beforeActiveFilter - afterActiveFilter} inactive)`);
     }
 
-    // Always apply category and subcategory filters
-    // TODO: selectedCategory filtering moved to App.js
-    // if (selectedCategory !== 'All') {
-    //   filtered = filtered.filter(card => card.category === selectedCategory);
-    // }
+    // Apply category filter
+    if (selectedCategory !== 'All') {
+      const beforeCategoryFilter = filtered.length;
+      filtered = filtered.filter(card => {
+        const cardCategory = card.category && card.category.trim() ? card.category : 'Uncategorized';
+        return cardCategory === selectedCategory;
+      });
+      console.log(`🔍 Category filter (${selectedCategory}): ${beforeCategoryFilter} → ${filtered.length} cards`);
+    }
 
     // Filter by sub-category
     if (selectedSubCategory !== 'All') {
@@ -445,18 +467,18 @@ export const useFlashcards = (firebaseApp, userId) => {
         const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
         return cardSubCategory === selectedSubCategory;
       });
-      console.log(`🔍 Sub-category filter ("${selectedSubCategory}"): ${beforeSubCategoryFilter} → ${filtered.length} cards`);
+      console.log(`🔍 Sub-category filter (${selectedSubCategory}): ${beforeSubCategoryFilter} → ${filtered.length} cards`);
     }
 
     // Filter by level
     if (selectedLevel !== 'All') {
       const beforeLevelFilter = filtered.length;
+      // For levels, we need to handle the inference logic
       filtered = filtered.filter(card => {
-        // Get level from card or infer from FSRS parameters
         const cardLevel = card.level || inferLevelFromFSRS(card);
         return cardLevel === selectedLevel;
       });
-      console.log(`🔍 Level filter ("${selectedLevel}"): ${beforeLevelFilter} → ${filtered.length} cards`);
+      console.log(`🔍 Level filter (${selectedLevel}): ${beforeLevelFilter} → ${filtered.length} cards`);
     }
 
     // Filter by due date if enabled
@@ -590,8 +612,10 @@ export const useFlashcards = (firebaseApp, userId) => {
       // Debug: Check what cards exist in this subcategory (including future due cards)
       const allCardsInSubcategory = flashcards.filter(card => {
         if (card.active === false) return false;
-        // TODO: selectedCategory filtering moved to App.js
-        // if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+        if (selectedCategory !== 'All') {
+          const cardCategory = card.category && card.category.trim() ? card.category : 'Uncategorized';
+          if (cardCategory !== selectedCategory) return false;
+        }
         if (selectedSubCategory !== 'All') {
           const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
           return cardSubCategory === selectedSubCategory;
@@ -701,7 +725,7 @@ export const useFlashcards = (firebaseApp, userId) => {
         });
       }
     }
-  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly, categorySortBy, lastManualSubCategoryChange]);
+  }, [flashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly, categorySortBy, lastManualSubCategoryChange]);
 
 
   /**
@@ -727,73 +751,82 @@ export const useFlashcards = (firebaseApp, userId) => {
    * @returns {Array<string>} Array of unique categories
    */
   const getCategories = useCallback(() => {
-    let filteredCards = flashcards;
-    
-    // Apply the same filtering logic as main filteredFlashcards to ensure consistency
-    
+    // Apply the EXACT same filtering logic as main filteredFlashcards to ensure consistency
+    // but SKIP the category filter step since we want to see available categories
+    let filteredCards = [...flashcards];
+
+    console.log('🔍 getCategories called with filters:', {
+      showDueTodayOnly,
+      showStarredOnly,
+      selectedLevel,
+      totalFlashcards: flashcards.length,
+      note: 'level filter WILL be applied for bottom-up filtering'
+    });
+
     // 1. Filter out inactive cards
     filteredCards = filteredCards.filter(card => card.active !== false);
-    
-    // 2. If showing due cards only, include categories that have due cards in any subcategory
+    console.log(`getLevelStats: After active filter: ${filteredCards.length} cards`);
+
+    // 2. SKIP category filter (we want to see all categories)
+    // 3. SKIP subcategory filter (categories should show regardless of subcategory selection)
+    // 4. Apply level filter for bottom-up filtering (if specific level selected)
+    if (selectedLevel !== 'All') {
+      const beforeLevelFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => {
+        const cardLevel = card.level || inferLevelFromFSRS(card);
+        return cardLevel === selectedLevel;
+      });
+      console.log(`After level filter ("${selectedLevel}"): ${beforeLevelFilter} → ${filteredCards.length} cards`);
+    }
+
+    // 5. Filter by due date if enabled
     if (showDueTodayOnly) {
       const now = new Date();
-      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      
-      // Find all categories that have at least one due card
-      const categoriesWithDueCards = new Set();
-      
-      filteredCards.forEach(card => {
+      filteredCards = filteredCards.filter(card => {
         let dueDate = card.dueDate || new Date(0);
         if (dueDate && typeof dueDate.toDate === 'function') {
           dueDate = dueDate.toDate();
         }
-        
-        if (dueDate < endOfToday) { // If this card is due
-          const category = card.category || 'Uncategorized';
-          categoriesWithDueCards.add(category);
-        }
+        return dueDate <= now; // Match main filtering logic exactly
       });
-      
-      // Only include categories that have at least one due card
-      const categories = Array.from(categoriesWithDueCards);
-      
-      // Sort by count of due cards (most to least)
-      const categoryStats = {};
-      categories.forEach(category => {
-        const dueCardsInCategory = filteredCards.filter(card => {
-          if ((card.category || 'Uncategorized') !== category) return false;
-          let dueDate = card.dueDate || new Date(0);
-          if (dueDate && typeof dueDate.toDate === 'function') {
-            dueDate = dueDate.toDate();
-          }
-          return dueDate < endOfToday;
-        }).length;
-        categoryStats[category] = dueCardsInCategory;
-      });
-      
-      return categories.sort((a, b) => {
-        const countA = categoryStats[a] || 0;
-        const countB = categoryStats[b] || 0;
-        return countB - countA; // Sort descending (most to least)
-      });
+      console.log(`After due date filter: ${filteredCards.length} cards`);
     }
-    
-    // 3. For non-due mode, return all categories with active cards
-    const categories = [...new Set(filteredCards.map(card => card.category || 'Uncategorized'))];
+
+    // 6. Filter by starred status if enabled  
+    if (showStarredOnly) {
+      filteredCards = filteredCards.filter(card => card.starred === true);
+      console.log(`After starred filter: ${filteredCards.length} cards`);
+    }
+
+    // Now extract categories from the filtered cards - use EXACT same normalization as main filter
+    const categories = [...new Set(filteredCards.map(card => {
+      return card.category && card.category.trim() ? card.category : 'Uncategorized';
+    }))];
     
     // Sort categories by count (most to least)
     const categoryStats = {};
     filteredCards.forEach(card => {
-      const category = card.category || 'Uncategorized';
+      const category = card.category && card.category.trim() ? card.category : 'Uncategorized';
       categoryStats[category] = (categoryStats[category] || 0) + 1;
     });
     
-    return categories.sort((a, b) => {
+    const sortedCategories = categories.sort((a, b) => {
       const countA = categoryStats[a] || 0;
       const countB = categoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, showDueTodayOnly, showStarredOnly]);
+    
+    console.log('🔍 getCategories returning:', sortedCategories, 'with stats:', categoryStats);
+    
+    // Debug: Check if any categories have 0 cards
+    const categoriesWithZero = sortedCategories.filter(cat => (categoryStats[cat] || 0) === 0);
+    if (categoriesWithZero.length > 0) {
+      console.warn('⚠️ Categories with 0 cards found:', categoriesWithZero);
+      console.warn('⚠️ This should not happen - debugging needed');
+    }
+    
+    return sortedCategories;
+  }, [flashcards, showDueTodayOnly, showStarredOnly, selectedLevel, inferLevelFromFSRS]);
 
   /**
    * Get available sub-categories from flashcards (filtered by selected category and due date)
@@ -805,40 +838,56 @@ export const useFlashcards = (firebaseApp, userId) => {
     
     console.log('🔍 getSubCategories called with:', {
       selectedCategory,
+      selectedLevel,
       showDueTodayOnly,
-      totalFlashcards: flashcards.length
+      showStarredOnly,
+      totalFlashcards: flashcards.length,
+      note: 'level filter WILL be applied for bottom-up filtering'
     });
     
     // Apply the same filtering logic as main filteredFlashcards to ensure consistency
     
     // 1. Filter out inactive cards
     filteredCards = filteredCards.filter(card => card.active !== false);
-    console.log(`After active filter: ${filteredCards.length} cards`);
+    console.log(`getLevelStats: After active filter: ${filteredCards.length} cards`);
     
-    // 2. If a specific category is selected, only show sub-categories from that category
+    // 2. Filter by starred status if needed
+    if (showStarredOnly) {
+      filteredCards = filteredCards.filter(card => card.starred === true);
+      console.log(`After starred filter: ${filteredCards.length} cards`);
+    }
+    
+    // 3. Filter by level if needed
+    if (selectedLevel !== 'All') {
+      filteredCards = filteredCards.filter(card => {
+        const cardLevel = card.level || inferLevelFromFSRS(card);
+        return cardLevel === selectedLevel;
+      });
+      console.log(`After level filter (${selectedLevel}): ${filteredCards.length} cards`);
+    }
+    
+    // 4. If a specific category is selected, only show sub-categories from that category
     if (selectedCategory !== 'All') {
       const beforeCategoryFilter = filteredCards.length;
       filteredCards = filteredCards.filter(card => card.category === selectedCategory);
       console.log(`After category filter (${selectedCategory}): ${filteredCards.length} cards (was ${beforeCategoryFilter})`);
     }
     
-    // 3. If due today filter is enabled, only consider cards that are due
+    // 5. If due today filter is enabled, only consider cards that are due
     if (showDueTodayOnly) {
       const beforeDueFilter = filteredCards.length;
       const now = new Date();
-      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       filteredCards = filteredCards.filter(card => {
         let dueDate = card.dueDate || new Date(0);
         if (dueDate && typeof dueDate.toDate === 'function') {
           dueDate = dueDate.toDate();
         }
-        return dueDate < endOfToday;
+        return dueDate <= now; // Match main filtering logic exactly
       });
       console.log(`After due date filter: ${filteredCards.length} cards (was ${beforeDueFilter})`);
     }
     
-    // 4. Note: Starred filter is handled by main filtering logic, not here
-    // This prevents double-filtering that causes count mismatches
+    // 6. All filtering now consistently applied
     
     const subCategoriesSet = new Set();
     const subCategoryStats = {};
@@ -862,7 +911,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       const countB = subCategoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, showDueTodayOnly, showStarredOnly, selectedLevel, inferLevelFromFSRS]);
 
   /**
    * Get ALL sub-category statistics without filtering (for initial stats)
@@ -909,17 +958,60 @@ export const useFlashcards = (firebaseApp, userId) => {
   const getSubCategoryStats = useCallback((selectedCategory = 'All') => {
     const stats = {};
     const now = new Date();
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     
-    flashcards.forEach(card => {
-      // Apply category filter if needed
-      if (selectedCategory !== 'All' && card.category !== selectedCategory) {
-        return;
-      }
-      
-      // Only count active cards
-      if (card.active === false) return;
-      
+    // Apply the same filtering logic as other functions to ensure consistency
+    let filteredCards = [...flashcards];
+    
+    console.log('🔍 getSubCategoryStats called with filters:', {
+      selectedCategory,
+      showDueTodayOnly,
+      showStarredOnly,
+      selectedLevel,
+      totalFlashcards: flashcards.length,
+      note: 'applying filters to subcategory stats for consistency'
+    });
+    
+    // 1. Filter out inactive cards
+    filteredCards = filteredCards.filter(card => card.active !== false);
+    console.log(`getSubCategoryStats: After active filter: ${filteredCards.length} cards`);
+    
+    // 2. Apply category filter if needed
+    if (selectedCategory !== 'All') {
+      const beforeCategoryFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => card.category === selectedCategory);
+      console.log(`getSubCategoryStats: After category filter ("${selectedCategory}"): ${beforeCategoryFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 3. Apply level filter for bottom-up filtering (if specific level selected)
+    if (selectedLevel !== 'All') {
+      const beforeLevelFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => {
+        const cardLevel = card.level || inferLevelFromFSRS(card);
+        return cardLevel === selectedLevel;
+      });
+      console.log(`getSubCategoryStats: After level filter ("${selectedLevel}"): ${beforeLevelFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 4. Filter by due date if enabled
+    if (showDueTodayOnly) {
+      filteredCards = filteredCards.filter(card => {
+        let dueDate = card.dueDate || new Date(0);
+        if (dueDate && typeof dueDate.toDate === 'function') {
+          dueDate = dueDate.toDate();
+        }
+        return dueDate <= now; // Match main filtering logic exactly
+      });
+      console.log(`getSubCategoryStats: After due date filter: ${filteredCards.length} cards`);
+    }
+    
+    // 5. Filter by starred status if enabled  
+    if (showStarredOnly) {
+      filteredCards = filteredCards.filter(card => card.starred === true);
+      console.log(`getSubCategoryStats: After starred filter: ${filteredCards.length} cards`);
+    }
+    
+    // Now calculate stats from filtered cards
+    filteredCards.forEach(card => {
       const subCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
       
       if (!stats[subCategory]) {
@@ -928,45 +1020,79 @@ export const useFlashcards = (firebaseApp, userId) => {
       
       stats[subCategory].total++;
       
-      // Ensure dueDate is a proper Date object for comparison (consistent with getCategoryStats)
+      // For due count, check if card is due (regardless of showDueTodayOnly filter)
       let dueDate = card.dueDate || new Date(0);
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
       }
-      if (dueDate < endOfToday) {
+      if (dueDate <= now) {
         stats[subCategory].due++;
       }
     });
     
+    console.log('📊 getSubCategoryStats result:', stats);
     return stats;
-  }, [flashcards]);
+  }, [flashcards, showDueTodayOnly, showStarredOnly, selectedLevel, inferLevelFromFSRS]);
 
   /**
    * Get available levels from flashcards (filtered by selected category, sub-category, and due date)
-   * @param {string} selectedCategory - The selected category to filter by
+   * Uses internal state variables for filtering
    * @returns {Array<string>} Array of unique levels that have available cards
    */
-  const getLevels = useCallback((selectedCategory = 'All') => {
+  const getLevels = useCallback(() => {
     let filteredCards = flashcards;
     
-    // Filter by category
+    console.log('🔍 getLevels called with internal state:', {
+      selectedCategory,
+      selectedSubCategory,
+      showDueTodayOnly,
+      showStarredOnly,
+      totalFlashcards: flashcards.length
+    });
+    
+    // 1. Filter out inactive cards
+    filteredCards = filteredCards.filter(card => card.active !== false);
+    console.log(`getLevelStats: After active filter: ${filteredCards.length} cards`);
+    
+    // 2. Filter by category
     if (selectedCategory !== 'All') {
-      filteredCards = filteredCards.filter(card => card.category === selectedCategory);
-    }
-    
-    // Filter by sub-category
-    if (selectedSubCategory !== 'All') {
-      filteredCards = filteredCards.filter(card => card.sub_category === selectedSubCategory);
-    }
-    
-    // If due today filter is enabled, only consider cards that are due
-    if (showDueTodayOnly) {
-      const now = new Date();
-      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const beforeCategoryFilter = filteredCards.length;
       filteredCards = filteredCards.filter(card => {
-        const dueDate = card.dueDate || new Date(0);
-        return dueDate < endOfToday;
+        const cardCategory = card.category && card.category.trim() ? card.category : 'Uncategorized';
+        return cardCategory === selectedCategory;
       });
+      console.log(`After category filter ("${selectedCategory}"): ${beforeCategoryFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 3. Filter by sub-category
+    if (selectedSubCategory !== 'All') {
+      const beforeSubCategoryFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => {
+        const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+        return cardSubCategory === selectedSubCategory;
+      });
+      console.log(`After subcategory filter ("${selectedSubCategory}"): ${beforeSubCategoryFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 4. Apply due date filter if showDueTodayOnly is enabled
+    if (showDueTodayOnly) {
+      const beforeDueFilter = filteredCards.length;
+      const now = new Date();
+      filteredCards = filteredCards.filter(card => {
+        let dueDate = card.dueDate || new Date(0);
+        if (dueDate && typeof dueDate.toDate === 'function') {
+          dueDate = dueDate.toDate();
+        }
+        return dueDate <= now;
+      });
+      console.log(`getLevels: After due date filter: ${beforeDueFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 5. Apply starred filter if showStarredOnly is enabled
+    if (showStarredOnly) {
+      const beforeStarredFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => card.starred === true);
+      console.log(`getLevels: After starred filter: ${beforeStarredFilter} → ${filteredCards.length} cards`);
     }
     
     const levels = [...new Set(
@@ -978,12 +1104,145 @@ export const useFlashcards = (firebaseApp, userId) => {
         .filter(level => level && level.trim() !== '')
     )];
     
+    console.log(`🔍 getLevels returning: ${levels.length} levels`, levels);
+    console.log(`🔍 getLevels filtered ${filteredCards.length} cards total for level extraction`);
+    
+    // Debug: Show level breakdown from filtered cards
+    const levelBreakdown = {};
+    filteredCards.forEach(card => {
+      const level = card.level || inferLevelFromFSRS(card);
+      if (level && level.trim() !== '') {
+        levelBreakdown[level] = (levelBreakdown[level] || 0) + 1;
+      }
+    });
+    console.log(`🔍 getLevels level breakdown from ${filteredCards.length} cards:`, levelBreakdown);
+    
     return levels.sort();
-  }, [flashcards, selectedSubCategory, showDueTodayOnly, inferLevelFromFSRS]);
+  }, [flashcards, selectedCategory, selectedSubCategory, showDueTodayOnly, showStarredOnly, inferLevelFromFSRS]);
+
+  /**
+   * Get level statistics (counts) for filtered cards
+   * Uses internal state variables for filtering
+   * @returns {Object} Object with level names as keys and counts as values
+   */
+  const getLevelStats = useCallback(() => {
+    let filteredCards = flashcards;
+    
+    console.log('🔍 getLevelStats called with internal state:', {
+      selectedCategory,
+      selectedSubCategory,
+      showDueTodayOnly,
+      showStarredOnly,
+      totalFlashcards: flashcards.length,
+      activeFlashcards: flashcards.filter(c => c.active !== false).length,
+      uniqueCategories: [...new Set(flashcards.map(c => c.category || 'Uncategorized'))]
+    });
+    
+    // 1. Filter out inactive cards
+    filteredCards = filteredCards.filter(card => card.active !== false);
+    console.log(`getLevelStats: After active filter: ${filteredCards.length} cards`);
+    
+    // 2. Filter by category
+    if (selectedCategory !== 'All') {
+      const beforeCategoryFilter = filteredCards.length;
+      console.log(`getLevelStats: Filtering by category "${selectedCategory}"`);
+      
+      // Debug: show categories before filtering
+      const uniqueCategoriesBefore = [...new Set(filteredCards.map(c => c.category || 'Uncategorized'))];
+      console.log(`getLevelStats: Categories before filter: [${uniqueCategoriesBefore.join(', ')}]`);
+      
+      filteredCards = filteredCards.filter(card => {
+        const cardCategory = card.category && card.category.trim() ? card.category : 'Uncategorized';
+        return cardCategory === selectedCategory;
+      });
+      
+      console.log(`getLevelStats: After category filter ("${selectedCategory}"): ${beforeCategoryFilter} → ${filteredCards.length} cards`);
+      
+      // Verify filter worked correctly
+      const uniqueCategoriesAfter = [...new Set(filteredCards.map(c => c.category || 'Uncategorized'))];
+      console.log(`getLevelStats: Categories after filter: [${uniqueCategoriesAfter.join(', ')}]`);
+      
+      if (filteredCards.length > 0 && (uniqueCategoriesAfter.length !== 1 || uniqueCategoriesAfter[0] !== selectedCategory)) {
+        console.error(`❌ CATEGORY FILTER ERROR! Expected: "${selectedCategory}", Got: [${uniqueCategoriesAfter.join(', ')}]`);
+      }
+    }
+    
+    // 3. Filter by sub-category
+    if (selectedSubCategory !== 'All') {
+      const beforeSubCategoryFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => {
+        const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+        return cardSubCategory === selectedSubCategory;
+      });
+      console.log(`After subcategory filter ("${selectedSubCategory}"): ${beforeSubCategoryFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 4. Apply due date filter if showDueTodayOnly is enabled
+    if (showDueTodayOnly) {
+      const beforeDueFilter = filteredCards.length;
+      const now = new Date();
+      filteredCards = filteredCards.filter(card => {
+        let dueDate = card.dueDate || new Date(0);
+        if (dueDate && typeof dueDate.toDate === 'function') {
+          dueDate = dueDate.toDate();
+        }
+        return dueDate <= now;
+      });
+      console.log(`getLevelStats: After due date filter: ${beforeDueFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 5. Apply starred filter if showStarredOnly is enabled
+    if (showStarredOnly) {
+      const beforeStarredFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => card.starred === true);
+      console.log(`getLevelStats: After starred filter: ${beforeStarredFilter} → ${filteredCards.length} cards`);
+    }
+    
+    const levelCounts = {};
+    
+    filteredCards.forEach(card => {
+      const level = card.level || inferLevelFromFSRS(card);
+      if (level && level.trim() !== '') {
+        levelCounts[level] = (levelCounts[level] || 0) + 1;
+      }
+    });
+    
+    console.log(`🔍 getLevelStats filtered ${filteredCards.length} cards total`);
+    console.log(`🔍 getLevelStats returning:`, levelCounts);
+    
+    // Compare with subcategory count for debugging
+    const totalLevelCards = Object.values(levelCounts).reduce((sum, count) => sum + count, 0);
+    if (totalLevelCards !== filteredCards.length) {
+      console.warn(`⚠️ LEVEL COUNT MISMATCH: Filtered ${filteredCards.length} cards but only counted ${totalLevelCards} in levels`);
+      
+      // Find cards not being counted
+      const uncountedCards = [];
+      filteredCards.forEach((card, index) => {
+        const level = card.level || inferLevelFromFSRS(card);
+        if (!level || level.trim() === '') {
+          uncountedCards.push({
+            index,
+            id: card.id,
+            question: card.question?.substring(0, 30),
+            originalLevel: card.level,
+            difficulty: card.difficulty,
+            easeFactor: card.easeFactor,
+            interval: card.interval
+          });
+        }
+      });
+      
+      if (uncountedCards.length > 0) {
+        console.warn(`⚠️ Cards not counted in levels (${uncountedCards.length}):`, uncountedCards);
+      }
+    }
+    
+    return levelCounts;
+  }, [flashcards, selectedCategory, selectedSubCategory, showDueTodayOnly, showStarredOnly, inferLevelFromFSRS]);
 
   // Auto-manage sub-category filter when options change - simplified since category is managed in App.js
   useEffect(() => {
-    const availableSubCategories = getSubCategories();
+    const availableSubCategories = getSubCategories(selectedCategory);
 
     console.log('🔍 AUTO-MANAGE SUBCATEGORY: Checking conditions:', {
       selectedSubCategory,
@@ -1009,7 +1268,7 @@ export const useFlashcards = (firebaseApp, userId) => {
 
   // Auto-manage level filter when options change
   useEffect(() => {
-    const availableLevels = getLevels();
+    const availableLevels = getLevels(selectedCategory, selectedSubCategory);
     
     if (availableLevels.length === 0) {
       // No levels available, reset to All
@@ -1032,33 +1291,72 @@ export const useFlashcards = (firebaseApp, userId) => {
   const getCategoryStats = useCallback(() => {
     const stats = {};
     const now = new Date();
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     
-    flashcards.forEach(card => {
-      // Only count active cards
-      if (card.active === false) return;
-      
+    // Apply the same filtering logic as other functions to ensure consistency
+    let filteredCards = [...flashcards];
+    
+    console.log('🔍🔍🔍 getCategoryStats CALLED - LEVEL:', selectedLevel, 'TOTAL CARDS:', flashcards.length);
+    console.log('🔍 getCategoryStats called with filters:', {
+      showDueTodayOnly,
+      showStarredOnly,
+      selectedLevel,
+      totalFlashcards: flashcards.length,
+      note: 'applying filters to category stats for consistency'
+    });
+    
+    // 1. Filter out inactive cards
+    filteredCards = filteredCards.filter(card => card.active !== false);
+    console.log(`getCategoryStats: After active filter: ${filteredCards.length} cards`);
+    
+    // 2. Apply level filter for bottom-up filtering (if specific level selected)
+    if (selectedLevel !== 'All') {
+      const beforeLevelFilter = filteredCards.length;
+      filteredCards = filteredCards.filter(card => {
+        const cardLevel = card.level || inferLevelFromFSRS(card);
+        return cardLevel === selectedLevel;
+      });
+      console.log(`getCategoryStats: After level filter ("${selectedLevel}"): ${beforeLevelFilter} → ${filteredCards.length} cards`);
+    }
+    
+    // 3. Filter by due date if enabled
+    if (showDueTodayOnly) {
+      filteredCards = filteredCards.filter(card => {
+        let dueDate = card.dueDate || new Date(0);
+        if (dueDate && typeof dueDate.toDate === 'function') {
+          dueDate = dueDate.toDate();
+        }
+        return dueDate <= now; // Match main filtering logic exactly
+      });
+      console.log(`getCategoryStats: After due date filter: ${filteredCards.length} cards`);
+    }
+    
+    // 4. Filter by starred status if enabled  
+    if (showStarredOnly) {
+      filteredCards = filteredCards.filter(card => card.starred === true);
+      console.log(`getCategoryStats: After starred filter: ${filteredCards.length} cards`);
+    }
+    
+    // Now calculate stats from filtered cards
+    filteredCards.forEach(card => {
       const category = card.category || 'Uncategorized';
       if (!stats[category]) {
         stats[category] = { total: 0, due: 0 };
       }
       stats[category].total++;
       
-      // Ensure dueDate is a proper Date object for comparison
+      // For due count, check if card is due (regardless of showDueTodayOnly filter)
       let dueDate = card.dueDate || new Date(0);
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
       }
-      
-      
-      if (dueDate < endOfToday) { // Count cards due today or earlier
+      if (dueDate <= now) {
         stats[category].due++;
       }
     });
     
     console.log('📊 getCategoryStats result:', stats);
     return stats;
-  }, [flashcards]);
+  }, [flashcards, showDueTodayOnly, showStarredOnly, selectedLevel, inferLevelFromFSRS]);
 
   /**
    * Add a new flashcard
@@ -1327,11 +1625,17 @@ export const useFlashcards = (firebaseApp, userId) => {
     return flashcards.filter(card => {
       // Only include active cards
       if (card.active === false) return false;
+      // Skip cards without valid due dates (but allow Firestore Timestamps)
+      if (!card.dueDate && card.dueDate !== 0) return false;
       // Ensure dueDate is a proper Date object for comparison
-      let dueDate = card.dueDate || new Date(0);
+      let dueDate = card.dueDate;
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
+      } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+        dueDate = new Date(dueDate);
       }
+      // Skip invalid dates
+      if (!dueDate || isNaN(dueDate.getTime())) return false;
       return dueDate >= startOfToday && dueDate < endOfToday;
     });
   }, [flashcards]);
@@ -1347,11 +1651,17 @@ export const useFlashcards = (firebaseApp, userId) => {
     return flashcards.filter(card => {
       // Only include active cards
       if (card.active === false) return false;
+      // Skip cards without valid due dates (but allow Firestore Timestamps)
+      if (!card.dueDate && card.dueDate !== 0) return false;
       // Ensure dueDate is a proper Date object for comparison
-      let dueDate = card.dueDate || new Date(0);
+      let dueDate = card.dueDate;
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
+      } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+        dueDate = new Date(dueDate);
       }
+      // Skip invalid dates
+      if (!dueDate || isNaN(dueDate.getTime())) return false;
       return dueDate < startOfToday;
     });
   }, [flashcards]);
@@ -1366,11 +1676,17 @@ export const useFlashcards = (firebaseApp, userId) => {
     const dueCards = flashcards.filter(card => {
       // Only include active cards
       if (card.active === false) return false;
+      // Skip cards without valid due dates (but allow Firestore Timestamps)
+      if (!card.dueDate && card.dueDate !== 0) return false;
       // Ensure dueDate is a proper Date object for comparison
-      let dueDate = card.dueDate || new Date(0);
+      let dueDate = card.dueDate;
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
+      } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+        dueDate = new Date(dueDate);
       }
+      // Skip invalid dates
+      if (!dueDate || isNaN(dueDate.getTime())) return false;
       return dueDate <= now;
     });
     
@@ -1381,7 +1697,18 @@ export const useFlashcards = (firebaseApp, userId) => {
       sampleDueDates: dueCards.slice(0, 3).map(card => ({
         question: card.question?.substring(0, 30),
         dueDate: card.dueDate,
-        hoursUntilDue: (card.dueDate - now) / (1000 * 60 * 60)
+        dueDateType: typeof card.dueDate,
+        hasToDateMethod: card.dueDate && typeof card.dueDate.toDate === 'function',
+        convertedDate: card.dueDate && typeof card.dueDate.toDate === 'function' ? card.dueDate.toDate() : card.dueDate,
+        hoursUntilDue: card.dueDate ? (card.dueDate.toDate ? (card.dueDate.toDate() - now) / (1000 * 60 * 60) : (card.dueDate - now) / (1000 * 60 * 60)) : 'no due date'
+      })),
+      allCardsWithDueDates: flashcards.filter(card => card.dueDate).map(card => ({
+        question: card.question?.substring(0, 20),
+        dueDate: card.dueDate,
+        dueDateType: typeof card.dueDate,
+        hasToDateMethod: card.dueDate && typeof card.dueDate.toDate === 'function',
+        active: card.active,
+        createdAt: card.createdAt
       }))
     });
     
@@ -1603,6 +1930,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     getSubCategoryStats,
     getAllSubCategoryStats,
     getLevels,
+    getLevelStats,
     getCategoryStats,
     getCardsDueToday,
     getPastDueCards,
@@ -1637,6 +1965,9 @@ export const useFlashcards = (firebaseApp, userId) => {
     // Debug functions
     manualTriggerAutoAdvance,
     debugCurrentFilterState,
-    debugSubCategoryTracking
+    debugSubCategoryTracking,
+    
+    // Utility functions
+    inferLevelFromFSRS
   };
 };

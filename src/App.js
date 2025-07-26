@@ -19,6 +19,7 @@ import { useSettings } from './hooks/useSettings';
 
 // Utils and Constants
 import { SUCCESS_MESSAGES, ERROR_MESSAGES, DEFAULT_FSRS_PARAMS } from './utils/constants';
+// import { toggleSelection } from './utils/multiSelectionHelpers';
 import { debugFirestore, checkFirestoreRules } from './debug/utils/firebaseDebug';
 import { debugDueCards } from './debug/utils/debugDueCards';
 import { addDebugAutoAdvanceToWindow } from './debug/utils/debugAutoAdvance';
@@ -106,6 +107,7 @@ function App() {
   // Track initial due cards count for the day
   const [initialDueCardsCount, setInitialDueCardsCount] = useState(0);
   const [cardsCompletedToday, setCardsCompletedToday] = useState(0);
+  const [persistentDueCardsCount, setPersistentDueCardsCount] = useState(0);
   const [initialCategoryStats, setInitialCategoryStats] = useState({});
   const [categoryCompletedCounts, setCategoryCompletedCounts] = useState({});
   const [initialSubCategoryStats, setInitialSubCategoryStats] = useState({});
@@ -122,6 +124,7 @@ function App() {
   const [isLevelsCollapsed, setIsLevelsCollapsed] = useState(window.innerWidth <= 768);
   const [isNotesCollapsed, setIsNotesCollapsed] = useState(window.innerWidth <= 768);
   const [areNotesToolbarHidden, setAreNotesToolbarHidden] = useState(false);
+
   
 
 
@@ -171,6 +174,7 @@ function App() {
     getSubCategoryStats,
     getAllSubCategoryStats,
     getLevels,
+    getLevelStats,
     getCategoryStats,
     getCardsDueToday,
     getPastDueCards,
@@ -199,8 +203,11 @@ function App() {
     // Debug functions
     manualTriggerAutoAdvance,
     debugCurrentFilterState,
-    debugSubCategoryTracking
-  } = useFlashcards(firebaseApp, userId);
+    debugSubCategoryTracking,
+    
+    // Utility functions
+    inferLevelFromFSRS
+  } = useFlashcards(firebaseApp, userId, selectedCategory);
 
   const {
     isDarkMode,
@@ -232,6 +239,148 @@ function App() {
   }, [selectedCategory, subCategories]);
   const subCategoryStats = getSubCategoryStats(selectedCategory);
   const levels = getLevels();
+  const levelStats = getLevelStats();
+  
+  // Debug: Check for level count mismatches and category/subcategory consistency
+  React.useEffect(() => {
+    if (Object.keys(levelStats).length > 0) {
+      const levelsArray = levels || [];
+      const statsLevels = Object.keys(levelStats);
+      const totalStatsCount = Object.values(levelStats).reduce((sum, count) => sum + count, 0);
+      
+      console.log('🔍 LEVEL DEBUG:', {
+        levelsFromGetLevels: levelsArray,
+        levelsFromStats: statsLevels,
+        levelStats: levelStats,
+        totalCardsInStats: totalStatsCount,
+        missingLevels: statsLevels.filter(level => !levelsArray.includes(level))
+      });
+      
+      if (statsLevels.length !== levelsArray.length) {
+        console.warn('⚠️ LEVEL MISMATCH: getLevels() and getLevelStats() have different levels!');
+      }
+
+      // Debug category vs subcategory counts
+      if (showDueTodayOnly && selectedCategory === 'All') {
+        // Get all due cards to analyze category/subcategory distribution
+        const now = new Date();
+        const allDueCards = flashcards.filter(card => {
+          if (card.active === false) return false;
+          if (!card.dueDate) return false;
+          let dueDate = card.dueDate;
+          if (dueDate && typeof dueDate.toDate === 'function') {
+            dueDate = dueDate.toDate();
+          }
+          return dueDate <= now;
+        });
+
+        console.log('🔍 CATEGORY/SUBCATEGORY DEBUG:', {
+          totalDueCards: allDueCards.length,
+          categoryCounts: {},
+          subcategoryCounts: {},
+          cardsWithoutSubcategory: allDueCards.filter(card => !card.sub_category || card.sub_category.trim() === '').length
+        });
+
+        // Count by category
+        const categoryBreakdown = {};
+        const subcategoryBreakdown = {};
+        allDueCards.forEach(card => {
+          const category = card.category || 'Uncategorized';
+          const subcategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+          
+          categoryBreakdown[category] = (categoryBreakdown[category] || 0) + 1;
+          subcategoryBreakdown[subcategory] = (subcategoryBreakdown[subcategory] || 0) + 1;
+        });
+
+        const totalCategoryCards = Object.values(categoryBreakdown).reduce((sum, count) => sum + count, 0);
+        const totalSubcategoryCards = Object.values(subcategoryBreakdown).reduce((sum, count) => sum + count, 0);
+
+        console.log('Category breakdown:', categoryBreakdown, 'Total:', totalCategoryCards);
+        console.log('Subcategory breakdown:', subcategoryBreakdown, 'Total:', totalSubcategoryCards);
+
+        if (totalCategoryCards !== totalSubcategoryCards) {
+          console.error('❌ CATEGORY/SUBCATEGORY MISMATCH!', {
+            categoryTotal: totalCategoryCards,
+            subcategoryTotal: totalSubcategoryCards,
+            difference: totalCategoryCards - totalSubcategoryCards
+          });
+        }
+      }
+    }
+  }, [levels, levelStats, showDueTodayOnly, selectedCategory, flashcards]);
+  
+  // Debug: Check consistency between levels and levelStats
+  React.useEffect(() => {
+    console.log('🔍 LEVEL-CONSISTENCY-CHECK:', {
+      selectedCategory,
+      selectedSubCategory: window.flashcardHookState?.selectedSubCategory || 'All',
+      levels,
+      levelStats,
+      levelsLength: levels.length,
+      levelStatsKeys: Object.keys(levelStats)
+    });
+  }, [levels, levelStats, selectedCategory]);
+
+  // Calculate persistent due cards count based on selected category/subcategory
+  const calculateDueCardsForCurrentSelection = useCallback(() => {
+    if (!flashcards.length) return 0;
+    
+    let filteredCards = flashcards.filter(card => card.active !== false);
+    console.log(`📊 DUE-COUNT-CALC: Starting with ${filteredCards.length} active cards`);
+    
+    // Apply category filter
+    if (selectedCategory !== 'All') {
+      const beforeCategory = filteredCards.length;
+      filteredCards = filteredCards.filter(card => {
+        const cardCategory = card.category && card.category.trim() ? card.category : 'Uncategorized';
+        return cardCategory === selectedCategory;
+      });
+      console.log(`📊 DUE-COUNT-CALC: Category filter "${selectedCategory}": ${beforeCategory} → ${filteredCards.length}`);
+    }
+    
+    // Apply subcategory filter if using useFlashcards hook
+    const { selectedSubCategory } = window.flashcardHookState || { selectedSubCategory: 'All' };
+    if (selectedSubCategory !== 'All') {
+      const beforeSubCategory = filteredCards.length;
+      filteredCards = filteredCards.filter(card => {
+        const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+        return cardSubCategory === selectedSubCategory;
+      });
+      console.log(`📊 DUE-COUNT-CALC: Subcategory filter "${selectedSubCategory}": ${beforeSubCategory} → ${filteredCards.length}`);
+    }
+    
+    // Filter for due cards (due date <= now)
+    const now = new Date();
+    const beforeDue = filteredCards.length;
+    const dueCards = filteredCards.filter(card => {
+      let dueDate = card.dueDate || new Date(0);
+      if (dueDate && typeof dueDate.toDate === 'function') {
+        dueDate = dueDate.toDate();
+      }
+      return dueDate <= now;
+    });
+    
+    console.log(`📊 DUE-COUNT-CALC: Due filter: ${beforeDue} → ${dueCards.length} cards due`);
+    return dueCards.length;
+  }, [flashcards, selectedCategory]);
+
+  // Function to update persistent due cards count when category/subcategory changes
+  const updatePersistentDueCount = useCallback(() => {
+    if (!userId) return;
+    
+    const newCount = calculateDueCardsForCurrentSelection();
+    const previousCount = persistentDueCardsCount;
+    
+    setPersistentDueCardsCount(newCount);
+    localStorage.setItem(`flashcard_persistent_due_${userId}`, newCount.toString());
+    
+    console.log('🔄 PERSISTENT-COUNT-UPDATE: Updated due cards count:', {
+      previousCount,
+      newCount,
+      selectedCategory,
+      selectedSubCategory: window.flashcardHookState?.selectedSubCategory || 'All'
+    });
+  }, [userId, calculateDueCardsForCurrentSelection, persistentDueCardsCount, selectedCategory]);
 
   // Get all categories (not filtered by due date) as fallback
   const allCategories = useMemo(() => {
@@ -286,24 +435,34 @@ function App() {
         categoryCards = categoryCards.filter(card => card.starred === true);
         
         const now = new Date();
-        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         categoryCards = categoryCards.filter(card => {
-          let dueDate = card.dueDate || new Date(0);
+          // Skip cards without valid due dates (but allow Firestore Timestamps)
+          if (!card.dueDate && card.dueDate !== 0) return false;
+          let dueDate = card.dueDate;
           if (dueDate && typeof dueDate.toDate === 'function') {
             dueDate = dueDate.toDate();
+          } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+            dueDate = new Date(dueDate);
           }
-          return dueDate < endOfToday;
+          // Skip invalid dates
+          if (!dueDate || isNaN(dueDate.getTime())) return false;
+          return dueDate <= now;
         });
       } else if (showDueTodayOnly) {
         // Filter by due date only - use end of today like useFlashcards
         const now = new Date();
-        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         categoryCards = categoryCards.filter(card => {
-          let dueDate = card.dueDate || new Date(0);
+          // Skip cards without valid due dates (but allow Firestore Timestamps)
+          if (!card.dueDate && card.dueDate !== 0) return false;
+          let dueDate = card.dueDate;
           if (dueDate && typeof dueDate.toDate === 'function') {
             dueDate = dueDate.toDate();
+          } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+            dueDate = new Date(dueDate);
           }
-          return dueDate < endOfToday;
+          // Skip invalid dates
+          if (!dueDate || isNaN(dueDate.getTime())) return false;
+          return dueDate <= now;
         });
       } else if (showStarredOnly) {
         // Filter by starred only
@@ -465,13 +624,18 @@ function App() {
 
             if (showDueTodayOnly) {
               const now = new Date();
-              const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
               filteredSubCatCards = filteredSubCatCards.filter(card => {
-                let dueDate = card.dueDate || new Date(0);
+                // Skip cards without valid due dates (but allow Firestore Timestamps)
+                if (!card.dueDate && card.dueDate !== 0) return false;
+                let dueDate = card.dueDate;
                 if (dueDate && typeof dueDate.toDate === 'function') {
                   dueDate = dueDate.toDate();
+                } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+                  dueDate = new Date(dueDate);
                 }
-                return dueDate < endOfToday;
+                // Skip invalid dates
+                if (!dueDate || isNaN(dueDate.getTime())) return false;
+                return dueDate <= now;
               });
             }
 
@@ -809,9 +973,66 @@ function App() {
 
       setMessage(`Card reviewed as ${rating.toUpperCase()}! Next review in ${interval} day${interval !== 1 ? 's' : ''}.`);
 
+      // Check if the card was due today before reviewing (to determine if we should decrement due count)
+      const cardWasDueToday = (() => {
+        let cardDueDate = card.dueDate || new Date(0);
+        if (cardDueDate && typeof cardDueDate.toDate === 'function') {
+          cardDueDate = cardDueDate.toDate();
+        }
+        return cardDueDate <= now;
+      })();
+
       // Increment completed cards count
       const newCompletedCount = cardsCompletedToday + 1;
       setCardsCompletedToday(newCompletedCount);
+
+      // Decrement persistent due cards count if the card was due today and relevant to current selection
+      if (cardWasDueToday) {
+        const cardMatchesCurrentSelection = (() => {
+          // Check category match
+          const cardCategory = card.category && card.category.trim() ? card.category : 'Uncategorized';
+          if (selectedCategory !== 'All' && cardCategory !== selectedCategory) {
+            return false;
+          }
+          
+          // Check subcategory match if subcategory is selected
+          const { selectedSubCategory } = window.flashcardHookState || { selectedSubCategory: 'All' };
+          if (selectedSubCategory !== 'All') {
+            const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+            if (cardSubCategory !== selectedSubCategory) {
+              return false;
+            }
+          }
+          
+          return true;
+        })();
+        
+        if (cardMatchesCurrentSelection) {
+          const newPersistentCount = Math.max(0, persistentDueCardsCount - 1);
+          setPersistentDueCardsCount(newPersistentCount);
+          localStorage.setItem(`flashcard_persistent_due_${userId}`, newPersistentCount.toString());
+          console.log('📉 REVIEW-DECREMENT: Card review decremented due count:', {
+            cardId: card.id,
+            cardCategory: card.category || 'Uncategorized',
+            cardSubCategory: card.sub_category || 'Uncategorized',
+            rating,
+            previousCount: persistentDueCardsCount,
+            newCount: newPersistentCount,
+            cardWasDueToday,
+            cardMatchesCurrentSelection
+          });
+        } else {
+          console.log('📊 REVIEW-NO-DECREMENT: Card review did not decrement due count:', {
+            cardId: card.id,
+            cardCategory: card.category || 'Uncategorized',
+            cardSubCategory: card.sub_category || 'Uncategorized',
+            selectedCategory,
+            selectedSubCategory: window.flashcardHookState?.selectedSubCategory || 'All',
+            cardWasDueToday,
+            cardMatchesCurrentSelection
+          });
+        }
+      }
 
       // Save updated completed count to localStorage
       localStorage.setItem(`flashcard_completed_today_${userId}`, newCompletedCount.toString());
@@ -1199,10 +1420,11 @@ function App() {
 
   // Initialize daily due cards count
   useEffect(() => {
-    if (userId && allDueCards.length > 0 && categoryStats && subCategoryStats) {
+    if (userId && flashcards.length > 0 && categoryStats && subCategoryStats) {
       const today = new Date().toDateString();
       const storedDate = localStorage.getItem(`flashcard_due_date_${userId}`);
       const storedCount = localStorage.getItem(`flashcard_initial_due_${userId}`);
+      const storedPersistentCount = localStorage.getItem(`flashcard_persistent_due_${userId}`);
       const storedCompleted = localStorage.getItem(`flashcard_completed_today_${userId}`);
       const storedCategoryStats = localStorage.getItem(`flashcard_initial_category_stats_${userId}`);
       const storedCategoryCompleted = localStorage.getItem(`flashcard_category_completed_${userId}`);
@@ -1212,6 +1434,7 @@ function App() {
       // If it's a new day or first time, reset counts
       if (storedDate !== today) {
         const newInitialCount = allDueCards.length;
+        const newPersistentCount = calculateDueCardsForCurrentSelection();
         const newCategoryStats = categoryStats;
         const newSubCategoryStats = getAllSubCategoryStats();
         
@@ -1219,8 +1442,10 @@ function App() {
         console.log('🔄 Initial category stats:', newCategoryStats);
         console.log('🔄 Initial subcategory stats keys:', Object.keys(newSubCategoryStats));
         console.log('🔄 Total due cards:', newInitialCount);
+        console.log('🔄 Persistent due cards for current selection:', newPersistentCount);
         
         setInitialDueCardsCount(newInitialCount);
+        setPersistentDueCardsCount(newPersistentCount);
         setCardsCompletedToday(0);
         setInitialCategoryStats(newCategoryStats);
         setCategoryCompletedCounts({});
@@ -1228,6 +1453,7 @@ function App() {
         setSubCategoryCompletedCounts({});
         localStorage.setItem(`flashcard_due_date_${userId}`, today);
         localStorage.setItem(`flashcard_initial_due_${userId}`, newInitialCount.toString());
+        localStorage.setItem(`flashcard_persistent_due_${userId}`, newPersistentCount.toString());
         localStorage.setItem(`flashcard_completed_today_${userId}`, '0');
         localStorage.setItem(`flashcard_initial_category_stats_${userId}`, JSON.stringify(newCategoryStats));
         localStorage.setItem(`flashcard_category_completed_${userId}`, JSON.stringify({}));
@@ -1236,6 +1462,7 @@ function App() {
       } else {
         // Restore counts from localStorage
         setInitialDueCardsCount(parseInt(storedCount) || allDueCards.length);
+        setPersistentDueCardsCount(parseInt(storedPersistentCount) || calculateDueCardsForCurrentSelection());
         setCardsCompletedToday(parseInt(storedCompleted) || 0);
         setInitialCategoryStats(storedCategoryStats ? JSON.parse(storedCategoryStats) : categoryStats);
         setCategoryCompletedCounts(storedCategoryCompleted ? JSON.parse(storedCategoryCompleted) : {});
@@ -1243,7 +1470,14 @@ function App() {
         setSubCategoryCompletedCounts(storedSubCategoryCompleted ? JSON.parse(storedSubCategoryCompleted) : {});
       }
     }
-  }, [userId, allDueCards.length, categoryStats, getAllSubCategoryStats]);
+  }, [userId, flashcards.length, categoryStats, getAllSubCategoryStats, calculateDueCardsForCurrentSelection]);
+
+  // Update persistent due cards count when category or subcategory changes
+  useEffect(() => {
+    if (userId && flashcards.length > 0) {
+      updatePersistentDueCount();
+    }
+  }, [selectedCategory, updatePersistentDueCount, flashcards.length, userId]);
 
   // Fix completion count inconsistencies - DISABLED to prevent infinite loop
   useEffect(() => {
@@ -1320,15 +1554,16 @@ function App() {
 
     // Use real-time count for auto-switch logic
     const now = new Date();
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const categoryDueCards = flashcards.filter(card => {
       if (card.active === false) return false;
       if ((card.category || 'Uncategorized') !== selectedCategory) return false;
-      let dueDate = card.dueDate || new Date(0);
+      // Skip cards without valid due dates
+      if (!card.dueDate) return false;
+      let dueDate = card.dueDate;
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
       }
-      return dueDate < endOfToday;
+      return dueDate <= now;
     });
 
     if (categoryDueCards.length === 0) {
@@ -1981,6 +2216,14 @@ function App() {
                                   // Match the category
                                   return (card.category || 'Uncategorized') === category;
                                 });
+                                
+                                // Apply level filter for bottom-up filtering (if specific level selected)
+                                if (selectedLevel !== 'All') {
+                                  categoryCards = categoryCards.filter(card => {
+                                    const cardLevel = card.level || inferLevelFromFSRS(card);
+                                    return cardLevel === selectedLevel;
+                                  });
+                                }
 
                                 // Calculate count based on showDueTodayOnly and showStarredOnly
                                 let actualCardsInCategory;
@@ -1992,26 +2235,36 @@ function App() {
                                   
                                   // Apply due date filter
                                   const now = new Date();
-                                  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
                                   categoryCards = categoryCards.filter(card => {
-                                    let dueDate = card.dueDate || new Date(0);
+                                    // Skip cards without valid due dates (but allow Firestore Timestamps)
+                                    if (!card.dueDate && card.dueDate !== 0) return false;
+                                    let dueDate = card.dueDate;
                                     if (dueDate && typeof dueDate.toDate === 'function') {
                                       dueDate = dueDate.toDate();
+                                    } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+                                      dueDate = new Date(dueDate);
                                     }
-                                    return dueDate < endOfToday;
+                                    // Skip invalid dates
+                                    if (!dueDate || isNaN(dueDate.getTime())) return false;
+                                    return dueDate <= now;
                                   });
                                   
                                   actualCardsInCategory = categoryCards.length;
                                 } else if (showDueTodayOnly) {
                                   // Use real-time counting for "All" button
                                   const now = new Date();
-                                  const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
                                   categoryCards = categoryCards.filter(card => {
-                                    let dueDate = card.dueDate || new Date(0);
+                                    // Skip cards without valid due dates (but allow Firestore Timestamps)
+                                    if (!card.dueDate && card.dueDate !== 0) return false;
+                                    let dueDate = card.dueDate;
                                     if (dueDate && typeof dueDate.toDate === 'function') {
                                       dueDate = dueDate.toDate();
+                                    } else if (typeof dueDate === 'number' || typeof dueDate === 'string') {
+                                      dueDate = new Date(dueDate);
                                     }
-                                    return dueDate < endOfToday;
+                                    // Skip invalid dates
+                                    if (!dueDate || isNaN(dueDate.getTime())) return false;
+                                    return dueDate <= now;
                                   });
                                   actualCardsInCategory = categoryCards.length;
                                 } else {
@@ -2045,6 +2298,14 @@ function App() {
                                 // Match the category
                                 return (card.category || 'Uncategorized') === category;
                               });
+                              
+                              // Apply level filter for bottom-up filtering (if specific level selected)
+                              if (selectedLevel !== 'All') {
+                                categoryCards = categoryCards.filter(card => {
+                                  const cardLevel = card.level || inferLevelFromFSRS(card);
+                                  return cardLevel === selectedLevel;
+                                });
+                              }
 
                               // Calculate count based on showDueTodayOnly and showStarredOnly
                               let actualCardsInCategory;
@@ -2054,28 +2315,30 @@ function App() {
                                 // Apply starred filter
                                 categoryCards = categoryCards.filter(card => card.starred === true);
                                 
-                                // Apply due date filter
+                                // Apply due date filter (match useFlashcards logic)
                                 const now = new Date();
-                                const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
                                 categoryCards = categoryCards.filter(card => {
-                                  let dueDate = card.dueDate || new Date(0);
+                                  // Skip cards without valid due dates
+                                  if (!card.dueDate) return false;
+                                  let dueDate = card.dueDate;
                                   if (dueDate && typeof dueDate.toDate === 'function') {
                                     dueDate = dueDate.toDate();
                                   }
-                                  return dueDate < endOfToday;
+                                  return dueDate <= now; // Match useFlashcards logic exactly
                                 });
                                 
                                 actualCardsInCategory = categoryCards.length;
                               } else if (showDueTodayOnly) {
-                                // Use real-time counting for categories
+                                // Use real-time counting for categories (match useFlashcards logic)
                                 const now = new Date();
-                                const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
                                 categoryCards = categoryCards.filter(card => {
-                                  let dueDate = card.dueDate || new Date(0);
+                                  // Skip cards without valid due dates
+                                  if (!card.dueDate) return false;
+                                  let dueDate = card.dueDate;
                                   if (dueDate && typeof dueDate.toDate === 'function') {
                                     dueDate = dueDate.toDate();
                                   }
-                                  return dueDate < endOfToday;
+                                  return dueDate <= now; // Match useFlashcards logic exactly
                                 });
                                 actualCardsInCategory = categoryCards.length;
                               } else {
@@ -2099,20 +2362,7 @@ function App() {
                                 <button
                                   key={category}
                                   className={`filter-btn ${selectedCategory === category ? 'active' : ''}`}
-                                  onClick={() => {
-                                    console.log(`🔍 Manual category selection: "${category}"`);
-                                    console.log(`🔍 Previous selectedCategory: "${selectedCategory}"`);
-                                    setSelectedCategory(category);
-                                    setLastManualCategoryChange(Date.now());
-                                    setIsManualCategorySelection(true);
-                                    console.log(`🔍 setSelectedCategory called with: "${category}"`);
-
-                                    // Clear the manual selection flag after 15 seconds
-                                    setTimeout(() => {
-                                      setIsManualCategorySelection(false);
-                                      console.log(`🔍 Manual category selection protection expired for "${category}"`);
-                                    }, 15000);
-                                  }}
+                                  onClick={() => setSelectedCategory(category)}
                                 >
                                   {category} ({actualCardsInCategory})
                                 </button>
@@ -2167,17 +2417,26 @@ function App() {
                                 const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
                                 return cardSubCategory === subCategory;
                               });
+                              
+                              // Apply level filter for bottom-up filtering (if specific level selected)
+                              if (selectedLevel !== 'All') {
+                                subCategoryCards = subCategoryCards.filter(card => {
+                                  const cardLevel = card.level || inferLevelFromFSRS(card);
+                                  return cardLevel === selectedLevel;
+                                });
+                              }
 
-                              // If showing due cards only, filter by due date
+                              // If showing due cards only, filter by due date (match logic from useFlashcards)
                               if (showDueTodayOnly) {
                                 const now = new Date();
-                                const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
                                 subCategoryCards = subCategoryCards.filter(card => {
-                                  let dueDate = card.dueDate || new Date(0);
+                                  // Skip cards without valid due dates
+                                  if (!card.dueDate) return false;
+                                  let dueDate = card.dueDate;
                                   if (dueDate && typeof dueDate.toDate === 'function') {
                                     dueDate = dueDate.toDate();
                                   }
-                                  return dueDate < endOfToday;
+                                  return dueDate <= now; // Match useFlashcards logic exactly
                                 });
                               }
 
@@ -2187,6 +2446,21 @@ function App() {
                               }
 
                               const actualCardsInSubCategory = subCategoryCards.length;
+
+                              // Debug: Show count calculation for this subcategory
+                              if (subCategory === 'Spring Rest') {
+                                console.log(`🔍 SUBCATEGORY COUNT DEBUG for "${subCategory}":`, {
+                                  beforeFiltering: flashcards.filter(card => {
+                                    if (card.active === false) return false;
+                                    if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
+                                    const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+                                    return cardSubCategory === subCategory;
+                                  }).length,
+                                  afterDueFilter: actualCardsInSubCategory,
+                                  showDueTodayOnly,
+                                  selectedCategory
+                                });
+                              }
 
                               // Skip subcategories with no actual cards
                               if (actualCardsInSubCategory === 0) {
@@ -2231,15 +2505,19 @@ function App() {
                           >
                             All
                           </button>
-                          {levels.map(level => (
-                            <button
-                              key={level}
-                              className={`filter-btn ${selectedLevel === level ? 'active' : ''}`}
-                              onClick={() => setSelectedLevel(level)}
-                            >
-                              {level.charAt(0).toUpperCase() + level.slice(1)}
-                            </button>
-                          ))}
+                          {levels.map(level => {
+                            const count = levelStats[level] || 0;
+                            console.log(`🔍 LEVEL-BUTTON: ${level} = ${count} cards`);
+                            return (
+                              <button
+                                key={level}
+                                className={`filter-btn ${selectedLevel === level ? 'active' : ''}`}
+                                onClick={() => setSelectedLevel(level)}
+                              >
+                                {level.charAt(0).toUpperCase() + level.slice(1)} ({count})
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -2297,24 +2575,24 @@ function App() {
                 )}
 
                 {/* Progress Bar - Shows daily completion progress */}
-                {(initialDueCardsCount > 0 || cardsCompletedToday > 0) && (
+                {(persistentDueCardsCount > 0 || cardsCompletedToday > 0) && (
                   <div className="daily-progress-section-wide">
                     <div className="progress-header">
-                      <h4>Daily Progress</h4>
+                      <h4>Due Cards Progress</h4>
                       <span className="progress-stats">
-                        {cardsCompletedToday} / {initialDueCardsCount} cards completed
+                        {persistentDueCardsCount} cards remaining
                       </span>
                     </div>
                     <div className="progress-bar-container">
                       <div 
                         className="progress-bar-fill" 
                         style={{ 
-                          width: `${Math.min(100, (cardsCompletedToday / initialDueCardsCount) * 100)}%` 
+                          width: `${Math.min(100, ((cardsCompletedToday) / (cardsCompletedToday + persistentDueCardsCount)) * 100)}%` 
                         }}
                       />
                     </div>
                     <div className="progress-percentage">
-                      {Math.round(Math.min(100, (cardsCompletedToday / initialDueCardsCount) * 100))}%
+                      {Math.round(Math.min(100, ((cardsCompletedToday) / (cardsCompletedToday + persistentDueCardsCount)) * 100))}%
                     </div>
                   </div>
                 )}

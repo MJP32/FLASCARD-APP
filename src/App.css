@@ -3630,8 +3630,8 @@ input:checked + .switch-slider:before {
 }
 
 .modal-content {
-  background-color: #1e40af;
-  color: white;
+  background-color: var(--surface);
+  color: var(--text-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   max-width: 90vw;
@@ -3639,6 +3639,68 @@ input:checked + .switch-slider:before {
   overflow-y: auto;
   position: relative;
   padding: var(--space-5);
+}
+
+/* Ensure flashcard form modal uses proper theme colors */
+.flashcard-form-modal {
+  background-color: var(--surface) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark .flashcard-form-modal {
+  background-color: var(--surface-dark) !important;
+  color: var(--text-dark-primary) !important;
+}
+
+/* Ensure generate modal uses proper theme colors */
+.generate-modal {
+  background-color: var(--surface) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark .generate-modal {
+  background-color: var(--surface-dark) !important;
+  color: var(--text-dark-primary) !important;
+}
+
+/* Override any modal that shouldn't have dark background in light mode */
+.app:not(.dark-mode) .modal-overlay .modal-content,
+.app:not(.dark-mode) .modal-overlay .flashcard-form-modal,
+.app:not(.dark-mode) .modal-overlay .generate-modal,
+.app:not(.dark-mode) .modal-overlay .ai-modal-content,
+.app:not(.dark-mode) .modal-overlay.ai-modal-overlay .ai-modal-content {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+/* Force light mode colors for all form elements in light mode modals */
+.app:not(.dark-mode) .modal-overlay .form-group,
+.app:not(.dark-mode) .modal-overlay .form-input,
+.app:not(.dark-mode) .modal-overlay input,
+.app:not(.dark-mode) .modal-overlay textarea,
+.app:not(.dark-mode) .modal-overlay select,
+.app:not(.dark-mode) .modal-overlay .modal-header {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+/* Override the dark class on modal-overlay when app is in light mode */
+.app:not(.dark-mode) .modal-overlay.dark .modal-content,
+.app:not(.dark-mode) .modal-overlay.dark .flashcard-form-modal,
+.app:not(.dark-mode) .modal-overlay.dark .generate-modal,
+.app:not(.dark-mode) .modal-overlay.dark .ai-modal-content {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+/* Ensure proper dark mode styling only when dark mode is active */
+.app.dark-mode .modal-overlay .modal-content,
+.app.dark-mode .modal-overlay .flashcard-form-modal,
+.app.dark-mode .modal-overlay .generate-modal,
+.app.dark-mode .modal-overlay .ai-modal-content,
+.app.dark-mode .modal-overlay.ai-modal-overlay .ai-modal-content {
+  background-color: #374151 !important;
+  color: #f3f4f6 !important;
 }
 
 .modal-header {
@@ -6217,10 +6279,10 @@ input:checked + .switch-slider:before {
   }
 }
 
-/* Dark mode adjustments for manage cards */
+/* Dark mode adjustments for modals */
 .modal-overlay.dark .modal-content {
-  background: #1e40af;
-  color: white;
+  background: var(--surface-dark);
+  color: var(--text-dark-primary);
 }
 
 .modal-overlay.dark .manage-cards-modal {
@@ -7183,6 +7245,16 @@ input:checked + .switch-slider:before {
   padding-left: var(--space-2) !important;
 }
 
+/* Override padding for active level buttons to show checkmark */
+.filters-section-left .filter-section.level-section .filter-buttons-container .filter-btn.active {
+  padding-left: 28px !important;
+}
+
+/* Also ensure hover state of active level buttons maintains checkmark padding */
+.filters-section-left .filter-section.level-section .filter-buttons-container .filter-btn.active:hover {
+  padding-left: 28px !important;
+}
+
 /* Ensure all filter sections are left-aligned */
 .filters-section-left .filter-section .filter-buttons-container {
   justify-content: flex-start !important;
@@ -7238,17 +7310,41 @@ input:checked + .switch-slider:before {
 }
 
 .filters-section-left .filter-btn.active {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+  background: #1e40af;
+  border-color: #1e40af;
   color: white;
-  font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-weight: 700;
+  box-shadow: 
+    0 2px 8px rgba(30, 64, 175, 0.3),
+    0 0 0 2px rgba(30, 64, 175, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateX(3px);
+  position: relative;
+}
+
+.filters-section-left .filter-btn.active::before {
+  content: "✓";
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: bold;
+  font-size: 0.9em;
+  opacity: 0.9;
+}
+
+.filters-section-left .filter-btn.active {
+  padding-left: 28px !important;
 }
 
 .filters-section-left .filter-btn.active:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
-  transform: translateX(2px);
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  transform: translateX(4px);
+  box-shadow: 
+    0 3px 12px rgba(29, 78, 216, 0.4),
+    0 0 0 2px rgba(29, 78, 216, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Dark mode filter button adjustments */
@@ -7264,14 +7360,39 @@ input:checked + .switch-slider:before {
 }
 
 .dark .filters-section-left .filter-btn.active {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
+  background: #1e40af;
+  border-color: #1e40af;
   color: white;
+  font-weight: 700;
+  box-shadow: 
+    0 2px 8px rgba(30, 64, 175, 0.4),
+    0 0 0 2px rgba(30, 64, 175, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateX(3px);
+  position: relative;
+  padding-left: 28px !important;
 }
 
 .dark .filters-section-left .filter-btn.active:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  transform: translateX(4px);
+  box-shadow: 
+    0 3px 12px rgba(29, 78, 216, 0.5),
+    0 0 0 2px rgba(29, 78, 216, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.dark .filters-section-left .filter-btn.active::before {
+  content: "✓";
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: bold;
+  font-size: 0.9em;
+  opacity: 0.9;
+  color: white;
 }
 
 /* Dark mode filter section separators */
@@ -8403,8 +8524,8 @@ div.notes-textarea-permanent {
 .ai-modal-content {
   width: 500px;
   max-width: 90vw;
-  background-color: #1e40af;
-  color: white;
+  background-color: var(--surface);
+  color: var(--text-primary);
 }
 
 .ai-modal-body {
@@ -8454,8 +8575,8 @@ div.notes-textarea-permanent {
 
 /* Dark mode AI modal styles */
 .modal-overlay.dark .ai-modal-content {
-  background: #1e40af;
-  color: white;
+  background: var(--surface-dark);
+  color: var(--text-dark-primary);
 }
 
 .modal-overlay.dark .ai-modal-description {
@@ -8513,18 +8634,39 @@ div.notes-textarea-permanent {
 }
 
 .filter-btn.active {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
-  color: #1d4ed8;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+  background: #1e40af;
+  border-color: #1e40af;
+  color: white;
+  font-weight: 700;
+  box-shadow: 
+    0 4px 12px rgba(30, 64, 175, 0.35),
+    0 0 0 2px rgba(30, 64, 175, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  position: relative;
+  padding-left: 28px !important;
+}
+
+.filter-btn.active::before {
+  content: "✓";
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: bold;
+  font-size: 0.9em;
+  opacity: 0.9;
+  color: white;
 }
 
 .filter-btn.active:hover {
-  background: #1e40af;
-  border-color: #1e40af;
-  color: #1e40af;
-  transform: translateY(-1px);
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 
+    0 6px 16px rgba(29, 78, 216, 0.4),
+    0 0 0 2px rgba(29, 78, 216, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Dark mode filter button styles */
@@ -8543,13 +8685,36 @@ div.notes-textarea-permanent {
 }
 
 .dark .filter-btn.active {
-  background: #3b82f6;
-  border-color: #3b82f6;
+  background: #1e40af;
+  border-color: #1e40af;
   color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+  font-weight: 700;
+  box-shadow: 
+    0 4px 12px rgba(30, 64, 175, 0.4),
+    0 0 0 2px rgba(30, 64, 175, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  position: relative;
+  padding-left: 28px !important;
+}
+
+.dark .filter-btn.active::before {
+  content: "✓";
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: bold;
+  font-size: 0.9em;
+  opacity: 0.9;
+  color: white;
 }
 
 .dark .filter-btn.active:hover {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 
+    0 6px 16px rgba(29, 78, 216, 0.5),
+    0 0 0 2px rgba(29, 78, 216, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
