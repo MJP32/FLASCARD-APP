@@ -180,41 +180,69 @@ p {
 
 /* User Welcome Box */
 .user-welcome-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  position: fixed !important;
+  top: 1rem !important;
+  left: 1rem !important;
+  width: auto !important;
+  height: auto !important;
+  z-index: 1000 !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+  border: 1px solid rgba(59, 130, 246, 0.2) !important;
+  border-radius: 8px !important;
+  padding: 0.75rem 1rem !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
 }
 
 .welcome-text {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  font-weight: 500;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  color: #1e40af !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
 }
 
 .user-email {
-  font-size: 0.9rem;
-  color: var(--text-primary);
-  font-weight: 600;
+  font-size: 0.8rem !important;
+  font-weight: 500 !important;
+  color: #64748b !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .streak-info {
-  font-size: 0.85rem;
-  color: var(--success-color);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+  font-size: 0.75rem !important;
+  color: #059669 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
 }
 
 .header-left-logo {
+  background: #fff !important;
+  border: 2px solid #1e40af !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 16px rgba(30,64,175,0.07) !important;
+  padding: 2vh 2vw !important;
+  margin: 2vh auto !important;
+  width: 70vw !important;
+  max-width: 700px !important;
   justify-self: start;
   display: flex;
   flex-direction: column;
+  background: #f1f5f9 !important;
+  border: 2px solid #1e40af !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 16px rgba(30,64,175,0.07) !important;
+  padding: 2vh 2vw !important;
+  margin: 2vh auto !important;
+  width: 70vw !important;
+  max-width: 700px !important;
   align-items: flex-start;
   padding-left: 0;
   margin-left: 0;
@@ -222,6 +250,9 @@ p {
 
 .header-center {
   justify-self: center;
+  font-size: 1.1rem !important;
+  padding: 1.2rem 2vw !important;
+  min-height: 300px !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2962,11 +2993,11 @@ input:checked + .switch-slider:before {
   height: auto;
   overflow-y: auto; /* Allow scrolling if content overflows */
   max-height: none; /* Remove height restriction */
+  width: 100% !important; /* Ensure full width for click area */
+  cursor: pointer !important; /* Make it clear the entire area is clickable */
   transition: transform 0.15s ease, box-shadow 0.15s ease;
-  cursor: pointer;
   user-select: none; /* Prevent text selection when clicking */
   /* Ensure content fits properly within border */
-  width: 100%;
   box-sizing: border-box;
 }
 
@@ -2989,6 +3020,34 @@ input:checked + .switch-slider:before {
 
 .dark .flashcard-content:active {
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Maximized mode - extend hover area to full screen with overlay */
+.flashcard-window.maximized .flashcard-content {
+  position: relative !important;
+  cursor: pointer !important;
+}
+
+.flashcard-window.maximized .flashcard-content::before {
+  content: '';
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  transition: all 0.2s ease !important;
+}
+
+.flashcard-window.maximized .flashcard-content:hover::before {
+  background-color: rgba(59, 130, 246, 0.03) !important;
+  box-shadow: inset 0 0 0 4px rgba(59, 130, 246, 0.2) !important;
+}
+
+.dark .flashcard-window.maximized .flashcard-content:hover::before {
+  background-color: rgba(59, 130, 246, 0.05) !important;
+  box-shadow: inset 0 0 0 4px rgba(59, 130, 246, 0.3) !important;
 }
 
 .flashcard-bottom {
@@ -3792,8 +3851,12 @@ input:checked + .switch-slider:before {
   position: sticky;
   bottom: 0;
   margin-top: auto; /* Push footer to bottom */
-  z-index: 100; /* Ensure footer is visible */
+  z-index: 50; /* Lower z-index to allow dropdowns to appear above */
   width: 100%;
+}
+
+.flashcard-window.maximized .flashcard-bottom {
+  z-index: 10 !important; /* Very low z-index in maximized view */
 }
 
 .footer-stats {
@@ -3914,13 +3977,23 @@ input:checked + .switch-slider:before {
   flex-direction: column !important;
 }
 
-/* Ensure flashcard-container fills maximized or popout window */
-.flashcard-window.maximized .flashcard-container,
-.flashcard-window.popout .flashcard-container {
+/* Ensure flashcard-container fills maximized window, but constrain popout */
+.flashcard-window.maximized .flashcard-container {
   width: 100vw !important;
   height: 100vh !important;
   min-height: 100vh !important;
   max-height: 100vh !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.flashcard-window.popout .flashcard-container {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  max-height: 100% !important;
   min-width: 0 !important;
   flex: 1 1 auto !important;
   display: flex !important;
@@ -3937,22 +4010,38 @@ input:checked + .switch-slider:before {
   min-width: 0 !important;
   min-height: 0 !important;
   display: flex !important;
-  flex-direction: column !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 0.375rem !important;
   overflow: hidden !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  flex-direction: column !important;
+  overflow: visible !important; /* Changed from hidden to visible for resize handles */
   position: relative !important; /* Ensure resize handles can be positioned */
 }
 
 /* Ensure flashcard-content fills available space */
-.flashcard-window.maximized .flashcard-content,
-.flashcard-window.popout .flashcard-content {
+.flashcard-window.maximized .flashcard-content {
   flex: 1 1 auto !important;
-  min-height: 100vh !important;
-  max-height: 100vh !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
   min-width: 0 !important;
   width: 100% !important;
   height: 100vh !important;
   overflow: visible !important;
-  padding: 2rem !important;
+  padding: 0 !important; /* Remove padding to extend click area to edges */
+  cursor: pointer !important;
+}
+
+.flashcard-window.popout .flashcard-content {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100vh !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  padding-top: 30px !important; /* Account for drag handle */
   box-sizing: border-box !important;
 }
 
@@ -4088,14 +4177,30 @@ body.fullscreen-mode {
 
 /* Ensure resize handles are visible in popout mode */
 .flashcard-window.popout .resize-handle {
-  opacity: 0.6; /* Make them visible */
-  background: rgba(59, 130, 246, 0.4) !important; /* Blue background */
+  opacity: 0.3 !important;
+  background: #94a3b8 !important;
+  position: absolute !important;
+  z-index: 99999 !important;
+  border: none !important;
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 2px !important;
 }
 
 .flashcard-window.popout .resize-handle:hover {
-  opacity: 1;
-  background: rgba(59, 130, 246, 0.7) !important; /* Darker on hover */
+  opacity: 0.8 !important;
+  background: #64748b !important;
 }
+
+/* Specific cursor styles for popout resize handles */
+.flashcard-window.popout .resize-handle.resize-nw { cursor: nw-resize !important; }
+.flashcard-window.popout .resize-handle.resize-ne { cursor: ne-resize !important; }
+.flashcard-window.popout .resize-handle.resize-sw { cursor: sw-resize !important; }
+.flashcard-window.popout .resize-handle.resize-se { cursor: se-resize !important; }
+.flashcard-window.popout .resize-handle.resize-n { cursor: n-resize !important; }
+.flashcard-window.popout .resize-handle.resize-s { cursor: s-resize !important; }
+.flashcard-window.popout .resize-handle.resize-e { cursor: e-resize !important; }
+.flashcard-window.popout .resize-handle.resize-w { cursor: w-resize !important; }
 
 /* Prevent body scroll when window is popouted */
 body.has-popout {
@@ -8272,14 +8377,31 @@ body.has-popout {
 }
 
 .answer-dropdown-content {
-  margin-top: var(--space-2);
-  padding: var(--space-3);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   animation: fadeIn 0.2s ease-out;
   position: relative;
   z-index: 2;
+}
+
+/* Fix answer dropdown in maximized view */
+.flashcard-window.maximized .answer-dropdown-content {
+  position: fixed !important;
+  z-index: 100002 !important;
+  background: white !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 0.75rem !important;
+  padding: 1.5rem !important;
+  box-shadow: 0 0 0 100vw rgba(248, 250, 252, 0.95), 0 8px 25px rgba(0, 0, 0, 0.2) !important;
+  backdrop-filter: blur(8px) !important;
+  min-width: 300px !important;
+  max-width: 500px !important;
+  color: #1f2937 !important;
 }
 
 /* Ensure dropdowns work in maximized modal */
@@ -8400,6 +8522,15 @@ body.has-popout {
   flex: 1 1 auto !important;
   padding: 3rem !important;
   font-size: 1.2rem !important;
+  background-color: rgba(248, 250, 252, 0.95) !important; /* Semi-transparent background */
+  backdrop-filter: blur(8px) !important; /* Add blur effect */
+  box-shadow: 0 0 0 1000px rgba(248, 250, 252, 0.8) !important; /* Extend background behind dropdowns */
+}
+
+/* Dark mode background for maximized flashcard section */
+.flashcard-window.maximized.dark .flashcard-section {
+  background-color: rgba(55, 65, 81, 0.95) !important; /* Semi-transparent dark background */
+  box-shadow: 0 0 0 1000px rgba(55, 65, 81, 0.8) !important; /* Extend dark background behind dropdowns */
 }
 
 /* Maximize question and answer sections in maximized view */
@@ -8419,6 +8550,26 @@ body.has-popout {
   padding: 2rem !important;
   font-size: 1.3rem !important;
   line-height: 1.6 !important;
+  overflow-y: auto !important; /* Enable vertical scrolling */
+  overflow-x: hidden !important; /* Hide horizontal scrollbar */
+  max-height: 60vh !important; /* Set max height to enable scrolling */
+  position: relative !important; /* Ensure dropdown positioning context */
+}
+
+/* Ensure dropdowns within scrollable content remain positioned correctly */
+.flashcard-window.maximized .flashcard-section .content details,
+.flashcard-window.maximized .flashcard-section .content .dropdown,
+.flashcard-window.maximized .flashcard-section .content .info-dropdown {
+  position: relative !important;
+  z-index: 100000 !important;
+}
+
+/* Ensure dropdown content appears above scrollable area */
+.flashcard-window.maximized .flashcard-section .content details .info-content,
+.flashcard-window.maximized .flashcard-section .content .dropdown-content,
+.flashcard-window.maximized .flashcard-section .content .info-dropdown .info-content {
+  position: fixed !important; /* Use fixed positioning to escape scroll container */
+  z-index: 100001 !important;
 }
 
 /* Maximize section labels */
@@ -8428,28 +8579,49 @@ body.has-popout {
   padding: 1rem !important;
 }
 
-/* Bottom controls area positioning for normal, popout, and maximized mode */
-.flashcard-window .flashcard-bottom,
+/* Bottom controls area positioning for normal mode */
+.flashcard-window .flashcard-bottom {
+  position: relative !important;
+}
+
+/* Bottom controls area positioning for popout and maximized mode */
 .flashcard-window.popout .flashcard-bottom,
 .flashcard-window.maximized .flashcard-bottom {
-  position: relative !important;
+  position: absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
 }
 
 /* Maximize bottom controls area */
 .flashcard-window.maximized .flashcard-bottom {
-  padding: 2rem !important;
-  min-height: 80px !important;
+  padding: 0.75rem !important;
+  min-height: 40px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
 }
 
 /* Maximize navigation and button controls */
 .flashcard-window.maximized .navigation-controls {
-  gap: 2rem !important;
-  padding: 1rem !important;
+  gap: 1.5rem !important;
+  padding: 0.5rem !important;
 }
 
 .flashcard-window.maximized .navigation-controls button {
-  padding: 1rem 2rem !important;
-  font-size: 1.1rem !important;
+  padding: 0.75rem 1.5rem !important;
+  font-size: 1rem !important;
+}
+
+/* Popout navigation and button controls */
+.flashcard-window.popout .navigation-controls {
+  gap: 1.5rem !important;
+  padding: 0.5rem !important;
+}
+
+.flashcard-window.popout .navigation-controls button {
+  padding: 0.75rem 1.5rem !important;
+  font-size: 1rem !important;
 }
 
 /* Fix all HTML details/summary dropdowns in maximized mode */
@@ -8457,14 +8629,14 @@ body.has-popout {
 .flashcard-window.maximized .info-dropdown,
 .flashcard-window.maximized .card-info-dropdown {
   position: relative !important;
-  z-index: 10003 !important;
+  z-index: 100000 !important; /* Increased z-index to be above footer and panels */
   overflow: visible !important;
 }
 
 .flashcard-window.maximized summary,
 .flashcard-window.maximized .info-header {
   position: relative !important;
-  z-index: 10003 !important;
+  z-index: 100001 !important; /* Higher than container */
   pointer-events: auto !important;
   cursor: pointer !important;
   color: #6b7280 !important;
@@ -8473,26 +8645,29 @@ body.has-popout {
 .flashcard-window.maximized details[open],
 .flashcard-window.maximized .info-dropdown[open] {
   overflow: visible !important;
-  z-index: 10003 !important;
+  z-index: 100000 !important; /* Higher than footer and panels */
 }
 
 .flashcard-window.maximized details .info-content,
 .flashcard-window.maximized .info-dropdown .info-content {
-  position: relative !important;
-  z-index: 10003 !important;
+  position: fixed !important; /* Use fixed positioning to escape container constraints */
+  z-index: 100002 !important; /* Highest z-index for dropdown content */
   background: white !important;
-  border: 1px solid #d1d5db !important;
-  border-radius: 0.375rem !important;
-  padding: 1rem !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 0.75rem !important;
+  padding: 1.5rem !important;
   margin-top: 0.5rem !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 0 0 100vw rgba(248, 250, 252, 0.95), 0 8px 25px rgba(0, 0, 0, 0.2) !important; /* Extended background overlay */
+  backdrop-filter: blur(8px) !important;
+  min-width: 300px !important;
+  max-width: 500px !important;
 }
 
 /* Fix category/subcategory dropdowns */
 .flashcard-window.maximized select,
 .flashcard-window.maximized .dropdown-select {
   position: relative !important;
-  z-index: 10003 !important;
+  z-index: 100000 !important;
   pointer-events: auto !important;
 }
 
@@ -8501,7 +8676,7 @@ body.has-popout {
 .flashcard-window.maximized .dropdown-container,
 .flashcard-window.maximized .dropdown-menu {
   position: relative !important;
-  z-index: 10003 !important;
+  z-index: 100000 !important;
   overflow: visible !important;
   pointer-events: auto !important;
 }
@@ -8510,18 +8685,18 @@ body.has-popout {
 .flashcard-window.maximized .dropdown-content,
 .flashcard-window.maximized .dropdown-menu-content {
   position: absolute !important;
-  z-index: 10004 !important;
+  z-index: 100001 !important;
   background: white !important;
   border: 1px solid #d1d5db !important;
   border-radius: 0.375rem !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 0 0 100vw rgba(0, 0, 0, 0.5), 0 8px 25px rgba(0, 0, 0, 0.15) !important;
   overflow: visible !important;
 }
 
 /* Fix additional info dropdown specifically */
 .flashcard-window.maximized .additional-info-dropdown {
   position: relative !important;
-  z-index: 10003 !important;
+  z-index: 100000 !important;
   overflow: visible !important;
   pointer-events: auto !important;
 }
@@ -8529,11 +8704,28 @@ body.has-popout {
 .flashcard-window.maximized .additional-info-dropdown summary {
   pointer-events: auto !important;
   cursor: pointer !important;
-  z-index: 10003 !important;
+  z-index: 100000 !important;
 }
 
 .flashcard-window.maximized .additional-info-dropdown[open] {
   overflow: visible !important;
+}
+
+/* Additional info dropdown content styling in maximized mode */
+.flashcard-window.maximized .additional-info-dropdown[open] .additional-info-content {
+  position: fixed !important;
+  z-index: 100002 !important;
+  background: white !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 0.75rem !important;
+  padding: 1.5rem !important;
+  margin: 0 !important;
+  box-shadow: 0 0 0 100vw rgba(0, 0, 0, 0.5), 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  min-width: 300px !important;
+  max-width: 600px !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
 }
 
 /* Ensure all clickable elements work in maximized mode */
@@ -8618,36 +8810,52 @@ body.has-popout {
   position: relative !important;
 }
 
-/* Make card actions section horizontal above footer in maximized mode */
+/* Make card actions section horizontal bar above footer in maximized mode */
 .flashcard-window.maximized .card-info-section {
-  position: relative !important;
-  z-index: 10001 !important;
-  background: rgba(255, 255, 255, 0.95) !important;
+  position: absolute !important;
+  bottom: 40px !important; /* Position directly above footer height */
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 200 !important; /* Higher than footer (50) but lower than dropdowns */
+  background: rgba(255, 255, 255, 0.98) !important;
   border: 2px solid #3b82f6 !important;
-  border-radius: 0.75rem !important;
-  padding: 1.5rem !important;
-  backdrop-filter: blur(8px) !important;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 0 !important;
+  padding: 1rem 2rem !important;
+  backdrop-filter: blur(10px) !important;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15) !important;
   width: 100% !important;
   max-width: none !important;
   min-width: auto !important;
   pointer-events: auto !important;
-  margin: 1rem 0 !important;
+  margin: 0 !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
   justify-content: space-between !important;
   gap: 2rem !important;
+  box-sizing: border-box !important;
+  min-height: 60px !important;
+  transform: translateY(-100%) !important;
 }
 
-/* Style card info dropdown in normal, popout, and maximized mode - technical card details (creation date, due date, etc.) */
-.flashcard-window .card-info-dropdown,
-.flashcard-window.popout .card-info-dropdown,
-.flashcard-window.maximized .card-info-dropdown {
+/* Style card info dropdown in normal mode - technical card details (creation date, due date, etc.) */
+.flashcard-window .card-info-dropdown {
   position: absolute !important;
   bottom: 1rem !important;
   right: 0 !important;
-  z-index: 10002 !important;
+  z-index: 100000 !important; /* Higher z-index for dropdown container */
+  background: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+}
+
+/* Move card info dropdown closer to footer in popout and maximized modes */
+.flashcard-window.popout .card-info-dropdown,
+.flashcard-window.maximized .card-info-dropdown {
+  position: absolute !important;
+  bottom: 0 !important;
+  right: 0 !important;
+  z-index: 100000 !important; /* Higher z-index for dropdown container */
   background: transparent !important;
   border: none !important;
   margin: 0 !important;
@@ -8695,22 +8903,23 @@ body.has-popout {
   backdrop-filter: blur(8px) !important;
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
   min-width: 300px !important;
-  z-index: 10003 !important;
+  z-index: 100001 !important;
+  box-shadow: 0 0 0 1000px rgba(248, 250, 252, 0.8), 0 8px 25px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* Style card action buttons in maximized mode - horizontal layout */
 .flashcard-window.maximized .card-action-buttons {
   display: flex !important;
-  gap: 1.5rem !important;
+  gap: 1rem !important;
   margin-bottom: 0 !important;
   justify-content: flex-start !important;
   align-items: center !important;
 }
 
 .flashcard-window.maximized .card-action-btn {
-  padding: 0.75rem 1.25rem !important;
-  font-size: 1rem !important;
-  border-radius: 0.5rem !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.9rem !important;
+  border-radius: 0.375rem !important;
   font-weight: 500 !important;
   white-space: nowrap !important;
 }
@@ -8743,9 +8952,10 @@ body.has-popout {
 
 /* Dark mode adjustments for maximized card info */
 .flashcard-window.maximized.dark .card-info-section {
-  background: rgba(31, 41, 59, 0.95) !important;
+  background: rgba(31, 41, 59, 0.98) !important;
   border-color: #60a5fa !important;
   color: #f1f5f9 !important;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Dark mode for card info dropdown content in normal, popout, and maximized mode */
@@ -8755,27 +8965,58 @@ body.has-popout {
   background: rgba(31, 41, 59, 0.95) !important;
   border-color: #60a5fa !important;
   color: #f1f5f9 !important;
+  z-index: 100001 !important;
+  box-shadow: 0 0 0 1000px rgba(55, 65, 81, 0.8), 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Dark mode for regular info dropdown content in maximized mode */
+.flashcard-window.maximized.dark details .info-content,
+.flashcard-window.maximized.dark .info-dropdown .info-content {
+  background: rgba(31, 41, 59, 0.95) !important;
+  border-color: #60a5fa !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 0 0 100vw rgba(0, 0, 0, 0.7), 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Dark mode for other dropdown content in maximized mode */
+.flashcard-window.maximized.dark .dropdown-content,
+.flashcard-window.maximized.dark .dropdown-menu-content {
+  background: rgba(31, 41, 59, 0.95) !important;
+  border-color: #60a5fa !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 0 0 100vw rgba(0, 0, 0, 0.7), 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Dark mode for additional info dropdown content in maximized mode */
+.flashcard-window.maximized.dark .additional-info-dropdown[open] .additional-info-content {
+  background: rgba(31, 41, 59, 0.95) !important;
+  border-color: #60a5fa !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 0 0 100vw rgba(0, 0, 0, 0.7), 0 8px 25px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* ============================================
    POPOUT VIEW STYLING
    ============================================ */
 
-/* Style card actions section in popout mode - high specificity */
+/* Style card actions section horizontal bar above footer in popout mode */
 .flashcard-window.popout .card-info-section {
-  position: relative !important;
-  z-index: 10001 !important;
-  background: rgba(255, 255, 255, 0.95) !important;
+  position: absolute !important;
+  bottom: 40px !important; /* Position directly above footer height */
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 200 !important; /* Higher than footer (50) but lower than dropdowns */
+  background: rgba(255, 255, 255, 0.98) !important;
   border: 2px solid #3b82f6 !important;
-  border-radius: 0.75rem !important;
-  padding: 1.5rem !important;
-  backdrop-filter: blur(8px) !important;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 0 !important;
+  padding: 1rem 1.5rem !important;
+  backdrop-filter: blur(10px) !important;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15) !important;
   width: 100% !important;
   max-width: none !important;
   min-width: auto !important;
   pointer-events: auto !important;
-  margin: 1rem 0 !important;
+  margin: 0 !important;
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
@@ -8783,21 +9024,24 @@ body.has-popout {
   gap: 2rem !important;
   visibility: visible !important;
   opacity: 1 !important;
+  box-sizing: border-box !important;
+  min-height: 60px !important;
+  transform: translateY(-100%) !important;
 }
 
 /* Style card action buttons in popout mode */
 .flashcard-window.popout .card-action-buttons {
   display: flex !important;
-  gap: 1.5rem !important;
+  gap: 0.75rem !important;
   margin-bottom: 0 !important;
   justify-content: flex-start !important;
   align-items: center !important;
 }
 
 .flashcard-window.popout .card-action-btn {
-  padding: 0.75rem 1.25rem !important;
-  font-size: 1rem !important;
-  border-radius: 0.5rem !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.9rem !important;
+  border-radius: 0.375rem !important;
   font-weight: 500 !important;
   white-space: nowrap !important;
 }
@@ -8829,9 +9073,10 @@ body.has-popout {
 
 /* Dark mode adjustments for popout card info */
 .flashcard-window.popout.dark .card-info-section {
-  background: rgba(31, 41, 59, 0.95) !important;
+  background: rgba(31, 41, 59, 0.98) !important;
   border-color: #60a5fa !important;
   color: #f1f5f9 !important;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* Override content height constraints for popout */
@@ -8840,6 +9085,14 @@ body.has-popout {
   max-height: none !important;
   min-height: 0 !important;
   flex: 0 1 auto !important;
+}
+
+/* Create inner wrapper for popout to contain overflow */
+.flashcard-window.popout > div:first-child {
+  overflow: auto !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Ensure popout container allows proper height distribution */
@@ -8851,15 +9104,19 @@ body.has-popout {
   flex-direction: column !important;
 }
 
-/* Style popout footer - ensure visibility */
+/* Style popout footer - ensure visibility and proper width */
 .flashcard-window.popout .flashcard-bottom {
-  padding: 1.5rem !important;
-  min-height: 60px !important;
+  padding: 0.75rem !important;
+  min-height: 40px !important;
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
   position: relative !important;
   flex-shrink: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
 }
 
 /* Ensure navigation controls are visible in popout */
