@@ -76,6 +76,17 @@ function App() {
   // Mobile header collapse state
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
 
+  // Window management states
+  const [isMaximized, setIsMaximized] = useState(false);
+  const [isPopouted, setIsPopouted] = useState(false);
+  const [windowPosition, setWindowPosition] = useState({ x: window.innerWidth / 10, y: 30 });
+  const [windowSize, setWindowSize] = useState({ width: 1600, height: 1000 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeDirection, setResizeDirection] = useState('');
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+
   // Message states
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -395,12 +406,12 @@ function App() {
           window.forceAWSUpdate();
         }
       }, 2000); // Wait 2 seconds for everything to load
-      // Calculate displayCategories and dailyProgress for debug function
+      // Calculate displayCategories and dailyProgress for debug function - using consistent real-time counting
       const debugDisplayCategories = categories.length > 0 ? categories : (!showDueTodayOnly ? allCategories : []);
       const dailyProgress = {
         completedToday: cardsCompletedToday,
-        dueToday: initialDueCardsCount, // Daily progress uses stable counting
-        totalToday: initialDueCardsCount
+        dueToday: cardsDueToday.length, // Use real-time count for consistency
+        totalToday: cardsCompletedToday + cardsDueToday.length
       };
       window.debugAllCount = () => debugAllCount(flashcards, showDueTodayOnly, showStarredOnly, selectedCategory, debugDisplayCategories, initialCategoryStats, categoryCompletedCounts);
       window.debugDueCardsSync = () => debugDueCardsSync(flashcards, showDueTodayOnly, filteredFlashcards, dailyProgress, filteredDisplayCategories);
@@ -1028,6 +1039,143 @@ function App() {
     setIsEditingCard(true);
     setShowCreateCardForm(true);
   };
+
+  // Window management functions
+  const handleMaximize = () => {
+    setIsMaximized(true);
+    setIsPopouted(false); // Don't use popout positioning for true fullscreen
+    // True fullscreen - no margins
+    setWindowPosition({ x: 0, y: 0 });
+    setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    document.body.classList.add('fullscreen-mode');
+    // Add class to parent container for browsers that don't support :has()
+    const mainContent = document.querySelector('.flashcard-main-content');
+    if (mainContent) mainContent.classList.add('has-maximized');
+  };
+
+  const handleRestore = () => {
+    console.log('Restoring window to embedded view...');
+    // Reset all window states to default embedded view
+    setIsMaximized(false);
+    setIsPopouted(false);
+    document.body.classList.remove('fullscreen-mode');
+    // Remove class from parent container
+    const mainContent = document.querySelector('.flashcard-main-content');
+    if (mainContent) mainContent.classList.remove('has-maximized');
+    // Reset position and size (these won't be used in embedded mode but good to clean up)
+    setWindowPosition({ x: 0, y: 0 });
+    setWindowSize({ width: 1600, height: 1000 });
+    console.log('Window restored to embedded view');
+  };
+
+  const handlePopout = () => {
+    setIsPopouted(true);
+    setIsMaximized(false);
+    setWindowPosition({ x: window.innerWidth / 10, y: 30 });
+    setWindowSize({ width: 1600, height: 1000 });
+  };
+
+  const handleClosePopout = () => {
+    setIsPopouted(false);
+    setIsMaximized(false);
+    setWindowPosition({ x: 0, y: 0 });
+    setWindowSize({ width: 1600, height: 1000 });
+    document.body.classList.remove('fullscreen-mode');
+    // Remove class from parent container
+    const mainContent = document.querySelector('.flashcard-main-content');
+    if (mainContent) mainContent.classList.remove('has-maximized');
+  };
+
+  const handleRestorePosition = () => {
+    // This function should restore to default embedded view, same as handleRestore
+    handleRestore();
+  };
+
+  const handleMouseDown = (e) => {
+    if (isMaximized || isResizing) return;
+    setIsDragging(true);
+    setDragOffset({
+      x: e.clientX - windowPosition.x,
+      y: e.clientY - windowPosition.y
+    });
+  };
+
+  const handleResizeStart = (e, direction) => {
+    e.stopPropagation();
+    setIsResizing(true);
+    setResizeDirection(direction);
+    setResizeStart({
+      x: e.clientX,
+      y: e.clientY,
+      width: windowSize.width,
+      height: windowSize.height
+    });
+  };
+
+  const handleMouseMove = useCallback((e) => {
+    if (isDragging && !isMaximized && isPopouted) {
+      setWindowPosition({
+        x: e.clientX - dragOffset.x,
+        y: e.clientY - dragOffset.y
+      });
+    } else if (isResizing) {
+      const deltaX = e.clientX - resizeStart.x;
+      const deltaY = e.clientY - resizeStart.y;
+      let newWidth = resizeStart.width;
+      let newHeight = resizeStart.height;
+      let newX = windowPosition.x;
+      let newY = windowPosition.y;
+
+      if (resizeDirection.includes('e')) newWidth = Math.max(400, resizeStart.width + deltaX);
+      if (resizeDirection.includes('w')) {
+        newWidth = Math.max(400, resizeStart.width - deltaX);
+        newX = windowPosition.x + (resizeStart.width - newWidth);
+      }
+      if (resizeDirection.includes('s')) newHeight = Math.max(300, resizeStart.height + deltaY);
+      if (resizeDirection.includes('n')) {
+        newHeight = Math.max(300, resizeStart.height - deltaY);
+        newY = windowPosition.y + (resizeStart.height - newHeight);
+      }
+
+      setWindowSize({ width: newWidth, height: newHeight });
+      if (resizeDirection.includes('w') || resizeDirection.includes('n')) {
+        setWindowPosition({ x: newX, y: newY });
+      }
+    }
+  }, [isDragging, dragOffset, isMaximized, isPopouted, isResizing, resizeDirection, resizeStart, windowPosition]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setResizeDirection('');
+  }, []);
+
+  useEffect(() => {
+    if (isDragging || isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
+
+  // Handle ESC key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isMaximized) {
+        handleRestore();
+      }
+    };
+
+    if (isMaximized) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [isMaximized]);
 
   // Clear messages after delay
   const clearMessage = useCallback(() => {
@@ -2296,46 +2444,287 @@ function App() {
                   </div>
                 )}
 
-                {/* Progress Bar - Shows daily completion progress */}
-                {(initialDueCardsCount > 0 || cardsCompletedToday > 0) && (
+                {/* Progress Bar - Shows daily completion progress using consistent real-time counting */}
+                {((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
                   <div className="daily-progress-section-wide">
                     <div className="progress-header">
                       <h4>Daily Progress</h4>
                       <span className="progress-stats">
-                        {cardsCompletedToday} / {initialDueCardsCount} cards completed
+                        {cardsCompletedToday} / {cardsCompletedToday + cardsDueToday.length} cards completed
                       </span>
                     </div>
                     <div className="progress-bar-container">
                       <div 
                         className="progress-bar-fill" 
                         style={{ 
-                          width: `${Math.min(100, (cardsCompletedToday / initialDueCardsCount) * 100)}%` 
+                          width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%` 
                         }}
                       />
                     </div>
                     <div className="progress-percentage">
-                      {Math.round(Math.min(100, (cardsCompletedToday / initialDueCardsCount) * 100))}%
+                      {Math.round(Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100))}%
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="flashcard-main-content">
-                <FlashcardDisplay
-                  card={currentCard}
-                  showAnswer={showAnswer}
-                  onShowAnswer={() => setShowAnswer(true)}
-                  onToggleAnswer={() => setShowAnswer(!showAnswer)}
-                  onPreviousCard={prevCard}
-                  onNextCard={nextCard}
-                  onReviewCard={handleReviewCard}
-                  currentIndex={currentCardIndex}
-                  totalCards={filteredFlashcards.length}
-                  isDarkMode={isDarkMode}
-                  onToggleStarCard={toggleStarCard}
-                  onEditCard={handleEditCard}
-                  onGenerateQuestions={() => setShowGenerateModal(true)}
-                />
+              <div className={`flashcard-main-content ${isMaximized || isPopouted ? 'windowed' : ''}`}>
+                {/* Overlay for popout mode */}
+                {isPopouted && !isMaximized && (
+                  <div 
+                    className="popout-overlay"
+                    style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      width: '100vw',
+                      height: '100vh',
+                      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                      zIndex: 9998
+                    }}
+                    onClick={handleClosePopout}
+                  />
+                )}
+                
+                <div 
+                  className={`flashcard-window${isMaximized ? ' maximized' : ''}${isPopouted && !isMaximized ? ' popout' : ''}`}
+                  onMouseDown={isPopouted && !isMaximized ? handleMouseDown : undefined}
+                  style={isMaximized ? {
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                  } : isPopouted ? {
+                    position: 'fixed',
+                    top: windowPosition.y,
+                    left: windowPosition.x,
+                    width: `${windowSize.width}px`,
+                    height: `${windowSize.height}px`,
+                    zIndex: 9999,
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    cursor: isDragging ? 'move' : 'default',
+                    margin: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  } : {
+                    position: 'relative',
+                    width: '100%',
+                    height: 'auto',
+                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    margin: 'auto',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}
+                >
+                  {/* Window Control Buttons - Top Right */}
+                  {isMaximized ? (
+                    /* Floating Restore Button - Only when maximized */
+                    <button
+                      onClick={handleRestore}
+                      style={{
+                        position: 'absolute',
+                        top: '16px',
+                        right: '16px',
+                        zIndex: 10001,
+                        padding: '10px 10px',
+                        backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '20px',
+                        lineHeight: '1',
+                        color: isDarkMode ? '#d1d5db' : '#374151',
+                        transition: 'all 0.2s',
+                        backdropFilter: 'blur(4px)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
+                      }}
+                      title="Exit Fullscreen (ESC)"
+                    >
+                      ⊡
+                    </button>
+                  ) : isPopouted ? (
+                    /* Popout mode - Maximize and Close buttons */
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '20px',
+                      zIndex: 10001,
+                      display: 'flex',
+                      gap: '4px'
+                    }}>
+                      <button
+                        onClick={handleMaximize}
+                        style={{
+                          padding: '8px 8px',
+                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          lineHeight: '1',
+                          color: isDarkMode ? '#d1d5db' : '#374151',
+                          transition: 'all 0.2s',
+                          backdropFilter: 'blur(4px)',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                        }}
+                        onMouseOver={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
+                        }}
+                        title="Maximize to fullscreen"
+                      >
+                        ⛶
+                      </button>
+                      <button
+                        onClick={handleRestorePosition}
+                        style={{
+                          padding: '8px 8px',
+                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          lineHeight: '1',
+                          color: isDarkMode ? '#d1d5db' : '#374151',
+                          transition: 'all 0.2s',
+                          backdropFilter: 'blur(4px)',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                        }}
+                        onMouseOver={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
+                        }}
+                        title="Close popout and restore to normal view"
+                      >
+                        ⊡
+                      </button>
+                    </div>
+                  ) : (
+                    /* Normal mode - Maximize and Popout buttons */
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '20px',
+                      zIndex: 10001,
+                      display: 'flex',
+                      gap: '4px'
+                    }}>
+                      <button
+                        onClick={handleMaximize}
+                        style={{
+                          padding: '8px 8px',
+                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          lineHeight: '1',
+                          color: isDarkMode ? '#d1d5db' : '#374151',
+                          transition: 'all 0.2s',
+                          backdropFilter: 'blur(4px)',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                        }}
+                        onMouseOver={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
+                        }}
+                        title="Maximize to fullscreen"
+                      >
+                        ⛶
+                      </button>
+                      <button
+                        onClick={handlePopout}
+                        style={{
+                          padding: '8px 8px',
+                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          lineHeight: '1',
+                          color: isDarkMode ? '#d1d5db' : '#374151',
+                          transition: 'all 0.2s',
+                          backdropFilter: 'blur(4px)',
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                        }}
+                        onMouseOver={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
+                        }}
+                        title="Popout window"
+                      >
+                        ⧉
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Flashcard Content */}
+                  <div
+                    className="flashcard-content"
+                    style={{
+                      flex: 1,
+                      minHeight: 0,
+                      minWidth: 0,
+                      width: '100%',
+                      height: '100%',
+                      overflow: isMaximized || isPopouted ? 'auto' : 'visible',
+                      overflowX: 'hidden',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: isDarkMode ? '#6b7280 #374151' : '#d1d5db #f3f4f6',
+                      transition: 'height 0.1s ease',
+                    }}
+                  >
+                    <FlashcardDisplay
+                      card={currentCard}
+                      showAnswer={showAnswer}
+                      onShowAnswer={() => setShowAnswer(true)}
+                      onToggleAnswer={() => setShowAnswer(!showAnswer)}
+                      onPreviousCard={prevCard}
+                      onNextCard={nextCard}
+                      onReviewCard={handleReviewCard}
+                      currentIndex={currentCardIndex}
+                      totalCards={filteredFlashcards.length}
+                      isDarkMode={isDarkMode}
+                      onToggleStarCard={toggleStarCard}
+                      onEditCard={handleEditCard}
+                      onGenerateQuestions={() => setShowGenerateModal(true)}
+                    />
+                  </div>
+                  
+                  {/* Resize Handles - Only show when popouted */}
+                  {isPopouted && !isMaximized && (
+                    <>
+                      {/* Corner handles */}
+                      <div className="resize-handle resize-nw" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
+                      <div className="resize-handle resize-ne" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
+                      <div className="resize-handle resize-sw" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
+                      <div className="resize-handle resize-se" onMouseDown={(e) => handleResizeStart(e, 'se')} />
+                      
+                      {/* Edge handles */}
+                      <div className="resize-handle resize-n" onMouseDown={(e) => handleResizeStart(e, 'n')} />
+                      <div className="resize-handle resize-s" onMouseDown={(e) => handleResizeStart(e, 's')} />
+                      <div className="resize-handle resize-e" onMouseDown={(e) => handleResizeStart(e, 'e')} />
+                      <div className="resize-handle resize-w" onMouseDown={(e) => handleResizeStart(e, 'w')} />
+                    </>
+                  )}
+                </div>
               </div>
               
               {/* Right Side Content - Notes and Review Panel */}

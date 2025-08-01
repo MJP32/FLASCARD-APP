@@ -344,7 +344,7 @@ const ImportExportModal = ({
   if (showPreview) {
     return (
       <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-        <div className="modal-content import-preview-modal">
+        <div className={`modal-content import-preview-modal ${isDarkMode ? 'dark' : ''}`}>
           <div className="modal-header">
             <h2>📋 Import Preview ({previewCards.length} cards)</h2>
             <button 
@@ -678,7 +678,7 @@ const ImportExportModal = ({
 
   return (
     <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className="modal-content import-export-modal">
+      <div className={`modal-content import-export-modal ${isDarkMode ? 'dark' : ''}`}>
         <div className="modal-header">
           <h2>Import & Export Flashcards</h2>
           <button 

@@ -1017,7 +1017,7 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
 
   return (
     <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className="modal-content flashcard-form-modal">
+      <div className={`modal-content flashcard-form-modal ${isDarkMode ? 'dark' : ''}`}>
         <div className="modal-header">
           <h2>{editCard ? 'Edit Flashcard' : 'Create New Flashcard'}</h2>
           <button 

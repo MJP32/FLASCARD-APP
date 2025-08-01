@@ -130,7 +130,7 @@ const ManageCardsModal = ({
 
   return (
     <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className="modal-content manage-cards-modal">
+      <div className={`modal-content manage-cards-modal ${isDarkMode ? 'dark' : ''}`}>
         <div className="modal-header">
           <h2>📋 Manage Cards</h2>
           <button 

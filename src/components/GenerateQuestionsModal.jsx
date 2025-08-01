@@ -559,8 +559,8 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
   }
 
   return (
-    <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className="modal-content generate-modal">
+    <div className="modal-overlay">
+      <div className="modal-content generate-modal" style={{ backgroundColor: 'white', color: '#1f2937' }}>
         <div className="modal-header">
           <h2>🤖 Generate AI Questions</h2>
           <button 
@@ -633,6 +633,7 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
                           className="answer-dropdown-toggle"
                           onClick={(e) => {
                             e.preventDefault();
+                            e.stopPropagation();
                             toggleDropdown(index);
                           }}
                           type="button"

@@ -49,7 +49,20 @@ const SettingsModal = ({
   const [showAccountSection, setShowAccountSection] = useState(false);
   const [showAppearanceSection, setShowAppearanceSection] = useState(false);
 
-  // Calculate card rating statistics
+  // Helper function to infer level from FSRS parameters (same as FlashcardDisplay)
+  const inferLevelFromFSRS = (card) => {
+    if (card.level) return card.level;
+    
+    const { difficulty = 5, easeFactor = 2.5, interval = 1 } = card;
+    
+    if (difficulty >= 8) return 'again';
+    if (difficulty >= 7) return 'hard';
+    if (difficulty <= 3 && easeFactor >= 2.8) return 'easy';
+    if (interval >= 4) return 'good';
+    return 'new';
+  };
+
+  // Calculate card rating statistics using proper FSRS level inference
   const calculateRatingStats = () => {
     const stats = {
       again: 0,
@@ -60,23 +73,9 @@ const SettingsModal = ({
     };
     
     flashcards.forEach(card => {
-      if (!card.fsrsData || !card.fsrsData.reps || card.fsrsData.reps === 0) {
-        stats.new++;
-      } else if (card.lastRating) {
-        switch(card.lastRating) {
-          case 1:
-            stats.again++;
-            break;
-          case 2:
-            stats.hard++;
-            break;
-          case 3:
-            stats.good++;
-            break;
-          case 4:
-            stats.easy++;
-            break;
-        }
+      const level = inferLevelFromFSRS(card);
+      if (stats.hasOwnProperty(level)) {
+        stats[level]++;
       }
     });
     

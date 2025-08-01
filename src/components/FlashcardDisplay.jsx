@@ -48,8 +48,7 @@ const FlashcardDisplay = ({
     return 'new';
   };
 
-  // State for card info visibility
-  const [showCardInfo, setShowCardInfo] = useState(false);
+  // Removed showCardInfo state since card info panel was removed
 
 
   if (!card) {
@@ -70,9 +69,120 @@ const FlashcardDisplay = ({
     <div 
       className={`flashcard-container ${isDarkMode ? 'dark' : ''}`}
     >
-      {/* Card Info Header - Must be first for absolute positioning */}
-      <div className="card-info-header">
-        {/* Card Action Buttons - Top Left */}
+      {/* Removed card info header - moved to after answer section */}
+
+
+      {/* Removed card counter to simplify layout */}
+
+      {/* Main Content Area - Clickable */}
+      <div 
+        className="flashcard-content"
+        onClick={(e) => {
+          // Check if the click target is a dropdown element or inside a dropdown
+          const target = e.target;
+          const isDropdownClick = target.closest('details') || 
+                                  target.closest('summary') || 
+                                  target.closest('.info-dropdown') ||
+                                  target.closest('.card-info-dropdown') ||
+                                  target.closest('.answer-dropdown-toggle') ||
+                                  target.closest('.answer-dropdown-content') ||
+                                  target.closest('button') ||
+                                  target.closest('select') ||
+                                  target.closest('.dropdown');
+          
+          // Don't flip card if clicking on dropdown elements
+          if (isDropdownClick) {
+            return;
+          }
+          
+          if (onToggleAnswer) {
+            onToggleAnswer();
+          } else if (!showAnswer && onShowAnswer) {
+            onShowAnswer();
+          }
+        }}
+        style={{ cursor: 'pointer' }}
+      >
+        {/* Question Section - Only show when answer is not shown */}
+        {!showAnswer && (
+          <div 
+            className="flashcard-section question-section"
+            onClick={(e) => {
+              // Check if the click target is a dropdown element or inside a dropdown
+              const target = e.target;
+              const isDropdownClick = target.closest('details') || 
+                                      target.closest('summary') || 
+                                      target.closest('.info-dropdown') ||
+                                      target.closest('.card-info-dropdown') ||
+                                      target.closest('.answer-dropdown-toggle') ||
+                                      target.closest('.answer-dropdown-content') ||
+                                      target.closest('button') ||
+                                      target.closest('select') ||
+                                      target.closest('.dropdown');
+              
+              // Don't flip card if clicking on dropdown elements
+              if (isDropdownClick) {
+                return;
+              }
+              
+              if (onToggleAnswer) {
+                onToggleAnswer();
+              } else if (!showAnswer && onShowAnswer) {
+                onShowAnswer();
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <h3 className="section-label">Question</h3>
+            <div 
+              className="content"
+              dangerouslySetInnerHTML={{ __html: card.question || 'No question provided' }}
+            />
+          </div>
+        )}
+
+        {/* Answer Section - Show when answer is shown */}
+        {showAnswer && (
+          <div 
+            className="flashcard-section answer-section"
+            onClick={(e) => {
+              // Check if the click target is a dropdown element or inside a dropdown
+              const target = e.target;
+              const isDropdownClick = target.closest('details') || 
+                                      target.closest('summary') || 
+                                      target.closest('.info-dropdown') ||
+                                      target.closest('.card-info-dropdown') ||
+                                      target.closest('.answer-dropdown-toggle') ||
+                                      target.closest('.answer-dropdown-content') ||
+                                      target.closest('button') ||
+                                      target.closest('select') ||
+                                      target.closest('.dropdown');
+              
+              // Don't flip card if clicking on dropdown elements
+              if (isDropdownClick) {
+                return;
+              }
+              
+              if (onToggleAnswer) {
+                onToggleAnswer();
+              }
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <h3 className="section-label">Answer</h3>
+            <div className="content">
+              <div 
+                className="answer-text"
+                dangerouslySetInnerHTML={{ __html: card.answer || 'No answer provided' }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Card Info Section - Above footer */}
+      <div className="card-info-section">
+        {/* Card Action Buttons */}
         <div className="card-action-buttons">
           {/* Edit Card Button */}
           {onEditCard && (
@@ -128,103 +238,6 @@ const FlashcardDisplay = ({
         </div>
       </div>
 
-
-      {/* Card Counter */}
-      <div className="card-counter">
-        Card {currentIndex + 1} of {totalCards}
-      </div>
-
-      {/* Main Content Area - Clickable */}
-      <div 
-        className="flashcard-content"
-        onClick={(e) => {
-          // Don't flip card if clicking on dropdown elements
-          if (e.target.closest('details') || e.target.closest('.additional-info-dropdown')) {
-            return;
-          }
-          
-          if (onToggleAnswer) {
-            onToggleAnswer();
-          } else if (!showAnswer && onShowAnswer) {
-            onShowAnswer();
-          }
-        }}
-        style={{ cursor: 'pointer' }}
-      >
-        {/* Question Section - Only show when answer is not shown */}
-        {!showAnswer && (
-          <div 
-            className="flashcard-section question-section"
-            onClick={(e) => {
-              // Don't flip card if clicking on dropdown elements
-              if (e.target.closest('details') || e.target.closest('.additional-info-dropdown')) {
-                return;
-              }
-              
-              if (onToggleAnswer) {
-                onToggleAnswer();
-              } else if (!showAnswer && onShowAnswer) {
-                onShowAnswer();
-              }
-            }}
-            style={{ cursor: 'pointer' }}
-          >
-            <h3 className="section-label">Question</h3>
-            <div 
-              className="content"
-              dangerouslySetInnerHTML={{ __html: card.question || 'No question provided' }}
-            />
-          </div>
-        )}
-
-        {/* Answer Section - Show when answer is shown */}
-        {showAnswer && (
-          <div 
-            className="flashcard-section answer-section"
-            onClick={(e) => {
-              // Don't flip card if clicking on dropdown elements
-              if (e.target.closest('details') || e.target.closest('.additional-info-dropdown')) {
-                return;
-              }
-              
-              if (onToggleAnswer) {
-                onToggleAnswer();
-              }
-            }}
-            style={{ cursor: 'pointer' }}
-          >
-            <h3 className="section-label">Answer</h3>
-            <div className="content">
-              <div 
-                className="answer-text"
-                dangerouslySetInnerHTML={{ __html: card.answer || 'No answer provided' }}
-              />
-              
-              {/* Additional Info Dropdown - Inside content white box */}
-              {card.additional_info && (
-                <div className="additional-info-wrapper">
-                  <details 
-                    className="additional-info-dropdown"
-                    onClick={(e) => e.stopPropagation()} // Prevent card flip when clicking dropdown
-                  >
-                    <summary className="additional-info-header">
-                      <span className="dropdown-icon">▶</span>
-                      Additional Information
-                    </summary>
-                    <div className="additional-info-content">
-                      <div 
-                        className="additional-info-inner"
-                        dangerouslySetInnerHTML={{ __html: card.additional_info }}
-                      />
-                    </div>
-                  </details>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Bottom Controls Section */}
       <div className="flashcard-bottom">
         {/* Navigation Controls - Arranged horizontally */}
@@ -270,66 +283,57 @@ const FlashcardDisplay = ({
         </div>
 
 
-        {/* Keyboard Shortcuts Hint */}
-        <div className="keyboard-hints">
-          <small>
-            Click card or press <kbd>Space</kbd>/<kbd>Enter</kbd> to flip • <kbd>←</kbd>/<kbd>→</kbd> navigate • <kbd>E</kbd> edit card • <kbd>G</kbd> generate questions
-            {showAnswer && onReviewCard && (
-              <> • <kbd>1</kbd>-<kbd>4</kbd> review</>
-            )}
-          </small>
-        </div>
-      </div>
-
-      {/* Card Info Button - Bottom Right */}
-      <div className="card-info-container">
-        <button 
-          className="card-info-button"
-          onClick={() => setShowCardInfo(!showCardInfo)}
-          title="Card Information"
-        >
-          ℹ️ Card Info
-        </button>
-        
-        {showCardInfo && (
-          <div className="card-info-dropdown">
-            {card.createdAt && (
-              <div className="card-info-item">
-                <strong>Created:</strong> {new Date(card.createdAt.toDate ? card.createdAt.toDate() : card.createdAt).toLocaleDateString()}
-              </div>
-            )}
-            {card.dueDate && (
-              <div className="card-info-item">
-                <strong>Due:</strong> {new Date(card.dueDate.toDate ? card.dueDate.toDate() : card.dueDate).toLocaleDateString()}
-              </div>
-            )}
-            {card.lastReviewed && (
-              <div className="card-info-item">
-                <strong>Last reviewed:</strong> {new Date(card.lastReviewed.toDate ? card.lastReviewed.toDate() : card.lastReviewed).toLocaleDateString()}
-              </div>
-            )}
-            {card.reviewCount !== undefined && (
-              <div className="card-info-item">
-                <strong>Reviews:</strong> {card.reviewCount}
-              </div>
-            )}
-            {card.difficulty !== undefined && (
-              <div className="card-info-item">
-                <strong>Difficulty:</strong> {card.difficulty.toFixed(1)}
-              </div>
-            )}
-            {card.interval !== undefined && (
-              <div className="card-info-item">
-                <strong>Interval:</strong> {card.interval} day{card.interval !== 1 ? 's' : ''}
-              </div>
-            )}
-            {card.easeFactor !== undefined && (
-              <div className="card-info-item">
-                <strong>Ease Factor:</strong> {card.easeFactor.toFixed(2)}
-              </div>
-            )}
+        {/* Keyboard Shortcuts */}
+        <div className="keyboard-shortcuts">
+          <div className="shortcuts-hint">
+            <small>
+              💡 <strong>Keyboard Shortcuts:</strong> 
+              <kbd>Space</kbd> Show Answer | 
+              <kbd>←/→</kbd> Navigate | 
+              <kbd>1-4</kbd> Rate Card | 
+              <kbd>Enter</kbd> Next Card
+            </small>
           </div>
-        )}
+        </div>
+
+        {/* Card Info Dropdown - Moved to footer */}
+        <div className="card-info-dropdown">
+          <details 
+            className="info-dropdown"
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+          >
+            <summary 
+              className="info-header"
+              onClick={(e) => {
+                e.stopPropagation();
+              }}
+            >
+              📊 Card Info
+            </summary>
+            <div className="info-content">
+              <div className="info-item">
+                <strong>Card ID:</strong> {card?.id || 'N/A'}
+              </div>
+              <div className="info-item">
+                <strong>Reviews:</strong> {card?.reviewCount || 0}
+              </div>
+              <div className="info-item">
+                <strong>Last Review:</strong> {card?.lastReviewed ? new Date(card.lastReviewed.seconds * 1000).toLocaleDateString() : 'Never'}
+              </div>
+              <div className="info-item">
+                <strong>Due Date:</strong> {card?.dueDate ? new Date(card.dueDate.seconds * 1000).toLocaleDateString() : 'Not set'}
+              </div>
+              <div className="info-item">
+                <strong>Difficulty:</strong> {card?.difficulty ? card.difficulty.toFixed(2) : 'N/A'}
+              </div>
+              <div className="info-item">
+                <strong>Interval:</strong> {card?.interval || 0} days
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
   );

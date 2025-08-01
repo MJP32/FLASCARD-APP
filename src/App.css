@@ -384,9 +384,7 @@ p {
 }
 
 /* Collapsed header button - inherits header-collapse-toggle styles */
-.header-toggle-btn-collapsed.header-collapse-toggle {
-  /* Styles are inherited from .header-collapse-toggle */
-}
+/* .header-toggle-btn-collapsed.header-collapse-toggle styles are inherited from .header-collapse-toggle */
 
 /* Mobile-specific adjustments */
 @media (max-width: 768px) {
@@ -2004,19 +2002,44 @@ label {
   );
 }
 
-/* Main flashcard container - prevent from going under fixed header */
+/* Main flashcard container - clean border frame */
 .flashcard-container {
-  margin-top: 5px !important;
-  padding-top: 5px;
-  height: auto; /* Auto height to accommodate all content */
-  min-height: 800px; /* Increased height to match: 400px -> 800px */
+  /* Remove negative margins for cleaner positioning */
+  margin: 0 !important;
+  /* Add proper positioning */
   position: relative;
   z-index: 1;
-  overflow: visible; /* Ensure content is not clipped */
-  border-left: 6px solid #1e40af !important; /* Blue left border - same as notes */
-  border-right: 6px solid #1e40af !important; /* Blue right border - same as notes */
-  border-top: 6px solid #1e40af !important; /* Blue top border - same as notes */
-  box-sizing: border-box !important; /* Ensure borders are included */
+  /* Border frame - thicker top border */
+  border-left: 6px solid #1e40af !important;
+  border-right: 6px solid #1e40af !important;
+  border-bottom: 6px solid #1e40af !important;
+  border-top: 12px solid #1e40af !important; /* Thicker top border */
+  border-radius: 0 !important; /* Clean rectangular frame */
+  /* Background and sizing */
+  background-color: #ffffff !important; /* White background inside border */
+  box-sizing: border-box !important;
+  /* Proper dimensions */
+  width: 100% !important;
+  min-height: 950px !important; /* Optimal card height */
+  height: auto !important;
+  /* Internal spacing */
+  padding: 1rem !important; /* Padding inside the border */
+  /* Ensure no overflow issues */
+  overflow: visible !important;
+  /* Clean presentation */
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1) !important; /* Subtle blue shadow */
+}
+
+/* Dark mode support for flashcard container */
+.dark .flashcard-container {
+  background-color: #1f2937 !important; /* Dark background inside border */
+  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.2) !important; /* Slightly stronger shadow */
+}
+
+/* Dark mode support for flashcard sections */
+.dark .flashcard-section {
+  background-color: #374151; /* Darker background for content sections */
+  border-color: #4b5563; /* Darker inner border */
 }
 
 .flashcard-inner {
@@ -2201,14 +2224,46 @@ input:checked + .switch-slider:before {
   overflow-wrap: break-word;
 }
 
-/* Keep question section within card boundaries */
+/* Keep question section within card boundaries and prevent border overlap */
 .question-section {
   margin-left: 0;
   margin-right: 0;
+  margin-top: 3rem !important; /* Add top margin to prevent border overlap */
   overflow: hidden;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+/* Ensure question content fits within parent container */
+.flashcard-section .question-section .content {
+  font-weight: bold !important;
+  font-size: 1.5rem !important;
+  line-height: 1.4 !important;
+  color: var(--text-primary) !important;
+  text-align: center !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-wrap: break-word !important;
+  min-height: 300px !important; /* Increased for larger panel */
+  padding: 3rem !important; /* Increased padding for larger area */
+  background-color: #ffffff !important; /* Pure white background */
+  border-radius: var(--radius-md) !important; /* Add rounded corners */
+  margin: 0.5rem 0 !important; /* Add margin for separation */
+  border: 1px solid #e9ecef !important;
+}
+
+/* Flexible content areas in windowed mode */
+.flashcard-window.maximized .flashcard-section .question-section .content,
+.flashcard-main-content.windowed .flashcard-section .question-section .content,
+.flashcard-window.maximized .flashcard-section .answer-section .content,
+.flashcard-main-content.windowed .flashcard-section .answer-section .content {
+  flex: 1 !important;
+  min-height: 200px !important;
 }
 
 .flashcard-answer {
@@ -2430,6 +2485,7 @@ input:checked + .switch-slider:before {
   color: var(--text-primary);
   position: relative;
   overflow-x: hidden;
+  overflow-y: auto; /* Allow vertical scrolling to see footer */
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
@@ -2542,9 +2598,10 @@ input:checked + .switch-slider:before {
   flex: 1;
   padding: 0;
   width: 100%;
-  min-height: calc(100vh - 200px); /* Ensure minimum height */
+  min-height: auto; /* Changed from calc(100vh - 200px) to auto */
   display: flex;
   flex-direction: column;
+  overflow: visible; /* Ensure content doesn't hide footer */
 }
 
 /* Anonymous User Warning */
@@ -2754,12 +2811,12 @@ input:checked + .switch-slider:before {
 
 /* Flashcard Display */
 .flashcard-container {
-  background-color: #e0f2fe; /* Light blue background */
+  background-color: transparent; /* Removed background square */
   border: 2px solid var(--primary-color); /* Consistent frame border */
   border-radius: var(--radius-lg);
-  padding: 2rem;
-  box-shadow: var(--shadow);
-  margin-bottom: 4rem;
+  padding: 0; /* Removed all padding */
+  box-shadow: none; /* Removed shadow to eliminate any background effect */
+  margin-bottom: 2rem; /* Reduced bottom margin */
   display: flex;
   flex-direction: column;
   height: 950px; /* Match notes section height */
@@ -2769,6 +2826,16 @@ input:checked + .switch-slider:before {
   overflow-y: auto; /* Allow vertical scrolling */
   overflow-x: hidden; /* Prevent horizontal overflow */
   box-sizing: border-box !important; /* Ensure borders are included */
+}
+
+/* Flexible height for flashcard container in popout/maximized windows */
+.flashcard-window.maximized .flashcard-container,
+.flashcard-main-content.windowed .flashcard-container {
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+  flex: 1 !important;
+  margin-bottom: 0 !important;
 }
 
 /* Additional Info Wrapper - Contained within white content box */
@@ -2886,18 +2953,21 @@ input:checked + .switch-slider:before {
 
 .flashcard-content {
   flex: 1;
-  margin-bottom: 0; /* Minimal space before card footer */
+  margin: 0; /* Clean margins */
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding-top: 1rem; /* Reduced from 2rem */
-  min-height: 550px; /* Increased from 300px */
-  padding-bottom: 0; /* No bottom padding */
+  padding: 0; /* No padding - let container handle spacing */
+  min-height: 400px; /* Reasonable min height */
+  height: auto;
   overflow-y: auto; /* Allow scrolling if content overflows */
-  max-height: calc(100% - 150px); /* Adjusted for larger content area */
+  max-height: none; /* Remove height restriction */
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
   user-select: none; /* Prevent text selection when clicking */
+  /* Ensure content fits properly within border */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Hover effect for clickable card */
@@ -3025,6 +3095,36 @@ input:checked + .switch-slider:before {
   color: var(--text-primary);
 }
 
+/* New card info dropdown styling */
+.card-info-dropdown {
+  margin-top: var(--space-2);
+}
+
+.info-dropdown {
+  color: #6b7280 !important; /* Gray text */
+}
+
+.info-header {
+  color: #6b7280 !important; /* Gray text for summary */
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.info-content {
+  margin-top: var(--space-2);
+  padding-left: var(--space-3);
+}
+
+.info-item {
+  margin-bottom: var(--space-1);
+  font-size: 0.875rem;
+  color: #6b7280 !important; /* Gray text */
+}
+
+.info-item strong {
+  color: #6b7280 !important; /* Gray text for strong elements */
+}
+
 .card-info-item:last-child {
   margin-bottom: 0;
 }
@@ -3052,6 +3152,16 @@ input:checked + .switch-slider:before {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+/* When inside card-info-section, no absolute positioning */
+.card-info-section .card-action-buttons {
+  position: static;
+  pointer-events: auto;
+}
+
+/* Legacy absolute positioning for card-info-header */
+.card-info-header .card-action-buttons {
   position: absolute;
   top: 8px;
   left: 16px;
@@ -3076,10 +3186,24 @@ input:checked + .switch-slider:before {
   justify-content: center;
   gap: 0.5rem;
   font-size: 0.875rem;
-  font-weight: 400;
+  font-weight: 500;
   white-space: nowrap;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   min-width: 120px; /* Make both buttons same width */
+}
+
+/* Edit button - Orange theme */
+.card-action-btn.edit-btn {
+  background-color: #fed7aa; /* Light orange background */
+  border-color: #fb923c;
+  color: #c2410c;
+}
+
+/* Generate button - Blue theme */
+.card-action-btn.generate-btn {
+  background-color: #bfdbfe; /* Light blue background */
+  border-color: #60a5fa;
+  color: #1e40af;
 }
 
 .card-action-btn:hover {
@@ -3090,23 +3214,39 @@ input:checked + .switch-slider:before {
 }
 
 .card-action-btn.edit-btn:hover {
-  background-color: #f59e0b; /* Orange for edit */
-  border-color: #d97706;
+  background-color: #f97316; /* Darker orange on hover */
+  border-color: #ea580c;
   color: white;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+  transform: translateY(-1px);
 }
 
 .card-action-btn.generate-btn:hover {
-  background-color: #3b82f6; /* Blue for generate */
+  background-color: #3b82f6; /* Darker blue on hover */
   border-color: #2563eb;
   color: white;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transform: translateY(-1px);
 }
 
 .dark .card-action-btn {
   background-color: rgba(30, 41, 59, 0.9);
   color: var(--text-dark-primary);
   border-color: var(--border-dark);
+}
+
+/* Dark mode edit button */
+.dark .card-action-btn.edit-btn {
+  background-color: #7c2d12; /* Dark orange background */
+  border-color: #9a3412;
+  color: #fed7aa;
+}
+
+/* Dark mode generate button */
+.dark .card-action-btn.generate-btn {
+  background-color: #1e3a8a; /* Dark blue background */
+  border-color: #1e40af;
+  color: #bfdbfe;
 }
 
 /* Card Metadata positioned in bottom right */
@@ -3150,6 +3290,18 @@ input:checked + .switch-slider:before {
   /* background: rgba(255, 0, 0, 0.1); */
 }
 
+/* Card Info Section - New position after answer */
+.card-info-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background-color: transparent; /* Removed background */
+  border-radius: var(--radius-md);
+  margin-top: 1rem;
+  gap: 1rem;
+}
+
 .card-info-header > * {
   pointer-events: auto;
 }
@@ -3166,13 +3318,22 @@ input:checked + .switch-slider:before {
 }
 
 .card-tags {
-  position: absolute;
-  top: 8px;
-  right: 16px;
   display: flex;
   flex-direction: row;
   gap: 8px;
   align-items: center;
+}
+
+/* When inside card-info-section, no absolute positioning */
+.card-info-section .card-tags {
+  position: static;
+}
+
+/* Legacy absolute positioning for card-info-header */
+.card-info-header .card-tags {
+  position: absolute;
+  top: 8px;
+  right: 16px;
   z-index: 15;
 }
 
@@ -3261,9 +3422,9 @@ input:checked + .switch-slider:before {
 .star-toggle-btn-inline {
   background: none;
   border: none;
-  font-size: 1rem;
+  font-size: 1.25rem; /* Increased from 1rem */
   cursor: pointer;
-  color: var(--text-secondary);
+  color: #9ca3af; /* Default gray color */
   padding: 0.25rem;
   border-radius: var(--radius-sm);
   transition: all var(--transition-normal);
@@ -3272,56 +3433,79 @@ input:checked + .switch-slider:before {
   align-items: center;
   justify-content: center;
   margin-left: 4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle text shadow */
 }
 
 .star-toggle-btn-inline:hover {
-  color: #fbbf24;
-  background-color: rgba(251, 191, 36, 0.1);
-  transform: scale(1.1);
+  color: #f59e0b; /* Bright amber/gold */
+  background-color: rgba(245, 158, 11, 0.15);
+  transform: scale(1.15); /* Slightly bigger scale */
+  text-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
 }
 
 .star-toggle-btn-inline.starred {
-  color: #fbbf24;
+  color: #f59e0b; /* Bright amber/gold for starred */
+  text-shadow: 0 2px 4px rgba(245, 158, 11, 0.4);
 }
 
 .star-toggle-btn-inline.starred:hover {
-  color: var(--text-secondary);
-  background-color: rgba(156, 163, 175, 0.1);
+  color: #dc2626; /* Red color on hover when starred (to unstar) */
+  background-color: rgba(220, 38, 38, 0.1);
+  text-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
 }
 
 .dark .star-toggle-btn-inline {
-  color: var(--text-dark-secondary);
+  color: #6b7280; /* Darker gray for dark mode */
 }
 
 .dark .star-toggle-btn-inline:hover {
-  color: #fbbf24;
-  background-color: rgba(251, 191, 36, 0.15);
+  color: #fbbf24; /* Bright yellow/gold */
+  background-color: rgba(251, 191, 36, 0.2);
+  transform: scale(1.15);
+  text-shadow: 0 2px 4px rgba(251, 191, 36, 0.4);
 }
 
 .dark .star-toggle-btn-inline.starred {
-  color: #fbbf24;
+  color: #fbbf24; /* Bright yellow/gold for starred */
+  text-shadow: 0 2px 4px rgba(251, 191, 36, 0.5);
 }
 
 .dark .star-toggle-btn-inline.starred:hover {
-  color: var(--text-dark-secondary);
-  background-color: rgba(156, 163, 175, 0.15);
+  color: #f87171; /* Light red on hover when starred (to unstar) */
+  background-color: rgba(248, 113, 113, 0.15);
+  text-shadow: 0 2px 4px rgba(248, 113, 113, 0.4);
 }
 
 /* Removed duplicate - using the definition above in card-info-header section */
 
 .flashcard-section {
-  margin-bottom: 2rem;
-  background-color: var(--surface);
-  border: 2px solid var(--border);
+  margin-bottom: 1rem;
+  background-color: #f8fafc; /* Light background for content sections */
+  border: 1px solid #e2e8f0; /* Subtle inner border */
   border-radius: var(--radius-lg);
-  padding: 3.5rem;
-  min-height: 400px;
-  height: auto;
+  padding: 3rem; /* Increased padding for larger area */
+  min-height: 350px; /* Base min height */
+  height: auto !important; /* Expand with content */
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  overflow: visible;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+  overflow: visible !important; /* Ensure dropdown content is visible */
+  /* Ensure content fits within border frame */
+  margin-left: 0;
+  margin-right: 0;
+  /* Ensure background expands with content */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Flexible sizing for flashcard sections in windowed mode */
+.flashcard-window.maximized .flashcard-section,
+.flashcard-main-content.windowed .flashcard-section {
+  flex: 1;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
 }
 
 .section-label {
@@ -3338,9 +3522,9 @@ input:checked + .switch-slider:before {
   line-height: 1.6;
   color: var(--text-primary);
   text-align: left;
-  min-height: 700px; /* Increased from 400px for bigger white box */
+  min-height: 300px; /* Reduced to fit within flashcard section */
   height: auto; /* Allow content to expand */
-  padding: 5rem; /* Increased from 4rem for more internal space */
+  padding: 2rem; /* Reduced to fit within parent container */
   background-color: #f8f9fa;
   border-radius: var(--radius-md);
   border: 1px solid #e9ecef;
@@ -3354,32 +3538,38 @@ input:checked + .switch-slider:before {
   position: relative; /* Establish containing block for positioned children */
 }
 
-/* Answer section specific styling to prevent overflow */
+/* Answer section specific styling to prevent overlap with border */
 .answer-section {
   overflow: visible; /* Allow dropdown to be visible */
   position: relative;
   margin-left: 0;
   margin-right: 0;
+  margin-top: 3rem !important; /* Increased top margin to prevent border overlap */
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-}
-
-.answer-section .content {
-  overflow-y: visible; /* Allow dropdown content to show vertically */
-  overflow-x: hidden; /* Hide horizontal scrollbar */
-  max-height: none; /* Remove height restriction */
-  margin-bottom: 0; /* Remove bottom margin */
+  min-height: auto !important; /* Allow natural height expansion */
+  height: auto !important; /* Expand with content */
   display: flex;
   flex-direction: column;
-  min-height: 700px; /* Maintain minimum height */
+}
+
+.flashcard-section .answer-section .content {
+  overflow-y: visible !important; /* Allow dropdown content to show vertically */
+  overflow-x: hidden !important; /* Hide horizontal scrollbar */
+  max-height: none !important; /* Remove height restriction */
+  margin: 0.5rem 0 !important; /* Add margin for separation */
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 300px !important; /* Increased for larger panel */
   width: 100% !important; /* Force full width */
   max-width: 100% !important; /* Ensure doesn't shrink */
-  position: relative;
-  background-color: #f8f9fa !important; /* Ensure white background */
-  padding: 4rem !important; /* Proper padding */
-  padding-bottom: 2rem !important; /* Less bottom padding */
+  position: relative !important;
+  background-color: #ffffff !important; /* Pure white background */
+  padding: 3rem !important; /* Increased padding for larger area */
   box-sizing: border-box !important; /* Include padding in width */
+  border-radius: var(--radius-md) !important; /* Add rounded corners */
+  border: 1px solid #e9ecef !important; /* Add subtle border */
 }
 
 /* Answer text styling */
@@ -3388,6 +3578,7 @@ input:checked + .switch-slider:before {
   line-height: 1.4;
   color: var(--text-primary);
   margin-bottom: 1rem;
+  padding-top: 1.5rem !important; /* Increased top padding to prevent border overlap */
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -3598,8 +3789,11 @@ input:checked + .switch-slider:before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: relative;
-  margin-top: 0;
+  position: sticky;
+  bottom: 0;
+  margin-top: auto; /* Push footer to bottom */
+  z-index: 100; /* Ensure footer is visible */
+  width: 100%;
 }
 
 .footer-stats {
@@ -3612,6 +3806,8 @@ input:checked + .switch-slider:before {
 .footer-shortcuts {
   font-size: 0.75rem;
   color: var(--text-secondary);
+  display: block; /* Ensure it's visible */
+  opacity: 1; /* Ensure it's not transparent */
 }
 
 /* Modal Styles */
@@ -3625,7 +3821,7 @@ input:checked + .switch-slider:before {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 15000;
   padding: 1rem;
 }
 
@@ -3647,6 +3843,7 @@ input:checked + .switch-slider:before {
   justify-content: space-between;
   padding: 1.5rem 2rem 1rem;
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
 
 .modal-header h2 {
@@ -3663,10 +3860,287 @@ input:checked + .switch-slider:before {
   color: var(--text-secondary);
   padding: 0.25rem;
   line-height: 1;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
 }
 
 .close-btn:hover {
   color: var(--text-primary);
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .close-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Window Management Styles */
+.flashcard-main-content.windowed {
+  position: static;
+}
+
+.flashcard-window {
+  transition: box-shadow 0.3s ease, border-radius 0.3s ease;
+  position: relative;
+}
+
+/* Maximized window should take up the entire viewport */
+/* Maximized window should take up the entire viewport */
+.flashcard-window.maximized {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 10000 !important;
+  transform: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Ensure flashcard-container fills maximized or popout window */
+.flashcard-window.maximized .flashcard-container,
+.flashcard-window.popout .flashcard-container {
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 100vh !important;
+  max-height: 100vh !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* In popout mode, ensure window and container fill the window */
+.flashcard-window.popout {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  position: relative !important; /* Ensure resize handles can be positioned */
+}
+
+/* Ensure flashcard-content fills available space */
+.flashcard-window.maximized .flashcard-content,
+.flashcard-window.popout .flashcard-content {
+  flex: 1 1 auto !important;
+  min-height: 100vh !important;
+  max-height: 100vh !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100vh !important;
+  overflow: visible !important;
+  padding: 2rem !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure parent containers don't constrain maximized window */
+.flashcard-main-content:has(.flashcard-window.maximized) {
+  position: static !important;
+  width: auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+/* Alternative for browsers that don't support :has() */
+.flashcard-main-content.has-maximized {
+  position: static !important;
+  width: auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+
+/* Ensure body doesn't interfere with fullscreen */
+body:has(.flashcard-window.maximized) {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Alternative for browsers that don't support :has() */
+body.fullscreen-mode {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.window-title-bar {
+  -webkit-app-region: drag;
+}
+
+.window-title-bar button {
+  -webkit-app-region: no-drag;
+}
+
+/* Prevent text selection when dragging */
+.window-title-bar * {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Resize Handles */
+.resize-handle {
+  position: absolute;
+  background: rgba(59, 130, 246, 0.5); /* More visible blue */
+  border: 2px solid #3b82f6; /* Thicker blue border */
+  z-index: 99999; /* Extremely high z-index to ensure visibility */
+  transition: background-color 0.2s ease;
+  pointer-events: auto; /* Ensure they can be clicked */
+}
+
+.resize-handle:hover {
+  background: rgba(59, 130, 246, 0.8); /* More visible on hover */
+  border-color: #1d4ed8; /* Darker blue on hover */
+}
+
+/* Corner handles */
+.resize-handle.resize-nw,
+.resize-handle.resize-ne,
+.resize-handle.resize-sw,
+.resize-handle.resize-se {
+  width: 16px; /* Bigger corner handles */
+  height: 16px; 
+  border-radius: 3px; /* Slightly more rounded */
+}
+
+.resize-handle.resize-nw {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+}
+
+.resize-handle.resize-ne {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+
+.resize-handle.resize-sw {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+}
+
+.resize-handle.resize-se {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+
+/* Edge handles */
+.resize-handle.resize-n,
+.resize-handle.resize-s {
+  left: 16px; /* Account for bigger corner handles */
+  right: 16px;
+  height: 8px; /* Even bigger for better visibility */
+}
+
+.resize-handle.resize-e,
+.resize-handle.resize-w {
+  top: 16px; /* Account for bigger corner handles */
+  bottom: 16px;
+  width: 8px; /* Even bigger for better visibility */
+}
+
+.resize-handle.resize-n {
+  top: 0;
+  cursor: n-resize;
+}
+
+.resize-handle.resize-s {
+  bottom: 0;
+  cursor: s-resize;
+}
+
+.resize-handle.resize-e {
+  right: 0;
+  cursor: e-resize;
+}
+
+.resize-handle.resize-w {
+  left: 0;
+  cursor: w-resize;
+}
+
+/* Ensure resize handles are visible in popout mode */
+.flashcard-window.popout .resize-handle {
+  opacity: 0.6; /* Make them visible */
+  background: rgba(59, 130, 246, 0.4) !important; /* Blue background */
+}
+
+.flashcard-window.popout .resize-handle:hover {
+  opacity: 1;
+  background: rgba(59, 130, 246, 0.7) !important; /* Darker on hover */
+}
+
+/* Prevent body scroll when window is popouted */
+body.has-popout {
+  overflow: hidden;
+}
+
+/* Custom scrollbar styling for popout window */
+.flashcard-window .flashcard-content::-webkit-scrollbar,
+.flashcard-window > div::-webkit-scrollbar {
+  width: 12px;
+}
+
+.flashcard-window .flashcard-content::-webkit-scrollbar-track,
+.flashcard-window > div::-webkit-scrollbar-track {
+  background: var(--surface, #f8f9fa);
+  border-radius: 6px;
+}
+
+.flashcard-window .flashcard-content::-webkit-scrollbar-thumb,
+.flashcard-window > div::-webkit-scrollbar-thumb {
+  background: var(--border, #d1d5db);
+  border-radius: 6px;
+  border: 2px solid var(--surface, #f8f9fa);
+}
+
+.flashcard-window .flashcard-content::-webkit-scrollbar-thumb:hover,
+.flashcard-window > div::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary, #6b7280);
+}
+
+/* Dark mode scrollbar */
+.dark .flashcard-window .flashcard-content::-webkit-scrollbar-track,
+.dark .flashcard-window > div::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.dark .flashcard-window .flashcard-content::-webkit-scrollbar-thumb,
+.dark .flashcard-window > div::-webkit-scrollbar-thumb {
+  background: #6b7280;
+  border-color: #374151;
+}
+
+.dark .flashcard-window .flashcard-content::-webkit-scrollbar-thumb:hover,
+.dark .flashcard-window > div::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }
 
 /* Messages */
@@ -5570,6 +6044,7 @@ input:checked + .switch-slider:before {
 .question-text, .answer-text {
   margin-bottom: var(--space-3);
   line-height: 1.5;
+  padding-top: 1.5rem !important; /* Add top padding to prevent border overlap */
 }
 
 .question-text strong, .answer-text strong {
@@ -6217,15 +6692,281 @@ input:checked + .switch-slider:before {
   }
 }
 
-/* Dark mode adjustments for manage cards */
-.modal-overlay.dark .modal-content {
+/* Dark mode adjustments for manage cards - general rule */
+.modal-overlay.dark .modal-content:not(.flashcard-form-modal):not(.manage-cards-modal):not(.ai-modal-content) {
   background: #1e40af;
   color: white;
 }
 
-.modal-overlay.dark .manage-cards-modal {
-  background: var(--surface-dark);
-  border-color: var(--border-dark);
+/* Force light mode for flashcard form modal regardless of app theme */
+.modal-overlay .flashcard-form-modal,
+.modal-overlay .modal-content.flashcard-form-modal,
+.modal-overlay.dark .flashcard-form-modal,
+.modal-overlay.dark .modal-content.flashcard-form-modal {
+  background: white !important;
+  color: #1f2937 !important;
+  border: 3px solid blue !important;
+}
+
+.modal-overlay .flashcard-form-modal .modal-header,
+.modal-overlay .flashcard-form-modal .form-group label,
+.modal-overlay .flashcard-form-modal .form-actions,
+.modal-overlay.dark .flashcard-form-modal .modal-header,
+.modal-overlay.dark .flashcard-form-modal .form-group label,
+.modal-overlay.dark .flashcard-form-modal .form-actions {
+  color: #1f2937 !important;
+}
+
+.modal-overlay .flashcard-form-modal input,
+.modal-overlay .flashcard-form-modal select,
+.modal-overlay .flashcard-form-modal textarea,
+.modal-overlay.dark .flashcard-form-modal input,
+.modal-overlay.dark .flashcard-form-modal select,
+.modal-overlay.dark .flashcard-form-modal textarea {
+  background: white !important;
+  color: #1f2937 !important;
+  border-color: #d1d5db !important;
+}
+
+.modal-overlay .flashcard-form-modal input:focus,
+.modal-overlay .flashcard-form-modal select:focus,
+.modal-overlay .flashcard-form-modal textarea:focus,
+.modal-overlay.dark .flashcard-form-modal input:focus,
+.modal-overlay.dark .flashcard-form-modal select:focus,
+.modal-overlay.dark .flashcard-form-modal textarea:focus {
+  border-color: #3b82f6 !important;
+  background: white !important;
+}
+
+/* Force light mode for manage cards modal regardless of app theme */
+.modal-overlay .manage-cards-modal,
+.modal-overlay .modal-content.manage-cards-modal,
+.modal-overlay.dark .manage-cards-modal,
+.modal-overlay.dark .modal-content.manage-cards-modal {
+  background: white !important;
+  color: #1f2937 !important;
+  border: 3px solid blue !important;
+}
+
+/* Add blue debugging borders to ALL modal screens */
+.settings-modal,
+.import-export-modal,
+.generate-modal,
+.manage-cards-modal,
+.ai-modal-content,
+.import-preview-modal,
+.study-guide-modal,
+.modal-content,
+.flashcard-form-modal {
+  border: 3px solid blue !important;
+}
+
+/* Force light mode for import/export modals regardless of app theme */
+.modal-overlay .import-export-modal,
+.modal-overlay .modal-content.import-export-modal,
+.modal-overlay.dark .import-export-modal,
+.modal-overlay.dark .modal-content.import-export-modal,
+.modal-overlay .import-preview-modal,
+.modal-overlay .modal-content.import-preview-modal,
+.modal-overlay.dark .import-preview-modal,
+.modal-overlay.dark .modal-content.import-preview-modal {
+  background: white !important;
+  color: #1f2937 !important;
+  border: 3px solid blue !important;
+}
+
+.modal-overlay .import-export-modal .modal-header,
+.modal-overlay .import-export-modal .tab-button,
+.modal-overlay .import-export-modal .form-group label,
+.modal-overlay .import-export-modal .form-actions,
+.modal-overlay .import-preview-modal .modal-header,
+.modal-overlay .import-preview-modal .form-group label,
+.modal-overlay .import-preview-modal .form-actions,
+.modal-overlay.dark .import-export-modal .modal-header,
+.modal-overlay.dark .import-export-modal .tab-button,
+.modal-overlay.dark .import-export-modal .form-group label,
+.modal-overlay.dark .import-export-modal .form-actions,
+.modal-overlay.dark .import-preview-modal .modal-header,
+.modal-overlay.dark .import-preview-modal .form-group label,
+.modal-overlay.dark .import-preview-modal .form-actions {
+  color: #1f2937 !important;
+}
+
+.modal-overlay .import-export-modal input,
+.modal-overlay .import-export-modal select,
+.modal-overlay .import-export-modal textarea,
+.modal-overlay .import-preview-modal input,
+.modal-overlay .import-preview-modal select,
+.modal-overlay .import-preview-modal textarea,
+.modal-overlay.dark .import-export-modal input,
+.modal-overlay.dark .import-export-modal select,
+.modal-overlay.dark .import-export-modal textarea,
+.modal-overlay.dark .import-preview-modal input,
+.modal-overlay.dark .import-preview-modal select,
+.modal-overlay.dark .import-preview-modal textarea {
+  background: white !important;
+  color: #1f2937 !important;
+  border-color: #d1d5db !important;
+}
+
+.modal-overlay .import-export-modal input:focus,
+.modal-overlay .import-export-modal select:focus,
+.modal-overlay .import-export-modal textarea:focus,
+.modal-overlay .import-preview-modal input:focus,
+.modal-overlay .import-preview-modal select:focus,
+.modal-overlay .import-preview-modal textarea:focus,
+.modal-overlay.dark .import-export-modal input:focus,
+.modal-overlay.dark .import-export-modal select:focus,
+.modal-overlay.dark .import-export-modal textarea:focus,
+.modal-overlay.dark .import-preview-modal input:focus,
+.modal-overlay.dark .import-preview-modal select:focus,
+.modal-overlay.dark .import-preview-modal textarea:focus {
+  border-color: #3b82f6 !important;
+  background: white !important;
+}
+
+/* Force light mode for generate questions modal regardless of app theme */
+.modal-overlay .generate-modal,
+.modal-overlay .modal-content.generate-modal,
+.modal-overlay.dark .generate-modal,
+.modal-overlay.dark .modal-content.generate-modal {
+  background: white !important;
+  color: #1f2937 !important;
+  border: 3px solid blue !important;
+}
+
+/* Force light mode for all generate modal content areas */
+.modal-overlay .generate-modal .generate-content,
+.modal-overlay.dark .generate-modal .generate-content,
+.modal-overlay .generate-modal .card-preview,
+.modal-overlay.dark .generate-modal .card-preview,
+.modal-overlay .generate-modal .preview-question,
+.modal-overlay.dark .generate-modal .preview-question,
+.modal-overlay .generate-modal .preview-answer,
+.modal-overlay.dark .generate-modal .preview-answer,
+.modal-overlay .generate-modal .question-card,
+.modal-overlay.dark .generate-modal .question-card {
+  background: white !important;
+  color: #1f2937 !important;
+}
+
+.modal-overlay .generate-modal .modal-header,
+.modal-overlay .generate-modal .form-group label,
+.modal-overlay .generate-modal .form-actions,
+.modal-overlay .generate-modal .options-section h3,
+.modal-overlay .generate-modal .checkbox-label,
+.modal-overlay.dark .generate-modal .modal-header,
+.modal-overlay.dark .generate-modal .form-group label,
+.modal-overlay.dark .generate-modal .form-actions,
+.modal-overlay.dark .generate-modal .options-section h3,
+.modal-overlay.dark .generate-modal .checkbox-label,
+.modal-overlay .generate-modal h3,
+.modal-overlay.dark .generate-modal h3,
+.modal-overlay .generate-modal strong,
+.modal-overlay.dark .generate-modal strong,
+.modal-overlay .generate-modal span,
+.modal-overlay.dark .generate-modal span,
+.modal-overlay .generate-modal .current-card-preview,
+.modal-overlay.dark .generate-modal .current-card-preview {
+  color: #1f2937 !important;
+  background: transparent !important;
+}
+
+.modal-overlay .generate-modal input,
+.modal-overlay .generate-modal select,
+.modal-overlay .generate-modal textarea,
+.modal-overlay .generate-modal input[type="checkbox"],
+.modal-overlay .generate-modal input[type="number"],
+.modal-overlay.dark .generate-modal input,
+.modal-overlay.dark .generate-modal select,
+.modal-overlay.dark .generate-modal textarea,
+.modal-overlay.dark .generate-modal input[type="checkbox"],
+.modal-overlay.dark .generate-modal input[type="number"] {
+  background: white !important;
+  color: #1f2937 !important;
+  border-color: #d1d5db !important;
+}
+
+.modal-overlay .generate-modal input:focus,
+.modal-overlay .generate-modal select:focus,
+.modal-overlay .generate-modal textarea:focus,
+.modal-overlay.dark .generate-modal input:focus,
+.modal-overlay.dark .generate-modal select:focus,
+.modal-overlay.dark .generate-modal textarea:focus {
+  border-color: #3b82f6 !important;
+  background: white !important;
+}
+
+/* Force light mode for all generate modal buttons and results */
+.modal-overlay .generate-modal .btn,
+.modal-overlay.dark .generate-modal .btn,
+.modal-overlay .generate-modal button,
+.modal-overlay.dark .generate-modal button,
+.modal-overlay .generate-modal .results-step,
+.modal-overlay.dark .generate-modal .results-step,
+.modal-overlay .generate-modal .input-step,
+.modal-overlay.dark .generate-modal .input-step,
+.modal-overlay .generate-modal .modal-actions,
+.modal-overlay.dark .generate-modal .modal-actions {
+  background: white !important;
+  color: #1f2937 !important;
+}
+
+/* Ensure all nested content has light mode styling */
+.modal-overlay .generate-modal *,
+.modal-overlay.dark .generate-modal * {
+  color: #1f2937 !important;
+}
+
+/* Override any remaining dark mode styles in generate modal */
+.generate-modal,
+.generate-modal.dark,
+.modal-content.generate-modal,
+.modal-content.generate-modal.dark,
+.dark .generate-modal,
+.dark .modal-content.generate-modal {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+/* Force all backgrounds to white in generate modal */
+.generate-modal *,
+.generate-modal.dark *,
+.dark .generate-modal *,
+.modal-overlay .generate-modal .modal-body,
+.modal-overlay.dark .generate-modal .modal-body,
+.modal-overlay .generate-modal .form-section,
+.modal-overlay.dark .generate-modal .form-section,
+.modal-overlay .generate-modal .options-section,
+.modal-overlay.dark .generate-modal .options-section {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+/* Specific overrides for problem areas */
+.generate-modal .card-preview,
+.generate-modal.dark .card-preview,
+.dark .generate-modal .card-preview {
+  background-color: #f3f4f6 !important;
+  border: 1px solid #e5e7eb !important;
+  color: #1f2937 !important;
+}
+
+/* Ensure buttons in generate modal are properly styled */
+.generate-modal .btn-primary,
+.generate-modal.dark .btn-primary,
+.dark .generate-modal .btn-primary {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  border: none !important;
+}
+
+.generate-modal .btn-secondary,
+.generate-modal.dark .btn-secondary,
+.dark .generate-modal .btn-secondary {
+  background-color: #e5e7eb !important;
+  color: #1f2937 !important;
+  border: none !important;
 }
 
 .modal-overlay.dark .manage-cards-stats {
@@ -6293,6 +7034,93 @@ input:checked + .switch-slider:before {
 
 .modal-overlay.dark .stat-value {
   color: var(--text-dark-primary);
+}
+
+/* Force light mode for all manage cards modal components - override dark mode */
+.modal-overlay .manage-cards-stats,
+.modal-overlay.dark .manage-cards-stats {
+  background: white !important;
+  border-color: #d1d5db !important;
+  color: #1f2937 !important;
+}
+
+.modal-overlay .manage-cards-content,
+.modal-overlay.dark .manage-cards-content {
+  background: white !important;
+  border-color: #d1d5db !important;
+}
+
+.modal-overlay .card-item,
+.modal-overlay.dark .card-item {
+  background-color: white !important;
+  border-color: #d1d5db !important;
+  color: #1f2937 !important;
+}
+
+.modal-overlay .card-item.inactive,
+.modal-overlay.dark .card-item.inactive {
+  background-color: #f9fafb !important;
+}
+
+.modal-overlay .card-item:hover,
+.modal-overlay.dark .card-item:hover {
+  border-color: #3b82f6 !important;
+}
+
+.modal-overlay .card-question strong,
+.modal-overlay .card-answer strong,
+.modal-overlay.dark .card-question strong,
+.modal-overlay.dark .card-answer strong {
+  color: #3b82f6 !important;
+}
+
+.modal-overlay .card-category,
+.modal-overlay.dark .card-category {
+  color: #3b82f6 !important;
+}
+
+.modal-overlay .card-subcategory,
+.modal-overlay.dark .card-subcategory {
+  color: #6b7280 !important;
+}
+
+.modal-overlay .search-input,
+.modal-overlay .filter-select,
+.modal-overlay.dark .search-input,
+.modal-overlay.dark .filter-select {
+  background: white !important;
+  border-color: #d1d5db !important;
+  color: #1f2937 !important;
+}
+
+.modal-overlay .search-input:focus,
+.modal-overlay .filter-select:focus,
+.modal-overlay.dark .search-input:focus,
+.modal-overlay.dark .filter-select:focus {
+  border-color: #3b82f6 !important;
+  background: white !important;
+}
+
+.modal-overlay .card-question,
+.modal-overlay .card-answer,
+.modal-overlay.dark .card-question,
+.modal-overlay.dark .card-answer {
+  color: #6b7280 !important;
+}
+
+.modal-overlay .card-meta,
+.modal-overlay.dark .card-meta {
+  color: #6b7280 !important;
+}
+
+.modal-overlay .stat-label,
+.modal-overlay.dark .stat-label {
+  color: #6b7280 !important;
+}
+
+.modal-overlay .stat-value,
+.modal-overlay.dark .stat-value {
+  color: #1f2937 !important;
 }
 
 /* Notes Dropdown Styles */
@@ -6556,6 +7384,23 @@ input:checked + .switch-slider:before {
   background: var(--primary-light);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
+}
+
+/* New keyboard shortcuts styling */
+.keyboard-shortcuts {
+  margin-top: var(--space-3);
+}
+
+.shortcuts-hint {
+  color: #6b7280 !important; /* Gray text */
+}
+
+.shortcuts-hint small {
+  color: #6b7280 !important; /* Gray text for small element */
+}
+
+.shortcuts-hint strong {
+  color: #6b7280 !important; /* Gray text for strong element */
 }
 
 .keyboard-shortcuts-hint kbd {
@@ -6833,17 +7678,17 @@ input:checked + .switch-slider:before {
   gap: var(--space-4);
   width: calc(100% - 2rem); /* Account for margin */
   margin: 1rem; /* Restore normal margins */
-  padding: var(--space-4);
+  padding: 0; /* Remove padding behind border */
   min-height: auto; /* Let content determine height */
   height: fit-content; /* Fit to content height */
   position: relative;
   justify-content: flex-start;
-  padding-bottom: var(--space-4); /* Restore normal bottom padding */
+  padding-bottom: 0; /* Remove bottom padding behind border */
   overflow: visible; /* Ensure borders are not clipped */
-  border: 2px solid rgba(30, 64, 175, 0.3) !important; /* More subtle blue frame */
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: 0 4px 16px rgba(30, 64, 175, 0.08); /* More subtle shadow */
+  border: none !important; /* Remove container border - let individual components have borders */
+  border-radius: 0;
+  background: transparent !important; /* Remove background behind border */
+  box-shadow: none; /* Remove shadow behind border */
   box-sizing: border-box !important;
   margin-bottom: 1rem; /* Normal bottom margin */
 }
@@ -6865,14 +7710,19 @@ input:checked + .switch-slider:before {
   display: flex;
   justify-content: flex-start;
   margin: 0;
+  margin-top: 0; /* Align with notes section top */
+  padding: 0; /* Remove padding behind border */
+  background: transparent; /* Remove background behind border */
 }
 
 /* Override flashcard container margin for proper alignment */
 .flashcard-with-notes-container .flashcard-container {
-  margin-top: 0 !important;
+  margin-top: 0 !important; /* Align with notes section */
   padding-top: 0 !important;
   width: 100%;
   max-width: 1600px;
+  background: transparent !important; /* Remove background behind border */
+  padding: 0 !important; /* Remove all padding behind border */
 }
 
 /* Filters Section - Left of flashcard - Force cache refresh */
@@ -7368,16 +8218,17 @@ input:checked + .switch-slider:before {
 
 .review-panel-frame {
   padding: var(--space-2) var(--space-3);
-  background: var(--surface);
-  border: 10px solid #1e40af;
+  background: transparent;
+  border: 4px solid #1e40af;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: none;
   text-align: center;
   animation: slideIn 0.3s ease-out;
-  width: 400px !important;
-  min-width: 400px !important;
-  max-width: 400px !important;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   box-sizing: border-box !important;
+  margin-top: 0;
 }
 
 .review-panel-title {
@@ -7412,6 +8263,8 @@ input:checked + .switch-slider:before {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+  position: relative;
+  z-index: 1;
 }
 
 .answer-dropdown-toggle:hover {
@@ -7425,6 +8278,604 @@ input:checked + .switch-slider:before {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   animation: fadeIn 0.2s ease-out;
+  position: relative;
+  z-index: 2;
+}
+
+/* Ensure dropdowns work in maximized modal */
+.flashcard-window.maximized .answer-dropdown-content {
+  position: relative !important;
+  z-index: 10001 !important;
+  background: white !important;
+  color: #1f2937 !important;
+}
+
+/* Allow overflow for generate modal content in maximized view */
+.flashcard-window.maximized .generate-modal {
+  overflow: visible !important;
+}
+
+.flashcard-window.maximized .generate-content {
+  overflow: visible !important;
+}
+
+.flashcard-window.maximized .results-step {
+  overflow: visible !important;
+}
+
+.flashcard-window.maximized .questions-list {
+  overflow: visible !important;
+}
+
+/* Ensure buttons work in maximized view */
+.flashcard-window.maximized .card-action-btn {
+  position: relative !important;
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+}
+
+.flashcard-window.maximized .card-action-buttons {
+  position: relative !important;
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+}
+
+/* Override pointer-events for card info header in maximized view */
+.flashcard-window.maximized .card-info-header {
+  pointer-events: auto !important;
+  z-index: 10001 !important;
+}
+
+/* Ensure card info section allows pointer events in maximized view */
+.flashcard-window.maximized .card-info-section {
+  pointer-events: auto !important;
+  z-index: 10001 !important;
+}
+
+/* Fix dropdown visibility in maximized view */
+.flashcard-window.maximized .answer-dropdown-toggle {
+  pointer-events: auto !important;
+  z-index: 10002 !important;
+  position: relative !important;
+  background: #1e40af !important;
+  color: white !important;
+  border: 2px solid #1e40af !important;
+  cursor: pointer !important;
+}
+
+.flashcard-window.maximized .question-item {
+  overflow: visible !important;
+  position: relative !important;
+  z-index: 10002 !important;
+}
+
+.flashcard-window.maximized .question-content {
+  overflow: visible !important;
+  position: relative !important;
+  z-index: 10002 !important;
+}
+
+/* Override the maximized window overflow for dropdown areas */
+.flashcard-window.maximized .modal-content {
+  overflow: visible !important;
+}
+
+.flashcard-window.maximized .generate-modal .questions-list,
+.flashcard-window.maximized .generate-modal .question-item,
+.flashcard-window.maximized .generate-modal .question-content {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+/* Ensure modal scroll area doesn't clip dropdowns */
+.flashcard-window.maximized .modal-content,
+.flashcard-window.maximized .generate-content,
+.flashcard-window.maximized .results-step {
+  overflow-y: auto !important;
+  overflow-x: visible !important;
+}
+
+/* ============================================
+   COMPREHENSIVE DROPDOWN FIX FOR MAXIMIZED MODE
+   ============================================ */
+
+/* Override maximized window overflow for dropdown functionality */
+.flashcard-window.maximized {
+  overflow: auto !important; /* Allow scrolling but not hidden */
+}
+
+.flashcard-window.maximized .flashcard-container {
+  overflow: visible !important;
+}
+
+.flashcard-window.maximized .flashcard-content {
+  overflow: visible !important;
+}
+
+/* Ensure the main content area allows dropdowns to overflow */
+.flashcard-window.maximized .flashcard-section {
+  overflow: visible !important;
+  min-height: 70vh !important;
+  height: auto !important;
+  flex: 1 1 auto !important;
+  padding: 3rem !important;
+  font-size: 1.2rem !important;
+}
+
+/* Maximize question and answer sections in maximized view */
+.flashcard-window.maximized .question-section,
+.flashcard-window.maximized .answer-section {
+  min-height: 70vh !important;
+  height: auto !important;
+  flex: 1 1 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Maximize the content within sections */
+.flashcard-window.maximized .flashcard-section .content {
+  flex: 1 1 auto !important;
+  min-height: 60vh !important;
+  padding: 2rem !important;
+  font-size: 1.3rem !important;
+  line-height: 1.6 !important;
+}
+
+/* Maximize section labels */
+.flashcard-window.maximized .section-label {
+  font-size: 1.5rem !important;
+  margin-bottom: 1.5rem !important;
+  padding: 1rem !important;
+}
+
+/* Bottom controls area positioning for normal, popout, and maximized mode */
+.flashcard-window .flashcard-bottom,
+.flashcard-window.popout .flashcard-bottom,
+.flashcard-window.maximized .flashcard-bottom {
+  position: relative !important;
+}
+
+/* Maximize bottom controls area */
+.flashcard-window.maximized .flashcard-bottom {
+  padding: 2rem !important;
+  min-height: 80px !important;
+}
+
+/* Maximize navigation and button controls */
+.flashcard-window.maximized .navigation-controls {
+  gap: 2rem !important;
+  padding: 1rem !important;
+}
+
+.flashcard-window.maximized .navigation-controls button {
+  padding: 1rem 2rem !important;
+  font-size: 1.1rem !important;
+}
+
+/* Fix all HTML details/summary dropdowns in maximized mode */
+.flashcard-window.maximized details,
+.flashcard-window.maximized .info-dropdown,
+.flashcard-window.maximized .card-info-dropdown {
+  position: relative !important;
+  z-index: 10003 !important;
+  overflow: visible !important;
+}
+
+.flashcard-window.maximized summary,
+.flashcard-window.maximized .info-header {
+  position: relative !important;
+  z-index: 10003 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  color: #6b7280 !important;
+}
+
+.flashcard-window.maximized details[open],
+.flashcard-window.maximized .info-dropdown[open] {
+  overflow: visible !important;
+  z-index: 10003 !important;
+}
+
+.flashcard-window.maximized details .info-content,
+.flashcard-window.maximized .info-dropdown .info-content {
+  position: relative !important;
+  z-index: 10003 !important;
+  background: white !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 0.375rem !important;
+  padding: 1rem !important;
+  margin-top: 0.5rem !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Fix category/subcategory dropdowns */
+.flashcard-window.maximized select,
+.flashcard-window.maximized .dropdown-select {
+  position: relative !important;
+  z-index: 10003 !important;
+  pointer-events: auto !important;
+}
+
+/* Fix any other dropdown containers */
+.flashcard-window.maximized .dropdown,
+.flashcard-window.maximized .dropdown-container,
+.flashcard-window.maximized .dropdown-menu {
+  position: relative !important;
+  z-index: 10003 !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure dropdown content is visible and properly styled */
+.flashcard-window.maximized .dropdown-content,
+.flashcard-window.maximized .dropdown-menu-content {
+  position: absolute !important;
+  z-index: 10004 !important;
+  background: white !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 0.375rem !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+  overflow: visible !important;
+}
+
+/* Fix additional info dropdown specifically */
+.flashcard-window.maximized .additional-info-dropdown {
+  position: relative !important;
+  z-index: 10003 !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+.flashcard-window.maximized .additional-info-dropdown summary {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 10003 !important;
+}
+
+.flashcard-window.maximized .additional-info-dropdown[open] {
+  overflow: visible !important;
+}
+
+/* Ensure all clickable elements work in maximized mode */
+.flashcard-window.maximized [onclick],
+.flashcard-window.maximized button,
+.flashcard-window.maximized .clickable {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 10002 !important;
+}
+
+/* Force details elements to be interactive in maximized mode */
+.flashcard-window.maximized details > summary {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+}
+
+/* Ensure the details marker/arrow is visible and clickable */
+.flashcard-window.maximized details > summary::-webkit-details-marker,
+.flashcard-window.maximized details > summary::marker {
+  display: list-item !important;
+  pointer-events: auto !important;
+}
+
+/* Override any CSS that might be preventing details functionality */
+.flashcard-window.maximized details {
+  display: block !important;
+}
+
+.flashcard-window.maximized details[open]  {
+  display: block !important;
+}
+
+/* Ensure proper stacking context for dropdown content */
+.flashcard-window.maximized details > summary:focus,
+.flashcard-window.maximized details > summary:hover {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+}
+
+/* NUCLEAR OPTION: Force all interactive elements to work in maximized mode */
+.flashcard-window.maximized * {
+  pointer-events: auto !important;
+}
+
+/* But block pointer events on the background container only */
+.flashcard-window.maximized {
+  pointer-events: none !important;
+}
+
+/* Re-enable pointer events for all content */
+.flashcard-window.maximized .flashcard-container,
+.flashcard-window.maximized .flashcard-content,
+.flashcard-window.maximized .flashcard-section,
+.flashcard-window.maximized details,
+.flashcard-window.maximized summary,
+.flashcard-window.maximized button,
+.flashcard-window.maximized .modal-content,
+.flashcard-window.maximized .modal-overlay {
+  pointer-events: auto !important;
+}
+
+/* Ensure window control buttons work in maximized view */
+.flashcard-window.maximized button[title*="fullscreen"],
+.flashcard-window.maximized button[title*="Fullscreen"],
+.flashcard-window.maximized button[title*="Exit"],
+.flashcard-window.maximized button[title*="Maximize"],
+.flashcard-window.maximized button[title*="Restore"] {
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+  position: absolute !important;
+}
+
+/* Ensure card info button works in maximized view */
+.flashcard-window.maximized .card-info-button {
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+  position: relative !important;
+}
+
+/* Make card actions section horizontal above footer in maximized mode */
+.flashcard-window.maximized .card-info-section {
+  position: relative !important;
+  z-index: 10001 !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 0.75rem !important;
+  padding: 1.5rem !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: auto !important;
+  pointer-events: auto !important;
+  margin: 1rem 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 2rem !important;
+}
+
+/* Style card info dropdown in normal, popout, and maximized mode - technical card details (creation date, due date, etc.) */
+.flashcard-window .card-info-dropdown,
+.flashcard-window.popout .card-info-dropdown,
+.flashcard-window.maximized .card-info-dropdown {
+  position: absolute !important;
+  bottom: 1rem !important;
+  right: 0 !important;
+  z-index: 10002 !important;
+  background: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+}
+
+/* Style the card info button in footer for normal, popout, and maximized mode */
+.flashcard-window .card-info-dropdown .info-header,
+.flashcard-window.popout .card-info-dropdown .info-header,
+.flashcard-window.maximized .card-info-dropdown .info-header {
+  background: rgba(59, 130, 246, 0.9) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 0.5rem !important;
+  padding: 0.75rem 1.25rem !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  backdrop-filter: blur(4px) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  display: inline-block !important;
+  white-space: nowrap !important;
+}
+
+.flashcard-window .card-info-dropdown .info-header:hover,
+.flashcard-window.popout .card-info-dropdown .info-header:hover,
+.flashcard-window.maximized .card-info-dropdown .info-header:hover {
+  background: rgba(37, 99, 235, 1) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Style the card info content dropdown for normal, popout, and maximized mode */
+.flashcard-window .card-info-dropdown[open] .info-content,
+.flashcard-window.popout .card-info-dropdown[open] .info-content,
+.flashcard-window.maximized .card-info-dropdown[open] .info-content {
+  position: absolute !important;
+  bottom: 100% !important;
+  right: 0 !important;
+  background: white !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 0.75rem !important;
+  padding: 1.5rem !important;
+  margin-bottom: 0.5rem !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  min-width: 300px !important;
+  z-index: 10003 !important;
+}
+
+/* Style card action buttons in maximized mode - horizontal layout */
+.flashcard-window.maximized .card-action-buttons {
+  display: flex !important;
+  gap: 1.5rem !important;
+  margin-bottom: 0 !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+}
+
+.flashcard-window.maximized .card-action-btn {
+  padding: 0.75rem 1.25rem !important;
+  font-size: 1rem !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+}
+
+/* Style card tags in maximized mode - horizontal layout */
+.flashcard-window.maximized .card-tags {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 1rem !important;
+  margin-bottom: 0 !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+
+.flashcard-window.maximized .category-badge,
+.flashcard-window.maximized .subcategory-tag,
+.flashcard-window.maximized .level-tag {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  border-radius: 0.5rem !important;
+}
+
+.flashcard-window.maximized .star-toggle-btn-inline {
+  font-size: 1.5rem !important;
+  padding: 0.5rem !important;
+  border-radius: 0.5rem !important;
+}
+
+/* Dark mode adjustments for maximized card info */
+.flashcard-window.maximized.dark .card-info-section {
+  background: rgba(31, 41, 59, 0.95) !important;
+  border-color: #60a5fa !important;
+  color: #f1f5f9 !important;
+}
+
+/* Dark mode for card info dropdown content in normal, popout, and maximized mode */
+.flashcard-window.dark .card-info-dropdown[open] .info-content,
+.flashcard-window.popout.dark .card-info-dropdown[open] .info-content,
+.flashcard-window.maximized.dark .card-info-dropdown[open] .info-content {
+  background: rgba(31, 41, 59, 0.95) !important;
+  border-color: #60a5fa !important;
+  color: #f1f5f9 !important;
+}
+
+/* ============================================
+   POPOUT VIEW STYLING
+   ============================================ */
+
+/* Style card actions section in popout mode - high specificity */
+.flashcard-window.popout .card-info-section {
+  position: relative !important;
+  z-index: 10001 !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 0.75rem !important;
+  padding: 1.5rem !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: auto !important;
+  pointer-events: auto !important;
+  margin: 1rem 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 2rem !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Style card action buttons in popout mode */
+.flashcard-window.popout .card-action-buttons {
+  display: flex !important;
+  gap: 1.5rem !important;
+  margin-bottom: 0 !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+}
+
+.flashcard-window.popout .card-action-btn {
+  padding: 0.75rem 1.25rem !important;
+  font-size: 1rem !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+}
+
+/* Style card tags in popout mode */
+.flashcard-window.popout .card-tags {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 1rem !important;
+  margin-bottom: 0 !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.flashcard-window.popout .category-badge,
+.flashcard-window.popout .subcategory-tag,
+.flashcard-window.popout .level-tag {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  border-radius: 0.5rem !important;
+}
+
+.flashcard-window.popout .star-toggle-btn-inline {
+  font-size: 1.25rem !important;
+  padding: 0.5rem !important;
+  border-radius: 0.5rem !important;
+}
+
+/* Dark mode adjustments for popout card info */
+.flashcard-window.popout.dark .card-info-section {
+  background: rgba(31, 41, 59, 0.95) !important;
+  border-color: #60a5fa !important;
+  color: #f1f5f9 !important;
+}
+
+/* Override content height constraints for popout */
+.flashcard-window.popout .flashcard-content {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  flex: 0 1 auto !important;
+}
+
+/* Ensure popout container allows proper height distribution */
+.flashcard-window.popout .flashcard-container {
+  height: auto !important;
+  max-height: none !important;
+  min-height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Style popout footer - ensure visibility */
+.flashcard-window.popout .flashcard-bottom {
+  padding: 1.5rem !important;
+  min-height: 60px !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  flex-shrink: 0 !important;
+}
+
+/* Ensure navigation controls are visible in popout */
+.flashcard-window.popout .navigation-controls {
+  display: flex !important;
+  gap: 1rem !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 1rem !important;
+}
+
+/* Ensure keyboard shortcuts are visible in popout */
+.flashcard-window.popout .keyboard-shortcuts {
+  display: block !important;
+  text-align: center !important;
+  margin-bottom: 1rem !important;
 }
 
 .answer-dropdown-content .answer-text {
@@ -7841,7 +9292,10 @@ div.notes-textarea-permanent {
 .flashcard-main-content .flashcard-container {
   border-left: 6px solid #1e40af !important; /* Blue left border - same as notes */
   border-right: 6px solid #1e40af !important; /* Blue right border - same as notes */
-  border-top: 6px solid #1e40af !important; /* Blue top border - same as notes */
+  border-top: 12px solid #1e40af !important; /* Thicker blue top border */
+  border-bottom: 12px solid #1e40af !important; /* Thicker blue bottom border */
+  margin-top: -8px !important; /* Raise border higher */
+  margin-bottom: -8px !important; /* Lower border visually */
   box-sizing: border-box !important;
 }
 
@@ -8397,7 +9851,7 @@ div.notes-textarea-permanent {
 
 /* AI Modal Styles */
 .ai-modal-overlay {
-  z-index: 1100; /* Higher than regular modals */
+  z-index: 15100; /* Higher than regular modals */
 }
 
 .ai-modal-content {
@@ -8552,4 +10006,94 @@ div.notes-textarea-permanent {
 .dark .filter-btn.active:hover {
   background: #2563eb;
   border-color: #2563eb;
+}
+
+/* FINAL OVERRIDE: Force generate modal to always be light mode */
+.generate-modal,
+.generate-modal *,
+body.dark .generate-modal,
+body.dark .generate-modal *,
+.app.dark .generate-modal,
+.app.dark .generate-modal *,
+.modal-overlay .generate-modal,
+.modal-overlay .generate-modal *,
+.modal-overlay.dark .generate-modal,
+.modal-overlay.dark .generate-modal * {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+/* Special handling for specific elements */
+.generate-modal .card-preview,
+body.dark .generate-modal .card-preview {
+  background-color: #f9fafb !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+.generate-modal h2,
+.generate-modal h3,
+.generate-modal h4,
+body.dark .generate-modal h2,
+body.dark .generate-modal h3,
+body.dark .generate-modal h4 {
+  color: #111827 !important;
+}
+
+/* Prevent any dark mode inheritance */
+.generate-modal {
+  isolation: isolate !important;
+}
+
+/* Force light mode for AI Generate Answer modal in edit form */
+.ai-modal-overlay,
+.ai-modal-overlay.dark,
+.modal-overlay.ai-modal-overlay,
+.modal-overlay.dark.ai-modal-overlay {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+.ai-modal-content,
+.ai-modal-content.dark,
+.modal-content.ai-modal-content,
+.modal-content.ai-modal-content.dark,
+.dark .ai-modal-content,
+.dark .modal-content.ai-modal-content,
+.ai-modal-overlay .ai-modal-content,
+.ai-modal-overlay.dark .ai-modal-content {
+  background-color: white !important;
+  color: #1f2937 !important;
+  border: 3px solid blue !important;
+}
+
+/* Force all AI modal content to be light mode */
+.ai-modal-content *,
+.ai-modal-content.dark *,
+.dark .ai-modal-content *,
+.ai-modal-overlay .ai-modal-content *,
+.ai-modal-overlay.dark .ai-modal-content * {
+  background-color: white !important;
+  color: #1f2937 !important;
+}
+
+/* Specific elements in AI modal */
+.ai-modal-content .modal-header,
+.ai-modal-content h3,
+.ai-modal-content h4,
+.ai-modal-content label,
+.ai-modal-content .option-checkbox,
+.ai-modal-content .btn,
+.ai-modal-content button {
+  color: #1f2937 !important;
+  background-color: transparent !important;
+}
+
+/* Buttons in AI modal */
+.ai-modal-content .btn-primary {
+  background-color: #3b82f6 !important;
+  color: white !important;
+}
+
+.ai-modal-content .btn-secondary {
+  background-color: #e5e7eb !important;
+  color: #1f2937 !important;
 }

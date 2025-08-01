@@ -166,7 +166,8 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
         borderBottom: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}`,
         background: isDarkMode ? 'linear-gradient(to right, rgba(30, 58, 138, 0.3), rgba(67, 56, 202, 0.3))' : 'linear-gradient(to right, #eff6ff, #e0e7ff)',
         borderTopLeftRadius: '8px',
-        borderTopRightRadius: '8px'
+        borderTopRightRadius: '8px',
+        position: 'relative'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button 
@@ -188,28 +189,6 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
             ‹
           </button>
           
-          <button 
-            style={{
-              padding: '6px 12px',
-              borderRadius: '6px',
-              border: 'none',
-              backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.9)',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              fontSize: '14px',
-              fontWeight: '600',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}
-            onClick={onClose}
-            onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(220, 38, 38, 0.9)' : 'rgba(220, 38, 38, 1)'}
-            onMouseOut={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(239, 68, 68, 0.8)' : 'rgba(239, 68, 68, 0.9)'}
-            title="Close Calendar"
-          >
-            ✕ Close
-          </button>
         </div>
         
         <h1 style={{ 
@@ -239,6 +218,20 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
           onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
         >
           ›
+        </button>
+        
+        {/* Close button - using same class as other modals */}
+        <button 
+          className="close-btn"
+          style={{
+            top: '0.25rem',
+            right: '0.25rem'
+          }}
+          onClick={onClose}
+          aria-label="Close calendar"
+          title="Close Calendar"
+        >
+          ×
         </button>
       </div>
 
