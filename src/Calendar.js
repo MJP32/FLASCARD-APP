@@ -121,13 +121,6 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
     return found;
   };
 
-  const getValueColorClass = (type) => {
-    switch (type) {
-      case 'cards': return 'bg-blue-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -736,29 +729,6 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
           </div>
         </div>
       )}
-      </div>
-    </div>
-  );
-};
-
-// Demo component with sample data
-const CalendarDemo = () => {
-  // Sample calendar dates for demonstration
-  const today = new Date();
-  const sampleCalendarDates = [
-    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate()), cardCount: 5 }, // Today
-    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3), cardCount: 3 },
-    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 6), cardCount: 8 },
-    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 10), cardCount: 2 },
-    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 13), cardCount: 6 },
-    { date: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 16), cardCount: 4 },
-  ];
-
-  return (
-    <div className="min-h-screen bg-gray-100 py-8">
-      <div className="container mx-auto">
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-8">Review Schedule Calendar</h1>
-        <Calendar calendarDates={sampleCalendarDates} />
       </div>
     </div>
   );

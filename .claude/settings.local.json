@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
       "Bash(npm start)",
@@ -49,7 +50,13 @@
       "Bash(git -c user.name=\"Claude Code\" -c user.email=\"noreply@anthropic.com\" commit -m \"$(cat <<''EOF''\nFix category count inconsistency in due cards mode\n\nIndividual category buttons now use stable counting approach (initialStats.due - completedCount) \nwhen showDueTodayOnly is true, ensuring consistency with \"All\" category count.\n\n🤖 Generated with [Claude Code](https://claude.ai/code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(timeout 15s npm start)",
       "Bash(tree:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(npx stylelint:*)",
+      "Bash(timeout 30s npm start)",
+      "Bash(npm run start:*)",
+      "Bash(timeout:*)",
+      "Bash(npx babel:*)",
+      "Bash(/dev/null)"
     ],
     "deny": []
   }

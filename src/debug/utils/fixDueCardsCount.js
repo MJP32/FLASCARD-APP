@@ -47,6 +47,7 @@ export const fixDueCardsCount = () => {
   
   // Execute the fix
   setTimeout(() => {
+    // eslint-disable-next-line no-eval
     eval(script);
   }, 100);
   

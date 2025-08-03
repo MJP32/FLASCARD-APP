@@ -12,9 +12,8 @@ import StudyGuideModal from './StudyGuideModal';
  * @param {Function} props.onUpdateFsrsParams - Callback to update FSRS parameters
  * @param {boolean} props.showIntervalSettings - Whether to show interval settings
  * @param {Function} props.onToggleIntervalSettings - Callback to toggle interval settings
- * @param {Function} props.onSignOut - Callback for user sign out
  * @param {string} props.userDisplayName - Current user display name
- * @param {Array} props.flashcards - Array of user's flashcards
+ * @param {Array} props.flashcards - Array of flashcards for study guide generation
  * @returns {JSX.Element} Settings modal component
  */
 const SettingsModal = ({
@@ -26,19 +25,12 @@ const SettingsModal = ({
   onUpdateFsrsParams,
   showIntervalSettings,
   onToggleIntervalSettings,
-  onSignOut,
   userDisplayName,
-  flashcards = [],
-  apiKeys = {},
-  selectedProvider = 'openai',
-  onApiKeysUpdate
+  flashcards = []
 }) => {
   const [localFsrsParams, setLocalFsrsParams] = useState(fsrsParams);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showFileFormat, setShowFileFormat] = useState(false);
-  const [showApiKeys, setShowApiKeys] = useState(false);
-  const [localApiKeys, setLocalApiKeys] = useState(apiKeys);
-  const [localSelectedProvider, setLocalSelectedProvider] = useState(selectedProvider);
   const [showFsrsExplanation, setShowFsrsExplanation] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [feedbackSending, setFeedbackSending] = useState(false);
@@ -46,51 +38,9 @@ const SettingsModal = ({
   const [showFeedbackSection, setShowFeedbackSection] = useState(false);
   const [showStudyGuideModal, setShowStudyGuideModal] = useState(false);
   const [showInviteSection, setShowInviteSection] = useState(false);
-  const [showAccountSection, setShowAccountSection] = useState(false);
+  const [showStudyGuideSection, setShowStudyGuideSection] = useState(false);
   const [showAppearanceSection, setShowAppearanceSection] = useState(false);
 
-  // Helper function to infer level from FSRS parameters (same as FlashcardDisplay)
-  const inferLevelFromFSRS = (card) => {
-    if (card.level) return card.level;
-    
-    const { difficulty = 5, easeFactor = 2.5, interval = 1 } = card;
-    
-    if (difficulty >= 8) return 'again';
-    if (difficulty >= 7) return 'hard';
-    if (difficulty <= 3 && easeFactor >= 2.8) return 'easy';
-    if (interval >= 4) return 'good';
-    return 'new';
-  };
-
-  // Calculate card rating statistics using proper FSRS level inference
-  const calculateRatingStats = () => {
-    const stats = {
-      again: 0,
-      hard: 0,
-      good: 0,
-      easy: 0,
-      new: 0
-    };
-    
-    flashcards.forEach(card => {
-      const level = inferLevelFromFSRS(card);
-      if (stats.hasOwnProperty(level)) {
-        stats[level]++;
-      }
-    });
-    
-    return stats;
-  };
-
-  console.log('Flashcards received:', flashcards.length);
-  let ratingStats;
-  try {
-    ratingStats = calculateRatingStats();
-    console.log('Rating stats:', ratingStats);
-  } catch (error) {
-    console.error('Error calculating rating stats:', error);
-    ratingStats = { again: 0, hard: 0, good: 0, easy: 0, new: 0 };
-  }
 
   // Update local params when props change
   useEffect(() => {
@@ -98,11 +48,6 @@ const SettingsModal = ({
     setHasUnsavedChanges(false);
   }, [fsrsParams]);
 
-  // Update local API keys when props change
-  useEffect(() => {
-    setLocalApiKeys(apiKeys);
-    setLocalSelectedProvider(selectedProvider);
-  }, [apiKeys, selectedProvider]);
 
   const handleParamChange = (key, value) => {
     setLocalFsrsParams(prev => ({
@@ -138,21 +83,6 @@ const SettingsModal = ({
     }
   };
 
-  const handleApiKeyChange = (provider, key) => {
-    setLocalApiKeys(prev => ({
-      ...prev,
-      [provider]: key
-    }));
-  };
-
-  const handleProviderChange = (provider) => {
-    setLocalSelectedProvider(provider);
-  };
-
-  const handleSaveApiKeys = () => {
-    onApiKeysUpdate(localApiKeys, localSelectedProvider);
-    setShowApiKeys(false);
-  };
 
   const handleSendFeedback = async () => {
     if (!feedbackText.trim()) {
@@ -170,7 +100,6 @@ const SettingsModal = ({
         `${feedbackText}\n\n` +
         `---\n` +
         `User: ${userDisplayName || 'Anonymous'}\n` +
-        `Cards: ${flashcards.length}\n` +
         `Dark Mode: ${isDarkMode ? 'Yes' : 'No'}\n` +
         `Date: ${new Date().toLocaleString()}`
       );
@@ -216,104 +145,43 @@ const SettingsModal = ({
         </div>
 
         <div className="modal-body">
-          {/* Account Section */}
+          {/* Study Guide Section */}
           <section className="settings-section">
             <div className="section-header-with-checkbox">
               <div className="checkbox-container">
                 <input
                   type="checkbox"
-                  id="show-account-section"
-                  checked={showAccountSection}
-                  onChange={(e) => setShowAccountSection(e.target.checked)}
+                  id="show-study-guide-section"
+                  checked={showStudyGuideSection}
+                  onChange={(e) => setShowStudyGuideSection(e.target.checked)}
                 />
-                <label htmlFor="show-account-section">
-                  <h3>👤 Account</h3>
+                <label htmlFor="show-study-guide-section">
+                  <h3>📖 Study Guide</h3>
                 </label>
               </div>
               <button 
                 className="btn btn-info btn-small"
-                onClick={() => setShowAccountSection(!showAccountSection)}
+                onClick={() => setShowStudyGuideSection(!showStudyGuideSection)}
               >
-                {showAccountSection ? '👤 Hide' : '👤'} Account Info
+                {showStudyGuideSection ? '📖 Hide' : '📖'} Study Guide
               </button>
             </div>
             
             <p className="section-description">
-              View your account information, study statistics, and manage your session.
+              Generate comprehensive study guides from your challenging flashcards to help focus your learning.
             </p>
             
-            {showAccountSection && (
-              <div className="account-section-content">
-            <div className="account-info">
-              <div className="account-details">
-                <div className="account-item">
-                  <span className="account-label">User:</span>
-                  <span className="account-value">
-                    {userDisplayName ? userDisplayName : 'Anonymous User'}
-                  </span>
-                </div>
-                <div className="account-item">
-                  <span className="account-label">Total Cards:</span>
-                  <span className="account-value">{flashcards.length}</span>
-                </div>
-                <div className="account-item">
-                  <span className="account-label">Active Cards:</span>
-                  <span className="account-value">
-                    {flashcards.filter(card => card.active !== false).length}
-                  </span>
-                </div>
+            {showStudyGuideSection && (
+              <div className="study-guide-section-content">
+            <div className="study-guide-info">
+              <div className="study-guide-details">
+                <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+                  Create a personalized study guide based on cards you've marked as "Hard" or are struggling with. 
+                  The guide will help you focus on areas that need the most attention.
+                </p>
               </div>
             </div>
             
-            {/* Card Performance - Horizontal Layout */}
-            <div className="rating-statistics-horizontal">
-              <h4 className="rating-stats-title">📊 Card Performance</h4>
-              <div className="rating-stats-horizontal-wrapper">
-                  <div className="rating-stat-item new">
-                    <span className="rating-emoji">🆕</span>
-                    <span className="rating-label">New</span>
-                    <span className="rating-count">{ratingStats.new}</span>
-                  </div>
-                  <div className="rating-stat-item again">
-                    <span className="rating-emoji">😵</span>
-                    <span className="rating-label">Again</span>
-                    <span className="rating-count">{ratingStats.again}</span>
-                  </div>
-                  <div className="rating-stat-item hard">
-                    <span className="rating-emoji">😰</span>
-                    <span className="rating-label">Hard</span>
-                    <span className="rating-count">{ratingStats.hard}</span>
-                  </div>
-                  <div className="rating-stat-item good">
-                    <span className="rating-emoji">😊</span>
-                    <span className="rating-label">Good</span>
-                    <span className="rating-count">{ratingStats.good}</span>
-                  </div>
-                  <div className="rating-stat-item easy">
-                    <span className="rating-emoji">😎</span>
-                    <span className="rating-label">Easy</span>
-                    <span className="rating-count">{ratingStats.easy}</span>
-                  </div>
-                <div className="rating-stats-summary">
-                  <div className="summary-item">
-                    <span className="summary-label">Reviewed:</span>
-                    <span className="summary-value">
-                      {ratingStats.again + ratingStats.hard + ratingStats.good + ratingStats.easy}
-                    </span>
-                  </div>
-                  <div className="summary-item">
-                    <span className="summary-label">Mastery Rate:</span>
-                    <span className="summary-value">
-                      {(() => {
-                        const total = ratingStats.again + ratingStats.hard + ratingStats.good + ratingStats.easy;
-                        const mastered = ratingStats.good + ratingStats.easy;
-                        return total > 0 ? `${Math.round((mastered / total) * 100)}%` : '0%';
-                      })()}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
               {/* Study Guide Section */}
               <div className="study-guide-section">
                 <button 
@@ -340,14 +208,7 @@ const SettingsModal = ({
                 
               </div>
               
-              <button 
-                className="btn btn-danger"
-                onClick={onSignOut}
-              >
-                🚪 Sign Out
-              </button>
             </div>
-              </div>
             )}
           </section>
 
@@ -786,182 +647,6 @@ Option 2: Without headers (uses default column order)
                     <li>• UTF-8 encoding is recommended for special characters</li>
                     <li>• Maximum 1000 cards per import recommended</li>
                   </ul>
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* API Keys Section */}
-          <section className="settings-section">
-            <div className="section-header-with-checkbox">
-              <div className="checkbox-container">
-                <input
-                  type="checkbox"
-                  id="show-api-keys"
-                  checked={showApiKeys}
-                  onChange={(e) => setShowApiKeys(e.target.checked)}
-                />
-                <label htmlFor="show-api-keys">
-                  <h3>🔑 API Keys</h3>
-                </label>
-              </div>
-              <button 
-                className="btn btn-info btn-small"
-                onClick={() => setShowApiKeys(!showApiKeys)}
-              >
-                {showApiKeys ? '🔒 Hide' : '🔑'} Configure Keys
-              </button>
-            </div>
-            
-            <p className="section-description">
-              Configure API keys for AI providers to enable advanced flashcard features like auto-generation and content enhancement.
-            </p>
-            
-            {/* API Keys Configuration - Moved inside dropdown */}
-            {showApiKeys && (
-              <div className="api-keys-info">
-                <div className="api-keys-config">
-                  {/* Provider Selection */}
-                  <div className="provider-selection">
-                    <h4>Select AI Provider</h4>
-                    <div className="provider-options">
-                      <label className="provider-option">
-                        <input
-                          type="radio"
-                          name="provider"
-                          value="openai"
-                          checked={localSelectedProvider === 'openai'}
-                          onChange={(e) => handleProviderChange(e.target.value)}
-                        />
-                        <div className="provider-info">
-                          <strong>OpenAI (GPT-4/GPT-3.5)</strong>
-                          <span>Most versatile, great for general content</span>
-                        </div>
-                      </label>
-                      
-                      <label className="provider-option">
-                        <input
-                          type="radio"
-                          name="provider"
-                          value="anthropic"
-                          checked={localSelectedProvider === 'anthropic'}
-                          onChange={(e) => handleProviderChange(e.target.value)}
-                        />
-                        <div className="provider-info">
-                          <strong>Anthropic (Claude)</strong>
-                          <span>Excellent for detailed explanations and analysis</span>
-                        </div>
-                      </label>
-                      
-                      <label className="provider-option">
-                        <input
-                          type="radio"
-                          name="provider"
-                          value="gemini"
-                          checked={localSelectedProvider === 'gemini'}
-                          onChange={(e) => handleProviderChange(e.target.value)}
-                        />
-                        <div className="provider-info">
-                          <strong>Google Gemini</strong>
-                          <span>Good balance of performance and cost</span>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* API Key Inputs */}
-                  <div className="api-key-inputs">
-                    <h4>API Keys</h4>
-                    <p className="api-keys-description">
-                      Enter your API keys below. Keys are stored locally in your browser and never sent to our servers.
-                    </p>
-                    
-                    <div className="api-key-input">
-                      <label htmlFor="openai-key">
-                        OpenAI API Key:
-                        <span className="key-status">
-                          {localApiKeys.openai ? '✅ Configured' : '❌ Not configured'}
-                        </span>
-                      </label>
-                      <input
-                        id="openai-key"
-                        type="password"
-                        placeholder="sk-..."
-                        value={localApiKeys.openai || ''}
-                        onChange={(e) => handleApiKeyChange('openai', e.target.value)}
-                        className="api-key-field"
-                      />
-                      <small>Get your key from: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI API Keys</a></small>
-                    </div>
-
-                    <div className="api-key-input">
-                      <label htmlFor="anthropic-key">
-                        Anthropic API Key:
-                        <span className="key-status">
-                          {localApiKeys.anthropic ? '✅ Configured' : '❌ Not configured'}
-                        </span>
-                      </label>
-                      <input
-                        id="anthropic-key"
-                        type="password"
-                        placeholder="sk-ant-..."
-                        value={localApiKeys.anthropic || ''}
-                        onChange={(e) => handleApiKeyChange('anthropic', e.target.value)}
-                        className="api-key-field"
-                      />
-                      <small>Get your key from: <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">Anthropic Console</a></small>
-                    </div>
-
-                    <div className="api-key-input">
-                      <label htmlFor="gemini-key">
-                        Google Gemini API Key:
-                        <span className="key-status">
-                          {localApiKeys.gemini ? '✅ Configured' : '❌ Not configured'}
-                        </span>
-                      </label>
-                      <input
-                        id="gemini-key"
-                        type="password"
-                        placeholder="AI..."
-                        value={localApiKeys.gemini || ''}
-                        onChange={(e) => handleApiKeyChange('gemini', e.target.value)}
-                        className="api-key-field"
-                      />
-                      <small>Get your key from: <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a></small>
-                    </div>
-                  </div>
-
-                  {/* Features Info */}
-                  <div className="features-info">
-                    <h4>What can you do with API keys?</h4>
-                    <ul>
-                      <li><strong>Auto-generate flashcards:</strong> Create cards from topics or text</li>
-                      <li><strong>Enhance existing cards:</strong> Improve questions and answers</li>
-                      <li><strong>Generate examples:</strong> Create practical examples for concepts</li>
-                      <li><strong>Content suggestions:</strong> Get hints and additional information</li>
-                    </ul>
-                  </div>
-
-                  {/* Privacy Notice */}
-                  <div className="privacy-notice">
-                    <h4>🔒 Privacy & Security</h4>
-                    <ul>
-                      <li>API keys are stored locally in your browser only</li>
-                      <li>Keys are never sent to our servers</li>
-                      <li>You can clear keys anytime by deleting the text</li>
-                      <li>Keys are used only for AI provider communication</li>
-                    </ul>
-                  </div>
-
-                  {/* Save Button */}
-                  <div className="api-keys-actions">
-                    <button 
-                      className="btn btn-success"
-                      onClick={handleSaveApiKeys}
-                    >
-                      💾 Save API Keys
-                    </button>
-                  </div>
                 </div>
               </div>
             )}

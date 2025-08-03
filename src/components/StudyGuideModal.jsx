@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const StudyGuideModal = ({ isOpen, onClose, flashcards, isDarkMode }) => {
   const [studyGuide, setStudyGuide] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Generate summarized study guide from hard cards
-  const generateSummarizedStudyGuide = () => {
+  const generateSummarizedStudyGuide = useCallback(() => {
     setIsGenerating(true);
     
     try {
@@ -103,7 +103,7 @@ const StudyGuideModal = ({ isOpen, onClose, flashcards, isDarkMode }) => {
           cards.forEach((card, index) => {
             // Extract key terms from question and answer
             const question = card.question || '';
-            const answer = card.answer || '';
+
             
             // Simple keyword extraction (first few words or important terms)
             const keyTerm = question.split(/[?.!]/)[0].substring(0, 80);
@@ -173,14 +173,14 @@ const StudyGuideModal = ({ isOpen, onClose, flashcards, isDarkMode }) => {
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [flashcards]);
 
   // Generate study guide when modal opens
   useEffect(() => {
     if (isOpen && flashcards && flashcards.length > 0) {
       generateSummarizedStudyGuide();
     }
-  }, [isOpen, flashcards]);
+  }, [isOpen, flashcards, generateSummarizedStudyGuide]);
 
   if (!isOpen) return null;
 
@@ -337,10 +337,21 @@ const StudyGuideModal = ({ isOpen, onClose, flashcards, isDarkMode }) => {
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = `study-guide-${new Date().toISOString().split('T')[0]}.md`;
+                a.style.visibility = 'hidden';
                 document.body.appendChild(a);
                 a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                
+                // Safe cleanup
+                setTimeout(() => {
+                  try {
+                    if (a.parentNode === document.body) {
+                      document.body.removeChild(a);
+                    }
+                    URL.revokeObjectURL(url);
+                  } catch (error) {
+                    console.warn('Failed to clean up study guide download link:', error);
+                  }
+                }, 100);
               }}
               style={{
                 backgroundColor: '#10b981',

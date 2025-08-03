@@ -83,7 +83,18 @@ export const exportToCSV = (flashcards, preserveFormatting = true) => {
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
+  
+  // Safe removal with timeout
+  setTimeout(() => {
+    try {
+      if (link.parentNode === document.body) {
+        document.body.removeChild(link);
+      }
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.warn('Failed to clean up download link:', error);
+    }
+  }, 100);
 };
 
 /**
@@ -309,9 +320,24 @@ export const exportToExcel = async (flashcards, preserveFormatting = true, force
       // Generate and download ZIP
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(zipBlob);
+      const url = URL.createObjectURL(zipBlob);
+      link.href = url;
       link.download = `flashcards_categorized_${dateStr}.zip`;
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
       link.click();
+      
+      // Safe cleanup
+      setTimeout(() => {
+        try {
+          if (link.parentNode === document.body) {
+            document.body.removeChild(link);
+          }
+          URL.revokeObjectURL(url);
+        } catch (error) {
+          console.warn('Failed to clean up zip download link:', error);
+        }
+      }, 100);
       
       console.log('✅ Categorized Excel export completed successfully');
     }
@@ -334,5 +360,16 @@ export const downloadBlob = (blob, filename) => {
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
+  
+  // Safe cleanup
+  setTimeout(() => {
+    try {
+      if (link.parentNode === document.body) {
+        document.body.removeChild(link);
+      }
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.warn('Failed to clean up download link:', error);
+    }
+  }, 100);
 };

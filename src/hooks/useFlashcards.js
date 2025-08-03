@@ -9,9 +9,7 @@ import {
   updateDoc, 
   doc, 
   getDoc, 
-  setDoc, 
   deleteDoc, 
-  getDocs, 
   where, 
   Timestamp 
 } from 'firebase/firestore';
@@ -411,6 +409,13 @@ export const useFlashcards = (firebaseApp, userId) => {
 
   // Filter flashcards based on category, sub-category, level, and due date
   useEffect(() => {
+    // Skip filtering if flashcards is empty or if we don't have the selectedCategory yet
+    if (!flashcards || flashcards.length === 0) {
+      console.log('🔍 FILTERING EFFECT: Skipping filter - no flashcards available');
+      setFilteredFlashcards([]);
+      return;
+    }
+
     const previousFilteredLength = filteredFlashcards.length;
     const currentCard = filteredFlashcards[currentCardIndex];
     const currentCardId = currentCard?.id;
@@ -419,6 +424,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     console.log('🔍 FILTERING EFFECT: Previous filtered length:', previousFilteredLength);
     console.log('🔍 FILTERING EFFECT: Current card ID before filtering:', currentCardId);
     console.log('🔍 FILTERING EFFECT: Current card index:', currentCardIndex);
+    console.log('🔍 FILTERING EFFECT: Total flashcards:', flashcards.length);
     
     let filtered = [...flashcards];
 
@@ -433,10 +439,14 @@ export const useFlashcards = (firebaseApp, userId) => {
     }
 
     // Always apply category and subcategory filters
-    // TODO: selectedCategory filtering moved to App.js
-    // if (selectedCategory !== 'All') {
-    //   filtered = filtered.filter(card => card.category === selectedCategory);
-    // }
+    // Get selectedCategory from window.flashcardHook since it's managed in App.js
+    const currentSelectedCategory = window.flashcardHook?.selectedCategory || 'All';
+    console.log('🔍 Current selected category from window:', currentSelectedCategory);
+    if (currentSelectedCategory !== 'All') {
+      const beforeCategoryFilter = filtered.length;
+      filtered = filtered.filter(card => card.category === currentSelectedCategory);
+      console.log(`🔍 Category filter ("${currentSelectedCategory}"): ${beforeCategoryFilter} → ${filtered.length} cards`);
+    }
 
     // Filter by sub-category
     if (selectedSubCategory !== 'All') {
@@ -462,8 +472,10 @@ export const useFlashcards = (firebaseApp, userId) => {
     // Filter by due date if enabled
     if (showDueTodayOnly) {
       const now = new Date();
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
       const beforeDueFilter = filtered.length;
       console.log('📅 Filtering by due date. Current time:', now);
+      console.log('📅 End of today:', endOfToday);
       console.log('📅 Cards before due filter:', beforeDueFilter);
       console.log('📅 Selected filters:', { selectedSubCategory, selectedLevel });
       
@@ -473,9 +485,9 @@ export const useFlashcards = (firebaseApp, userId) => {
         if (dueDate && typeof dueDate.toDate === 'function') {
           dueDate = dueDate.toDate();
         }
-        const isDue = dueDate <= now; // Check if due now or earlier
+        const isDue = dueDate < endOfToday; // Check if due before end of today (consistent with other methods)
         if (!isDue) {
-          console.log('Card not due yet:', { 
+          console.log('Card not due today:', { 
             question: card.question?.substring(0, 30), 
             dueDate: dueDate,
             active: card.active,
@@ -484,7 +496,7 @@ export const useFlashcards = (firebaseApp, userId) => {
         }
         return isDue;
       });
-      console.log('📊 After due date filter:', filtered.length, 'cards are due now (removed', beforeDueFilter - filtered.length, 'future cards)');
+      console.log('📊 After due date filter:', filtered.length, 'cards are due today (removed', beforeDueFilter - filtered.length, 'future cards)');
       console.log('📊 Note: Category and subcategory filters are still applied to due cards');
     }
 
@@ -653,8 +665,8 @@ export const useFlashcards = (firebaseApp, userId) => {
                                 dueCardsInSubcategory.length === 0 &&
                                 recentCardCompletion;
 
-      // Re-enable auto-advance with new behavior: go to next category when subcategory is finished
-      const autoAdvanceDisabled = false;
+      // Disable auto-advance in useFlashcards - now handled in App.js with enhanced logic
+      const autoAdvanceDisabled = true;
 
       if (shouldAutoAdvance && !autoAdvanceDisabled) {
         if (skipTimeDelay) {
@@ -675,11 +687,26 @@ export const useFlashcards = (firebaseApp, userId) => {
           console.log('🔄 SUBCATEGORY FINISHED: Current subcategory has no more due cards, finding next subcategory within same category');
 
           // First, try to find another subcategory with due cards in the SAME category
-          // TODO: selectedCategory moved to App.js - auto-advance logic needs refactoring
-          // const nextSubCategoryInSameCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
-
-          // TODO: Auto-advance logic temporarily disabled until selectedCategory refactoring is complete
-          console.log('🔄 AUTO-ADVANCE: Logic disabled until selectedCategory is properly refactored in App.js');
+          // Get current category from window.flashcardHook which is set by App.js
+          const currentCategory = window.flashcardHook?.selectedCategory;
+          if (currentCategory && currentCategory !== 'All') {
+            const nextSubCategoryInSameCategory = getNextSubCategoryWithLeastCards(currentCategory, selectedSubCategory);
+            console.log(`🔄 AUTO-ADVANCE: Next subcategory in "${currentCategory}":`, nextSubCategoryInSameCategory);
+            
+            if (nextSubCategoryInSameCategory) {
+              console.log(`🔄 AUTO-ADVANCE: Switching to subcategory "${nextSubCategoryInSameCategory}" within category "${currentCategory}"`);
+              setSelectedSubCategory(nextSubCategoryInSameCategory);
+              // Signal to App.js that subcategory changed due to auto-advance
+              if (window.flashcardHook?.onSubCategoryAutoAdvance) {
+                window.flashcardHook.onSubCategoryAutoAdvance(nextSubCategoryInSameCategory);
+              }
+            } else {
+              console.log(`🔄 AUTO-ADVANCE: No more subcategories with due cards in "${currentCategory}"`);
+              // Let App.js handle category switching if needed
+            }
+          } else {
+            console.log('🔄 AUTO-ADVANCE: Current category is "All", not switching subcategories');
+          }
         }, 50);
       } else if (shouldAutoAdvance && autoAdvanceDisabled) {
         console.log('🚫 AUTO-ADVANCE: DISABLED FOR DEBUGGING - Would have auto-advanced but it\'s disabled');
@@ -948,17 +975,17 @@ export const useFlashcards = (firebaseApp, userId) => {
    */
   const getLevels = useCallback((selectedCategory = 'All') => {
     let filteredCards = flashcards;
-    
+
     // Filter by category
     if (selectedCategory !== 'All') {
       filteredCards = filteredCards.filter(card => card.category === selectedCategory);
     }
-    
+
     // Filter by sub-category
     if (selectedSubCategory !== 'All') {
       filteredCards = filteredCards.filter(card => card.sub_category === selectedSubCategory);
     }
-    
+
     // If due today filter is enabled, only consider cards that are due
     if (showDueTodayOnly) {
       const now = new Date();
@@ -968,7 +995,7 @@ export const useFlashcards = (firebaseApp, userId) => {
         return dueDate < endOfToday;
       });
     }
-    
+
     const levels = [...new Set(
       filteredCards
         .map(card => {
@@ -977,8 +1004,48 @@ export const useFlashcards = (firebaseApp, userId) => {
         })
         .filter(level => level && level.trim() !== '')
     )];
-    
+
     return levels.sort();
+  }, [flashcards, selectedSubCategory, showDueTodayOnly, inferLevelFromFSRS]);
+
+  /**
+   * Get level statistics (card counts) for each level
+   * @param {string} selectedCategory - The selected category to filter by
+   * @returns {Object} Object with level names as keys and card counts as values
+   */
+  const getLevelStats = useCallback((selectedCategory = 'All') => {
+    let filteredCards = flashcards;
+
+    // Filter by category
+    if (selectedCategory !== 'All') {
+      filteredCards = filteredCards.filter(card => card.category === selectedCategory);
+    }
+
+    // Filter by sub-category
+    if (selectedSubCategory !== 'All') {
+      filteredCards = filteredCards.filter(card => card.sub_category === selectedSubCategory);
+    }
+
+    // If due today filter is enabled, only consider cards that are due
+    if (showDueTodayOnly) {
+      const now = new Date();
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      filteredCards = filteredCards.filter(card => {
+        const dueDate = card.dueDate || new Date(0);
+        return dueDate < endOfToday;
+      });
+    }
+
+    const levelStats = {};
+
+    filteredCards.forEach(card => {
+      const level = card.level || inferLevelFromFSRS(card);
+      if (level && level.trim() !== '') {
+        levelStats[level] = (levelStats[level] || 0) + 1;
+      }
+    });
+
+    return levelStats;
   }, [flashcards, selectedSubCategory, showDueTodayOnly, inferLevelFromFSRS]);
 
   // Auto-manage sub-category filter when options change - simplified since category is managed in App.js
@@ -1107,7 +1174,10 @@ export const useFlashcards = (firebaseApp, userId) => {
    */
   const updateFlashcard = async (cardId, updates) => {
     if (!db) throw new Error('Database not available');
-    if (!cardId) throw new Error('Card ID is required');
+    if (!cardId) {
+      console.error('updateFlashcard called without cardId:', { cardId, updates });
+      throw new Error('Card ID is required');
+    }
 
     console.log('🔄 useFlashcards: Updating card', cardId, 'with updates:', updates);
     
@@ -1321,7 +1391,6 @@ export const useFlashcards = (firebaseApp, userId) => {
    */
   const getCardsDueToday = useCallback(() => {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     
     return flashcards.filter(card => {
@@ -1332,7 +1401,8 @@ export const useFlashcards = (firebaseApp, userId) => {
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
       }
-      return dueDate >= startOfToday && dueDate < endOfToday;
+      // Changed to match getCategoryStats - count all cards due before end of today
+      return dueDate < endOfToday;
     });
   }, [flashcards]);
 
@@ -1411,18 +1481,19 @@ export const useFlashcards = (firebaseApp, userId) => {
    */
   const getFilteredDueCards = useCallback((selectedCategory = 'All') => {
     const now = new Date();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     
     let filtered = flashcards.filter(card => {
       // Only include active cards
       if (card.active === false) return false;
       
-      // Check if card is due now or earlier
+      // Check if card is due before end of today (consistent with getCardsDueToday)
       // Ensure dueDate is a proper Date object for comparison
       let dueDate = card.dueDate || new Date(0);
       if (dueDate && typeof dueDate.toDate === 'function') {
         dueDate = dueDate.toDate();
       }
-      if (dueDate > now) return false; // Exclude cards due in the future
+      if (dueDate >= endOfToday) return false; // Exclude cards due after today
       
       return true;
     });
@@ -1603,6 +1674,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     getSubCategoryStats,
     getAllSubCategoryStats,
     getLevels,
+    getLevelStats,
     getCategoryStats,
     getCardsDueToday,
     getPastDueCards,

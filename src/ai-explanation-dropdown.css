@@ -1,0 +1,24 @@
+.ai-explanation-dropdown-outer {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  margin-top: 0.5rem;
+  position: relative;
+  z-index: 3;
+}
+
+.ai-explanation-dropdown-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 220px;
+  max-width: 480px;
+  margin: 0 auto;
+  z-index: 100;
+  background: var(--dropdown-bg, #fff);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+}

@@ -73,6 +73,9 @@ export const htmlToMarkdown = (html) => {
                     markdownContent = `~~${markdownContent}~~`;
                   }
                   break;
+                default:
+                  // Ignore unsupported style properties
+                  break;
               }
             }
           }
@@ -130,6 +133,9 @@ export const htmlToMarkdown = (html) => {
                   if (value.includes('line-through')) {
                     markdownContent = `~~${markdownContent}~~`;
                   }
+                  break;
+                default:
+                  // Ignore unsupported style properties
                   break;
               }
             }
@@ -239,6 +245,9 @@ export const markdownToHtml = (markdown) => {
             } else {
               styles.push(`font-size: ${value}`);
             }
+            break;
+          default:
+            // Ignore unsupported style properties
             break;
         }
       });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 /**
  * Component for displaying flashcard content
@@ -146,7 +146,6 @@ const FlashcardDisplay = ({
           <div 
             className="flashcard-section answer-section"
             onClick={(e) => {
-              // Check if the click target is a dropdown element or inside a dropdown
               const target = e.target;
               const isDropdownClick = target.closest('details') || 
                                       target.closest('summary') || 
@@ -157,12 +156,9 @@ const FlashcardDisplay = ({
                                       target.closest('button') ||
                                       target.closest('select') ||
                                       target.closest('.dropdown');
-              
-              // Don't flip card if clicking on dropdown elements
               if (isDropdownClick) {
                 return;
               }
-              
               if (onToggleAnswer) {
                 onToggleAnswer();
               }
