@@ -41,6 +41,94 @@ const firebaseConfig = {
 };
 
 /**
+ * ContentEditable component that preserves cursor position
+ */
+const ContentEditableNotes = ({ content, onChange, className, style }) => {
+  const contentRef = React.useRef(null);
+  const lastContent = React.useRef(content);
+  const isUpdating = React.useRef(false);
+  
+  // Only set initial content
+  React.useEffect(() => {
+    if (contentRef.current && !contentRef.current.innerHTML) {
+      contentRef.current.innerHTML = content;
+    }
+  }, []);
+  
+  // Handle external content changes (but not while user is typing)
+  React.useEffect(() => {
+    if (contentRef.current && content !== lastContent.current && !isUpdating.current) {
+      const selection = window.getSelection();
+      const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+      
+      // Save cursor position
+      let cursorPosition = 0;
+      if (range && contentRef.current.contains(range.startContainer)) {
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(contentRef.current);
+        preCaretRange.setEnd(range.startContainer, range.startOffset);
+        cursorPosition = preCaretRange.toString().length;
+      }
+      
+      // Update content
+      contentRef.current.innerHTML = content;
+      lastContent.current = content;
+      
+      // Restore cursor position
+      try {
+        const textNodes = [];
+        const walker = document.createTreeWalker(
+          contentRef.current,
+          NodeFilter.SHOW_TEXT,
+          null,
+          false
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {
+          textNodes.push(node);
+        }
+        
+        let charCount = 0;
+        for (const textNode of textNodes) {
+          const nodeLength = textNode.textContent.length;
+          if (charCount + nodeLength >= cursorPosition) {
+            const newRange = document.createRange();
+            newRange.setStart(textNode, cursorPosition - charCount);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+            break;
+          }
+          charCount += nodeLength;
+        }
+      } catch (e) {
+        console.log('Could not restore cursor position');
+      }
+    }
+  }, [content]);
+  
+  const handleInput = (e) => {
+    isUpdating.current = true;
+    const html = e.currentTarget.innerHTML;
+    lastContent.current = html;
+    onChange(html);
+    setTimeout(() => { isUpdating.current = false; }, 0);
+  };
+  
+  return (
+    <div
+      ref={contentRef}
+      contentEditable
+      className={className}
+      style={style}
+      onInput={handleInput}
+      suppressContentEditableWarning={true}
+    />
+  );
+};
+
+/**
  * Component that automatically navigates to the optimal category and subcategory
  * when no cards are available in the current selection
  */
@@ -58,7 +146,7 @@ const AutoNavigateToOptimalCards = ({
   const [navigationComplete, setNavigationComplete] = useState(false);
 
   useEffect(() => {
-    if (!showDueTodayOnly || isNavigating || navigationComplete) return;
+    if (isNavigating || navigationComplete) return;
 
     const performAutoNavigation = async () => {
       setIsNavigating(true);
@@ -78,18 +166,18 @@ const AutoNavigateToOptimalCards = ({
           // Navigate to the optimal category and subcategory
           setSelectedCategory(bestCategory);
           setSelectedSubCategory(bestSubCategory);
-          setMessage(`Auto-navigated to "${bestCategory}" → "${bestSubCategory}" (optimal study path)`);
+          setMessage(`Auto-navigated to "${bestCategory}" → "${bestSubCategory}"`);
           
-          setTimeout(() => setMessage(''), 4000);
+          setTimeout(() => setMessage(''), 2500);
         } else {
           console.log(`🚀 AUTO-NAVIGATE: No subcategories with due cards in "${bestCategory}", showing all subcategories`);
           
           // Navigate to the category but show all subcategories
           setSelectedCategory(bestCategory);
           setSelectedSubCategory('All');
-          setMessage(`Auto-navigated to "${bestCategory}" category (optimal study path)`);
+          setMessage(`Auto-navigated to "${bestCategory}" category`);
           
-          setTimeout(() => setMessage(''), 4000);
+          setTimeout(() => setMessage(''), 2500);
         }
         
         setNavigationComplete(true);
@@ -102,7 +190,7 @@ const AutoNavigateToOptimalCards = ({
     };
 
     // Add a small delay to prevent immediate navigation
-    const timer = setTimeout(performAutoNavigation, 1000);
+    const timer = setTimeout(performAutoNavigation, 500);
     return () => clearTimeout(timer);
   }, [currentCategory, currentSubCategory, showDueTodayOnly, isNavigating, navigationComplete, getNextCategoryWithLeastCards, getNextSubCategoryWithLeastCards, setMessage, setSelectedCategory, setSelectedSubCategory]);
 
@@ -218,9 +306,19 @@ function App() {
   const [localSelectedProvider, setLocalSelectedProvider] = useState(selectedProvider);
 
   // Session-wide notes states
-  const [notes, setNotes] = useState(() => localStorage.getItem('flashcard_session_notes') || '');
+  const [notes, setNotes] = useState(() => {
+    const savedNotes = localStorage.getItem('flashcard_session_notes') || '';
+    // Convert any existing HTML notes to plain text
+    if (savedNotes && savedNotes.includes('<')) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = savedNotes;
+      return tempDiv.textContent || tempDiv.innerText || '';
+    }
+    return savedNotes;
+  });
   const [notesCopied, setNotesCopied] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
+  const [isNotesEditMode, setIsNotesEditMode] = useState(false);
 
   // Streak tracking state
   const [streakDays, setStreakDays] = useState(0);
@@ -232,9 +330,10 @@ function App() {
   const [isAnonymousWarningDismissed, setIsAnonymousWarningDismissed] = useState(false);
   
   // Track initial due cards count for the day
-  const [, setInitialDueCardsCount] = useState(0);
+  const [initialDueCardsCount, setInitialDueCardsCount] = useState(0);
+  const [initialTotalCardsCount, setInitialTotalCardsCount] = useState(0); // Track initial total active cards count
   const [cardsCompletedToday, setCardsCompletedToday] = useState(0);
-  const [initialCategoryStats, setInitialCategoryStats] = useState({});
+  // Removed unused initialCategoryStats
   const [categoryCompletedCounts, setCategoryCompletedCounts] = useState({});
   const [, setInitialSubCategoryStats] = useState({});
   const [subCategoryCompletedCounts, setSubCategoryCompletedCounts] = useState({});
@@ -251,9 +350,13 @@ function App() {
   const [isSubCategoriesCollapsed, setIsSubCategoriesCollapsed] = useState(window.innerWidth <= 768);
   const [isLevelsCollapsed, setIsLevelsCollapsed] = useState(window.innerWidth <= 768);
   const [isNotesCollapsed, setIsNotesCollapsed] = useState(window.innerWidth <= 768);
+  const [isNotesHidden, setIsNotesHidden] = useState(false);
   const [isNotesPopouted, setIsNotesPopouted] = useState(false);
   const [notesWindowPosition, setNotesWindowPosition] = useState({ x: 100, y: 100 });
   const [notesWindowSize, setNotesWindowSize] = useState({ width: 600, height: 700 });
+  
+  // View mode state for cycling through different display options
+  const [viewModeIndex, setViewModeIndex] = useState(0);
   
   // Explain functionality state
   const [showExplainModal, setShowExplainModal] = useState(false);
@@ -261,10 +364,16 @@ function App() {
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
   const [explainError, setExplainError] = useState('');
   const [addExplanationToQuestion, setAddExplanationToQuestion] = useState(true);
-
-
+  const [addToStudyNotes, setAddToStudyNotes] = useState(true);
+  const [studyNotesText, setStudyNotesText] = useState('');
+  const [explanationCount, setExplanationCount] = useState(0);
   
-
+  // Note editing modal state
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [currentNoteText, setCurrentNoteText] = useState('');
+  
+  // Track API key errors
+  // Removed unused hasApiKeyError and setHasApiKeyError
 
   // Initialize Firebase
   useEffect(() => {
@@ -528,7 +637,7 @@ function App() {
         window._hasLoggedCategories = true;
       }
     }
-  }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly]);
+  }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, categoryStats, debugCurrentFilterState, debugSubCategoryTracking, getSubCategories, getSubCategoryStats, manualTriggerAutoAdvance]);
 
   // Sync login screen visibility with authentication state
   useEffect(() => {
@@ -552,6 +661,95 @@ function App() {
       }
     }
   }, [isAuthReady, userId]);
+
+  // Clear API keys from state for anonymous users (but keep them in localStorage)
+  useEffect(() => {
+    if (isAuthReady && isAnonymous) {
+      // Clear API keys from state for anonymous users
+      setApiKeys({
+        openai: '',
+        anthropic: '',
+        gemini: ''
+      });
+      console.log('Cleared API keys from state for anonymous user');
+    }
+  }, [isAuthReady, isAnonymous]);
+
+  // Create default flashcards for new users
+  const createDefaultFlashcards = async (currentUserId) => {
+    console.log('🔍 createDefaultFlashcards called with:', {
+      currentUserId,
+      hasAddFlashcard: !!addFlashcard,
+      flashcardsLength: flashcards.length
+    });
+
+    if (!currentUserId || !addFlashcard) {
+      console.log('❌ Cannot create default cards: missing userId or addFlashcard function', {
+        currentUserId: !!currentUserId,
+        addFlashcard: !!addFlashcard
+      });
+      return;
+    }
+
+    // Check if defaults have already been created for this user
+    const defaultsKey = `defaultCards_${currentUserId}`;
+    const hasDefaults = localStorage.getItem(defaultsKey);
+    
+    console.log('🔍 Checking localStorage for defaults:', { defaultsKey, hasDefaults });
+    
+    if (hasDefaults) {
+      console.log('📋 Default cards already created for this user');
+      return;
+    }
+
+    // Check if user already has flashcards
+    console.log('🔍 Checking flashcards length:', flashcards.length);
+    if (flashcards.length > 0) {
+      console.log('📋 User already has flashcards, skipping default creation');
+      localStorage.setItem(defaultsKey, 'true'); // Mark as having defaults to avoid future checks
+      return;
+    }
+
+    console.log('📋 Creating default flashcards for new user:', currentUserId);
+
+    const defaultCards = [
+      {
+        question: "What is 2+2?",
+        answer: "4",
+        category: "Math",
+        sub_category: "Arithmetic", 
+        level: "new",
+        additional_info: "Basic addition"
+      },
+      {
+        question: "Capital of France?",
+        answer: "Paris",
+        category: "Geography",
+        sub_category: "Europe",
+        level: "easy", 
+        additional_info: "Located in Western Europe"
+      }
+    ];
+
+    try {
+      let createdCount = 0;
+      for (const cardData of defaultCards) {
+        await addFlashcard(cardData);
+        createdCount++;
+      }
+      
+      // Mark defaults as created
+      localStorage.setItem(defaultsKey, 'true');
+      
+      console.log(`✅ Successfully created ${createdCount} default flashcards`);
+      setMessage(`Welcome! We've added ${createdCount} sample cards to get you started.`);
+      clearMessage();
+      
+    } catch (error) {
+      console.error('❌ Error creating default flashcards:', error);
+      // Don't show error to user - this is a nice-to-have feature
+    }
+  };
 
   // Create default flashcards for new users
   useEffect(() => {
@@ -579,7 +777,7 @@ function App() {
         clearTimeout(timer);
       };
     }
-  }, [isAuthReady, userId, addFlashcard, flashcards.length, hasCheckedForDefaults]);
+  }, [isAuthReady, userId, addFlashcard, flashcards.length, hasCheckedForDefaults, createDefaultFlashcards]);
 
   // Handle authentication
   const handleLogin = async (loginType, emailVal = '', passwordVal = '') => {
@@ -962,88 +1160,84 @@ function App() {
     }
   };
 
-  // Create default flashcards for new users
-  const createDefaultFlashcards = async (currentUserId) => {
-    console.log('🔍 createDefaultFlashcards called with:', {
-      currentUserId,
-      hasAddFlashcard: !!addFlashcard,
-      flashcardsLength: flashcards.length
-    });
-
-    if (!currentUserId || !addFlashcard) {
-      console.log('❌ Cannot create default cards: missing userId or addFlashcard function', {
-        currentUserId: !!currentUserId,
-        addFlashcard: !!addFlashcard
-      });
-      return;
-    }
-
-    // Check if defaults have already been created for this user
-    const defaultsKey = `defaultCards_${currentUserId}`;
-    const hasDefaults = localStorage.getItem(defaultsKey);
-    
-    console.log('🔍 Checking localStorage for defaults:', { defaultsKey, hasDefaults });
-    
-    if (hasDefaults) {
-      console.log('📋 Default cards already created for this user');
-      return;
-    }
-
-    // Check if user already has flashcards
-    console.log('🔍 Checking flashcards length:', flashcards.length);
-    if (flashcards.length > 0) {
-      console.log('📋 User already has flashcards, skipping default creation');
-      localStorage.setItem(defaultsKey, 'true'); // Mark as having defaults to avoid future checks
-      return;
-    }
-
-    console.log('📋 Creating default flashcards for new user:', currentUserId);
-
-    const defaultCards = [
-      {
-        question: "What is 2+2?",
-        answer: "4",
-        category: "Math",
-        sub_category: "Arithmetic", 
-        level: "new",
-        additional_info: "Basic addition"
-      },
-      {
-        question: "Capital of France?",
-        answer: "Paris",
-        category: "Geography",
-        sub_category: "Europe",
-        level: "easy", 
-        additional_info: "Located in Western Europe"
-      }
-    ];
-
-    try {
-      let createdCount = 0;
-      for (const cardData of defaultCards) {
-        await addFlashcard(cardData);
-        createdCount++;
-      }
-      
-      // Mark defaults as created
-      localStorage.setItem(defaultsKey, 'true');
-      
-      console.log(`✅ Successfully created ${createdCount} default flashcards`);
-      setMessage(`Welcome! We've added ${createdCount} sample cards to get you started.`);
-      clearMessage();
-      
-    } catch (error) {
-      console.error('❌ Error creating default flashcards:', error);
-      // Don't show error to user - this is a nice-to-have feature
-    }
-  };
-
   // Handle edit card
   const handleEditCard = useCallback((card) => {
     setEditCardData(card);
     setIsEditingCard(true);
     setShowCreateCardForm(true);
   }, []);
+
+  // View mode configuration and handler
+  const viewModes = [
+    { 
+      name: 'Normal', 
+      icon: '👁️', 
+      description: 'Normal view with notes panel',
+      apply: () => {
+        setIsNotesHidden(false);
+        setIsMaximized(false);
+        setIsPopouted(false);
+        setIsNotesPopouted(false);
+      }
+    },
+    { 
+      name: 'Focus', 
+      icon: '🔍', 
+      description: 'Focus mode without notes panel',
+      apply: () => {
+        setIsNotesHidden(true);
+        setIsMaximized(false);
+        setIsPopouted(false);
+        setIsNotesPopouted(false);
+      }
+    },
+    { 
+      name: 'Fullscreen', 
+      icon: '⬜', 
+      description: 'Maximized fullscreen view',
+      apply: () => {
+        setIsNotesHidden(false);
+        setIsMaximized(true);
+        setIsPopouted(false);
+        setIsNotesPopouted(false);
+      }
+    },
+    { 
+      name: 'Popout', 
+      icon: '⧉', 
+      description: 'Popout window view',
+      apply: () => {
+        setIsNotesHidden(false);
+        setIsMaximized(false);
+        setIsPopouted(true);
+        setIsNotesPopouted(false);
+      }
+    }
+  ];
+
+  const handleViewModeToggle = () => {
+    const nextModeIndex = (viewModeIndex + 1) % viewModes.length;
+    setViewModeIndex(nextModeIndex);
+    viewModes[nextModeIndex].apply();
+  };
+
+  // Sync viewModeIndex with current state
+  useEffect(() => {
+    let currentModeIndex = 0;
+    if (isMaximized) {
+      currentModeIndex = 2; // Fullscreen
+    } else if (isPopouted) {
+      currentModeIndex = 3; // Popout
+    } else if (isNotesHidden) {
+      currentModeIndex = 1; // Focus
+    } else {
+      currentModeIndex = 0; // Normal
+    }
+    
+    if (currentModeIndex !== viewModeIndex) {
+      setViewModeIndex(currentModeIndex);
+    }
+  }, [isMaximized, isPopouted, isNotesHidden, viewModeIndex]);
 
   // Window management functions
   const handleMaximize = () => {
@@ -1106,11 +1300,14 @@ function App() {
 
   // Explain functionality handlers
   const handleOpenExplain = () => {
-    if (currentCard) {
-      const defaultPrompt = `Explain "${currentCard.question?.replace(/<[^>]*>/g, '') || 'this question'}" including concepts and why it is important to know`;
-      setExplainPrompt(defaultPrompt);
-    } else {
-      setExplainPrompt('Explain the current topic including concepts and why it is important to know');
+    // Only set default prompt if the textbox is empty
+    if (!explainPrompt.trim()) {
+      if (currentCard) {
+        const defaultPrompt = `Explain "${currentCard.question?.replace(/<[^>]*>/g, '') || 'this question'}" including concepts and why it is important to know`;
+        setExplainPrompt(defaultPrompt);
+      } else {
+        setExplainPrompt('Explain the current topic including concepts and why it is important to know');
+      }
     }
     setShowExplainModal(true);
     setExplainError('');
@@ -1118,8 +1315,148 @@ function App() {
 
   const handleCloseExplain = () => {
     setShowExplainModal(false);
-    setExplainPrompt('');
     setExplainError('');
+    // Don't clear the prompt so users can reuse or modify their input
+  };
+
+  // Helper function to add notes with color grouping and proper formatting
+  const addToNotes = (content, type = 'explanation') => {
+    const timestamp = new Date().toLocaleString();
+    
+    // Define different color palettes for explanations to distinguish them
+    const explanationColors = [
+      { 
+        color: '#3b82f6', 
+        bg: isDarkMode ? 'rgba(59, 130, 246, 0.12)' : 'rgba(59, 130, 246, 0.08)', 
+        icon: '💡' 
+      }, // Blue
+      { 
+        color: '#10b981', 
+        bg: isDarkMode ? 'rgba(16, 185, 129, 0.12)' : 'rgba(16, 185, 129, 0.08)', 
+        icon: '🌟' 
+      }, // Green
+      { 
+        color: '#f59e0b', 
+        bg: isDarkMode ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)', 
+        icon: '✨' 
+      }, // Amber
+      { 
+        color: '#8b5cf6', 
+        bg: isDarkMode ? 'rgba(139, 92, 246, 0.12)' : 'rgba(139, 92, 246, 0.08)', 
+        icon: '🔍' 
+      }, // Purple
+      { 
+        color: '#ef4444', 
+        bg: isDarkMode ? 'rgba(239, 68, 68, 0.12)' : 'rgba(239, 68, 68, 0.08)', 
+        icon: '🎯' 
+      }, // Red
+      { 
+        color: '#06b6d4', 
+        bg: isDarkMode ? 'rgba(6, 182, 212, 0.12)' : 'rgba(6, 182, 212, 0.08)', 
+        icon: '💎' 
+      }, // Cyan
+      { 
+        color: '#84cc16', 
+        bg: isDarkMode ? 'rgba(132, 204, 22, 0.12)' : 'rgba(132, 204, 22, 0.08)', 
+        icon: '🚀' 
+      }, // Lime
+      { 
+        color: '#ec4899', 
+        bg: isDarkMode ? 'rgba(236, 72, 153, 0.12)' : 'rgba(236, 72, 153, 0.08)', 
+        icon: '⭐' 
+      }  // Pink
+    ];
+    
+    // Define color styles for different types of content
+    const colorStyles = {
+      explanation: explanationColors[explanationCount % explanationColors.length],
+      question: { 
+        color: '#10b981', 
+        bg: isDarkMode ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.05)', 
+        icon: '❓' 
+      },
+      answer: { 
+        color: '#f59e0b', 
+        bg: isDarkMode ? 'rgba(245, 158, 11, 0.08)' : 'rgba(245, 158, 11, 0.05)', 
+        icon: '✅' 
+      },
+      note: { 
+        color: '#8b5cf6', 
+        bg: isDarkMode ? 'rgba(139, 92, 246, 0.08)' : 'rgba(139, 92, 246, 0.05)', 
+        icon: '📝' 
+      },
+      review: { 
+        color: '#ef4444', 
+        bg: isDarkMode ? 'rgba(239, 68, 68, 0.08)' : 'rgba(239, 68, 68, 0.05)', 
+        icon: '🔍' 
+      }
+    };
+    
+    const style = colorStyles[type] || colorStyles.note;
+    
+    // Increment explanation count for next explanation
+    if (type === 'explanation') {
+      setExplanationCount(prev => prev + 1);
+    }
+    
+    // Create formatted content with color and timestamp
+    // Check if content already contains HTML
+    const isHTML = /<[^>]+>/.test(content);
+    const processedContent = isHTML ? content : content.replace(/\n/g, '<br/>');
+    
+    let formattedContent;
+    
+    if (type === 'explanation') {
+      // For explanations, preserve HTML formatting and wrap in styled container
+      const questionContext = currentCard?.question?.replace(/<[^>]*>/g, '') || 'Current Topic';
+      formattedContent = `<div style="
+        background: ${style.bg || 'rgba(59, 130, 246, 0.08)'};
+        border: 1px solid ${style.color}40;
+        border-left: 4px solid ${style.color}; 
+        border-radius: 8px;
+        padding: 20px; 
+        margin-bottom: 24px; 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      ">
+        <div style="margin-bottom: 12px;">
+          <strong style="font-size: 1.1em; display: inline-block; margin-bottom: 4px; color: ${style.color};">${style.icon} ${questionContext}</strong><br/>
+          <small style="color: #666; font-size: 0.85em; opacity: 0.7;">${timestamp}</small>
+        </div>
+        <div style="margin-top: 16px; line-height: 1.6;">
+          ${content}
+        </div>
+      </div>
+
+      <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 28px 0; opacity: 0.3;"/>
+
+      `;
+    } else {
+      // For other types, use plain text formatting
+      const plainContent = isHTML ? htmlToPlainText(content) : content;
+      const header = `${style.icon} ${type.toUpperCase()}`;
+      const separator = '━'.repeat(50);
+      formattedContent = `${separator}
+${header}
+${timestamp}
+${separator}
+${plainContent}
+
+`;
+    }
+    
+    const currentNotes = notes.trim();
+    // Prepend new content instead of append
+    const newNotes = currentNotes ? `${formattedContent}${currentNotes}` : formattedContent;
+    
+    setNotes(newNotes);
+    
+    // Save to localStorage
+    setTimeout(() => {
+      localStorage.setItem('flashcard_session_notes', newNotes);
+    }, 100);
+    
+    return newNotes;
   };
 
   const handleGenerateExplanation = async () => {
@@ -1130,7 +1467,7 @@ function App() {
 
     const apiKey = apiKeys[selectedProvider];
     if (!apiKey) {
-      setExplainError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
+      setExplainError(`No ${selectedProvider.toUpperCase()} API key configured. Please click the 🔑 API Key button to add your API key, or try a different AI provider if you have one configured.`);
       return;
     }
 
@@ -1213,68 +1550,113 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         cleanResponse = `<p>${cleanResponse}</p>`;
       }
       
-      // Convert HTML to plain text since notes use a textarea
-      const htmlToText = (html) => {
-        // Create a temporary div to parse HTML
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
+      // Convert HTML to formatted HTML for better display in notes
+      const formatExplanationHTML = (html) => {
+        if (!html) return '';
         
-        // Convert common HTML elements to text equivalents
-        const processNode = (node) => {
-          let text = '';
-          for (let child of node.childNodes) {
-            if (child.nodeType === Node.TEXT_NODE) {
-              text += child.textContent;
-            } else if (child.nodeType === Node.ELEMENT_NODE) {
-              const tagName = child.tagName.toLowerCase();
-              switch (tagName) {
-                case 'h1':
-                case 'h2':
-                case 'h3':
-                case 'h4':
-                case 'h5':
-                case 'h6':
-                  text += '\n\n' + child.textContent.toUpperCase() + '\n';
-                  break;
-                case 'p':
-                  text += '\n\n' + processNode(child) + '\n';
-                  break;
-                case 'br':
-                  text += '\n';
-                  break;
-                case 'li':
-                  text += '\n• ' + processNode(child);
-                  break;
-                case 'ul':
-                case 'ol':
-                  text += '\n' + processNode(child) + '\n';
-                  break;
-                case 'strong':
-                case 'b':
-                  text += '**' + child.textContent + '**';
-                  break;
-                case 'em':
-                case 'i':
-                  text += '*' + child.textContent + '*';
-                  break;
-                default:
-                  text += processNode(child);
+        // Clean and enhance the HTML formatting
+        let formatted = html
+          // First, clean up any messy formatting
+          .replace(/\s+/g, ' ') // Normalize spaces
+          .replace(/>\s+</g, '><') // Remove spaces between tags
+          .trim();
+        
+        // Enhance formatting for better section separation and readability
+        formatted = formatted
+          // Convert headers to colored styled sections with better spacing
+          .replace(/<h1>/gi, '<div style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: white; padding: 12px 16px; border-radius: 8px; margin: 1.5em 0 1em 0; font-weight: bold; font-size: 1.3em; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);"><h1 style="margin: 0; color: white;">')
+          .replace(/<\/h1>/gi, '</h1></div>')
+          
+          .replace(/<h2>/gi, '<div style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 10px 14px; border-radius: 6px; margin: 1.2em 0 0.8em 0; font-weight: bold; font-size: 1.2em; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);"><h2 style="margin: 0; color: white;">')
+          .replace(/<\/h2>/gi, '</h2></div>')
+          
+          .replace(/<h3>/gi, '<div style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 8px 12px; border-radius: 5px; margin: 1em 0 0.6em 0; font-weight: bold; font-size: 1.1em; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);"><h3 style="margin: 0; color: white;">')
+          .replace(/<\/h3>/gi, '</h3></div>')
+          
+          .replace(/<h([4-6])>/gi, '<div style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 6px 10px; border-radius: 4px; margin: 0.8em 0 0.5em 0; font-weight: bold; font-size: 1em; box-shadow: 0 2px 4px rgba(139, 92, 246, 0.3);"><h$1 style="margin: 0; color: white;">')
+          .replace(/<\/h([4-6])>/gi, '</h$1></div>')
+          
+          // Add proper spacing to paragraphs with subtle background
+          .replace(/<p>/gi, '<p style="margin: 1.2em 0; line-height: 1.7; padding: 12px; background: rgba(248, 250, 252, 0.7); border-left: 3px solid #e2e8f0; border-radius: 4px;">')
+          
+          // Style lists with colored containers
+          .replace(/<ul>/gi, '<div style="background: rgba(239, 246, 255, 0.8); padding: 16px; border-radius: 6px; margin: 1em 0; border-left: 4px solid #3b82f6;"><ul style="margin: 0; padding-left: 1.5em;">')
+          .replace(/<\/ul>/gi, '</ul></div>')
+          
+          .replace(/<ol>/gi, '<div style="background: rgba(236, 253, 245, 0.8); padding: 16px; border-radius: 6px; margin: 1em 0; border-left: 4px solid #10b981;"><ol style="margin: 0; padding-left: 1.5em;">')
+          .replace(/<\/ol>/gi, '</ol></div>')
+          
+          .replace(/<li>/gi, '<li style="margin: 0.6em 0; line-height: 1.6; padding: 4px 0;">')
+          
+          // Highlight important words with colored backgrounds
+          .replace(/\b(important|key|note|remember|critical|essential|must|should)\b/gi, '<span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 3px; font-weight: bold;">$1</span>')
+          .replace(/\b(warning|caution|alert|danger)\b/gi, '<span style="background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 3px; font-weight: bold;">$1</span>')
+          
+          // Style strong/bold text with colors
+          .replace(/<strong>/gi, '<strong style="color: #dc2626; font-weight: bold; background: rgba(239, 68, 68, 0.1); padding: 1px 3px; border-radius: 2px;">')
+          .replace(/<b>/gi, '<strong style="color: #dc2626; font-weight: bold; background: rgba(239, 68, 68, 0.1); padding: 1px 3px; border-radius: 2px;">')
+          .replace(/<\/b>/gi, '</strong>')
+          
+          // Style emphasis with colors
+          .replace(/<em>/gi, '<em style="color: #0891b2; font-style: italic; background: rgba(6, 182, 212, 0.1); padding: 1px 3px; border-radius: 2px;">')
+          .replace(/<i>/gi, '<em style="color: #0891b2; font-style: italic; background: rgba(6, 182, 212, 0.1); padding: 1px 3px; border-radius: 2px;">')
+          .replace(/<\/i>/gi, '</em>')
+          
+          // Enhanced code blocks with better styling
+          .replace(/<code>/gi, '<code style="background: linear-gradient(135deg, #374151, #1f2937); color: #f9fafb; padding: 4px 8px; border-radius: 4px; font-family: \'Monaco\', \'Consolas\', monospace; font-size: 0.9em; border: 1px solid #4b5563;">')
+          
+          // Add section breaks between major elements
+          .replace(/<\/(div)>\s*<(div)/gi, '</$1><div style="height: 16px;"></div><$2')
+          .replace(/<\/(p)>\s*<(div)/gi, '</$1><div style="height: 12px;"></div><$2')
+          .replace(/<\/(div)>\s*<(p)/gi, '</$1><div style="height: 12px;"></div><$2');
+        
+        // If there's no HTML structure, convert plain text to HTML
+        if (!formatted.includes('<')) {
+          const lines = formatted.split('\n');
+          formatted = lines
+            .map(line => {
+              line = line.trim();
+              if (!line) return '<br/>';
+              
+              // Check if line is a list item
+              if (line.match(/^[\-\*•]\s+/)) {
+                return `<li style="margin: 0.4em 0; line-height: 1.5;">${line.replace(/^[\-\*•]\s+/, '')}</li>`;
               }
-            }
-          }
-          return text;
-        };
+              // Check if line is numbered list
+              else if (line.match(/^\d+[\.\)]\s+/)) {
+                return `<li style="margin: 0.4em 0; line-height: 1.5;">${line.replace(/^\d+[\.\)]\s+/, '')}</li>`;
+              }
+              // Regular paragraph
+              else {
+                return `<p style="margin: 0.8em 0; line-height: 1.6;">${line}</p>`;
+              }
+            })
+            .join('\n');
+          
+          // Wrap consecutive list items in ul
+          formatted = formatted.replace(/(<li[^>]*>.*?<\/li>\s*)+/g, (match) => {
+            return `<ul style="margin: 0.8em 0; padding-left: 1.5em;">${match}</ul>`;
+          });
+        }
         
-        return processNode(tempDiv).trim();
+        return formatted;
       };
       
-      // Create a formatted explanation with a clear heading
-      const explanationTitle = `💡 AI EXPLANATION`;
-      const explanationText = htmlToText(cleanResponse);
-      const explanationContent = `${explanationTitle}\n${'='.repeat(explanationTitle.length)}\n\n${explanationText}`;
+      // Format the HTML for better display in notes
+      const formattedExplanation = formatExplanationHTML(cleanResponse);
       
-      const currentNotes = notes.trim();
-      const newNotes = currentNotes ? `${currentNotes}\n\n${explanationContent}` : explanationContent;
+      // Convert HTML to plain text for tooltip
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = cleanResponse;
+      const explanationText = tempDiv.textContent || tempDiv.innerText || cleanResponse;
+      
+      // Debug logging
+      console.log('Clean Response (HTML):', cleanResponse);
+      console.log('Formatted Explanation:', formattedExplanation);
+      console.log('Plain Text Explanation:', explanationText);
+      
+      // Use the new helper function to add formatted content
+      const newNotes = addToNotes(formattedExplanation, 'explanation');
       
       // Debug logging to see what we're getting
       console.log('AI Response:', response);
@@ -1290,18 +1672,37 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         const tooltipText = explanationText.length > 500 
           ? explanationText.substring(0, 500) + '...' 
           : explanationText;
-        const escapedTooltip = tooltipText
+        
+        // Make sure tooltip text is clean plain text
+        const cleanTooltipText = tooltipText
+          .replace(/\n/g, ' ') // Convert newlines to spaces
+          .replace(/\r/g, '') // Remove carriage returns
+          .replace(/\s+/g, ' ') // Multiple spaces to single space
+          .trim();
+        
+        const escapedTooltip = cleanTooltipText
           .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;')
-          .replace(/\n/g, ' ')
-          .replace(/\r/g, '');
+          .replace(/'/g, '&#39;');
         
         const explanationIcon = `<span class="ai-explanation-lightbulb" title="${escapedTooltip}">💡</span> `;
+        
+        // Debug logging for tooltip
+        console.log('Tooltip Text (Raw):', tooltipText);
+        console.log('Tooltip Text (Clean):', cleanTooltipText);
+        console.log('Tooltip Text (Escaped):', escapedTooltip);
 
-        // Prepend to question, not append
-        const updatedQuestion = `${explanationIcon}${currentCard.question || ''}`;
+        // Check if there's already a lightbulb in the question and replace it
+        let baseQuestion = currentCard.question || '';
+        
+        // Remove any existing lightbulb spans
+        // This regex matches the lightbulb span with any title attribute content
+        baseQuestion = baseQuestion.replace(/<span class="ai-explanation-lightbulb"[^>]*>💡<\/span>\s*/g, '');
+        
+        // Prepend the new lightbulb to the cleaned question
+        const updatedQuestion = `${explanationIcon}${baseQuestion}`;
 
         console.log('Current question:', currentCard.question);
+        console.log('Base question (lightbulb removed):', baseQuestion);
         console.log('Explanation icon HTML:', explanationIcon);
         console.log('Updated question:', updatedQuestion);
 
@@ -1309,24 +1710,36 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         if (currentCard.id) {
           try {
             await updateFlashcard(currentCard.id, { question: updatedQuestion });
-            console.log('Question updated with explanation dropdown');
+            console.log('Question updated with explanation dropdown (replaced existing if present)');
           } catch (error) {
             console.error('Error updating card question:', error);
           }
         }
       }
       
-      // Update notes directly - try to preserve HTML formatting
-      setNotes(newNotes);
-      
-      // Trigger a manual update to the editor if needed
-      setTimeout(() => {
-        localStorage.setItem('flashcard_session_notes', newNotes);
-      }, 100);
       handleCloseExplain();
     } catch (error) {
       console.error('Explanation generation error:', error);
-      setExplainError('Failed to generate explanation: ' + error.message);
+      
+      // Provide user-friendly error messages based on error type
+      let userMessage = 'Unable to generate explanation. ';
+      
+      if (error.message.includes('401') || error.message.includes('403') || error.message.includes('Invalid API')) {
+        userMessage += 'Please check your API key configuration - it may be invalid or expired.';
+      } else if (error.message.includes('429') || error.message.includes('rate limit')) {
+        userMessage += 'API rate limit exceeded. Please wait a moment and try again.';
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        userMessage += 'Network connection issue. Please check your internet connection and try again.';
+      } else if (error.message.includes('quota') || error.message.includes('billing')) {
+        userMessage += 'API quota exceeded or billing issue. Please check your API account.';
+      } else {
+        userMessage += 'The AI service is currently unavailable. Please try again later or try a different AI provider.';
+      }
+      
+      setExplainError(userMessage);
+      
+      // Also add a note to the notes section about the failure
+      addToNotes(`Could not generate explanation: ${userMessage}`, 'note');
     } finally {
       setIsGeneratingExplanation(false);
     }
@@ -1356,7 +1769,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       body: JSON.stringify({
         model: 'gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: 'You are an educational expert who provides clear, comprehensive explanations of concepts. Always format your responses with proper HTML for readability.' },
+          { role: 'system', content: 'You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections like "Overview", "Key Concepts", "Examples", "Important Points", etc. Use paragraphs, lists, and emphasis for clarity.' },
           { role: 'user', content: prompt }
         ],
         temperature: 0.7,
@@ -1390,7 +1803,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         max_tokens: 1000,
         temperature: 0.7,
         messages: [
-          { role: 'user', content: prompt }
+          { role: 'user', content: `You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections like "Overview", "Key Concepts", "Examples", "Important Points", etc. Use paragraphs, lists, and emphasis for clarity.\n\n${prompt}` }
         ]
       })
     });
@@ -1417,7 +1830,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       body: JSON.stringify({
         contents: [
           {
-            parts: [{ text: prompt }]
+            parts: [{ text: `You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections like "Overview", "Key Concepts", "Examples", "Important Points", etc. Use paragraphs, lists, and emphasis for clarity.\n\n${prompt}` }]
           }
         ],
         generationConfig: {
@@ -1599,21 +2012,51 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     }
   }, [isNotesDragging, isNotesResizing, handleNotesMouseMove, handleNotesMouseUp]);
 
-  // Handle ESC key to exit fullscreen
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isMaximized) {
-        handleRestore();
-      }
-    };
+  // ESC key handling is now integrated into main keyboard shortcuts handler
 
+  // Focus the flashcard window when maximized to ensure keyboard events work
+  useEffect(() => {
     if (isMaximized) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown);
-      };
+      const flashcardWindow = document.querySelector('.flashcard-window.maximized');
+      console.log('🎯 Maximized mode focus debug:', {
+        isMaximized: isMaximized,
+        flashcardWindow: flashcardWindow,
+        canFocus: flashcardWindow && typeof flashcardWindow.focus === 'function',
+        tabIndex: flashcardWindow?.tabIndex
+      });
+      
+      if (flashcardWindow) {
+        // Small delay to ensure the element is fully rendered
+        setTimeout(() => {
+          try {
+            flashcardWindow.focus();
+            console.log('🎯 Focus attempt completed. Active element:', document.activeElement?.tagName, document.activeElement?.className);
+          } catch (error) {
+            console.error('🎯 Focus failed:', error);
+          }
+        }, 100);
+        
+        // Also add a direct keydown listener to the maximized window as backup
+        const directKeyHandler = (event) => {
+          if (['1', '2', '3', '4'].includes(event.key) && showAnswer && getCurrentCard()) {
+            console.log('🎯 Direct key handler triggered:', event.key);
+            event.preventDefault();
+            event.stopPropagation();
+            
+            const ratingMap = { '1': 'again', '2': 'hard', '3': 'good', '4': 'easy' };
+            handleReviewCard(ratingMap[event.key]);
+          }
+        };
+        
+        flashcardWindow.addEventListener('keydown', directKeyHandler);
+        
+        // Return cleanup function
+        return () => {
+          flashcardWindow.removeEventListener('keydown', directKeyHandler);
+        };
+      }
     }
-  }, [isMaximized]);
+  }, [isMaximized, showAnswer, getCurrentCard, handleReviewCard]);
 
   // Clear messages after delay
 
@@ -1640,6 +2083,18 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Debug keyboard events in maximized mode
+      if (isMaximized && ['1', '2', '3', '4'].includes(event.key)) {
+        console.log('🎯 Max mode key debug:', {
+          key: event.key,
+          target: event.target.tagName,
+          showAnswer: showAnswer,
+          hasCard: !!getCurrentCard(),
+          activeElement: document.activeElement?.tagName,
+          focusedElement: document.activeElement?.className
+        });
+      }
+      
       // Don't trigger shortcuts if user is typing in an input
       if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.contentEditable === 'true') {
         return;
@@ -1724,15 +2179,22 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           break;
         case 'Escape':
           event.preventDefault();
-          setShowCreateCardForm(false);
-          setShowSettingsModal(false);
-          setShowImportExportModal(false);
-          setShowCalendarModal(false);
-          setShowManageCardsModal(false);
-          setShowGenerateModal(false);
-          setShowAccountModal(false);
-          setIsEditingCard(false);
-          setEditCardData(null);
+          // Handle maximized mode exit first
+          if (isMaximized) {
+            handleRestore();
+          } else {
+            // Handle modal closures
+            setShowCreateCardForm(false);
+            setShowSettingsModal(false);
+            setShowImportExportModal(false);
+            setShowCalendarModal(false);
+            setShowManageCardsModal(false);
+            setShowGenerateModal(false);
+            setShowAccountModal(false);
+            setShowNoteModal(false);
+            setIsEditingCard(false);
+            setEditCardData(null);
+          }
           break;
         default:
           break;
@@ -1741,7 +2203,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showAnswer, nextCard, prevCard, setShowAnswer, handleReviewCard, getCurrentCard, handleEditCard]);
+  }, [showAnswer, nextCard, prevCard, setShowAnswer, handleReviewCard, getCurrentCard, handleEditCard, isMaximized, handleRestore]);
 
   // Computed values now declared earlier in the component
 
@@ -1749,6 +2211,11 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
   useEffect(() => {
     localStorage.setItem('flashcard_session_notes', notes);
   }, [notes]);
+
+  // Clear explain prompt when card changes so default text updates
+  useEffect(() => {
+    setExplainPrompt('');
+  }, [currentCardIndex]);
 
   // Handle notes text change
   const handleNotesChange = (value) => {
@@ -1758,7 +2225,73 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
   // Clear notes
   const handleClearNotes = () => {
     setNotes('');
+    setExplanationCount(0); // Reset explanation color counter
   };
+
+  // Note modal handlers
+  const handleOpenNoteModal = () => {
+    setCurrentNoteText('');
+    setShowNoteModal(true);
+  };
+
+  // Helper function to convert HTML to plain text
+  const htmlToPlainText = (html) => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    return tempDiv.textContent || tempDiv.innerText || '';
+  };
+
+  // Notes edit mode handler
+  const handleEditNotes = () => {
+    setIsNotesEditMode(true);
+    
+    // Focus the editor after state update
+    setTimeout(() => {
+      const editor = document.querySelector('.notes-html-editor');
+      if (editor) {
+        editor.focus();
+        // Place cursor at the end of the content
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }, 100);
+  };
+
+  // Notes preview mode handler
+  const handlePreviewNotes = () => {
+    setIsNotesEditMode(false);
+    // Notes content is already preserved in the notes state
+    // No need to restore from originalNotesBeforeEdit unless the user wants to cancel changes
+  };
+
+  const handleCloseNoteModal = () => {
+    setShowNoteModal(false);
+    setCurrentNoteText('');
+  };
+
+  const handleSaveNote = () => {
+    if (currentNoteText.trim()) {
+      addToNotes(currentNoteText.trim(), 'note');
+      handleCloseNoteModal();
+    }
+  };
+
+  // Auto-focus the note editor when modal opens
+  useEffect(() => {
+    if (showNoteModal) {
+      // Small delay to ensure the modal is fully rendered
+      setTimeout(() => {
+        const noteEditor = document.querySelector('.note-editor textarea');
+        if (noteEditor) {
+          noteEditor.focus();
+        }
+      }, 100);
+    }
+  }, [showNoteModal]);
   
   // Get due cards for easy access
   const pastDueCards = getPastDueCards();
@@ -1787,6 +2320,34 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     }
   }, [flashcards, showDueTodayOnly, filteredDueCards, starredCards]);
 
+  // Debug helper for progress bar
+  useEffect(() => {
+    window.debugProgressBar = {
+      checkValues: () => {
+        console.log('Progress Bar Debug Info:', {
+          cardsCompletedToday,
+          initialDueCardsCount,
+          initialTotalCardsCount,
+          cardsDueTodayLength: cardsDueToday.length,
+          flashcardsLength: flashcards.length,
+          showDueTodayOnly,
+          storedInitialCount: localStorage.getItem(`flashcard_initial_due_${userId}`),
+          storedInitialTotal: localStorage.getItem(`flashcard_initial_total_${userId}`),
+          storedDate: localStorage.getItem(`flashcard_due_date_${userId}`),
+          todayDate: new Date().toDateString()
+        });
+      },
+      resetToday: () => {
+        if (userId) {
+          localStorage.removeItem(`flashcard_due_date_${userId}`);
+          localStorage.removeItem(`flashcard_initial_due_${userId}`);
+          localStorage.removeItem(`flashcard_completed_today_${userId}`);
+          console.log('Daily counts reset. Refresh the page to recalculate.');
+        }
+      }
+    };
+  }, [cardsCompletedToday, initialDueCardsCount, initialTotalCardsCount, cardsDueToday.length, flashcards.length, showDueTodayOnly, userId]);
+
   // Load streak from localStorage on mount
   useEffect(() => {
     if (userId) {
@@ -1797,35 +2358,40 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
   // Initialize daily due cards count
   useEffect(() => {
-    if (userId && allDueCards.length > 0 && categoryStats && subCategoryStats) {
+    if (userId && flashcards.length > 0 && categoryStats && subCategoryStats) {
       const today = new Date().toDateString();
       const storedDate = localStorage.getItem(`flashcard_due_date_${userId}`);
       const storedCount = localStorage.getItem(`flashcard_initial_due_${userId}`);
+      const storedTotalCount = localStorage.getItem(`flashcard_initial_total_${userId}`);
       const storedCompleted = localStorage.getItem(`flashcard_completed_today_${userId}`);
-      const storedCategoryStats = localStorage.getItem(`flashcard_initial_category_stats_${userId}`);
+      // Removed unused storedCategoryStats
       const storedCategoryCompleted = localStorage.getItem(`flashcard_category_completed_${userId}`);
       const storedSubCategoryStats = localStorage.getItem(`flashcard_initial_subcategory_stats_${userId}`);
       const storedSubCategoryCompleted = localStorage.getItem(`flashcard_subcategory_completed_${userId}`);
       
       // If it's a new day or first time, reset counts
       if (storedDate !== today) {
-        const newInitialCount = allDueCards.length;
+        const newInitialCount = cardsDueToday.length;
+        const newInitialTotalCount = flashcards.filter(card => card.active !== false).length; // Count all active cards
         const newCategoryStats = categoryStats;
         const newSubCategoryStats = getAllSubCategoryStats();
-        
+
         console.log('🔄 COUNTING-INIT: Setting initial stats for new day');
         console.log('🔄 Initial category stats:', newCategoryStats);
         console.log('🔄 Initial subcategory stats keys:', Object.keys(newSubCategoryStats));
-        console.log('🔄 Total due cards:', newInitialCount);
-        
+        console.log('🔄 Total due cards today:', newInitialCount);
+        console.log('🔄 Total active cards:', newInitialTotalCount);
+
         setInitialDueCardsCount(newInitialCount);
+        setInitialTotalCardsCount(newInitialTotalCount);
         setCardsCompletedToday(0);
-        setInitialCategoryStats(newCategoryStats);
+        // setInitialCategoryStats(newCategoryStats); // Removed: variable not defined and not used
         setCategoryCompletedCounts({});
         setInitialSubCategoryStats(newSubCategoryStats);
         setSubCategoryCompletedCounts({});
         localStorage.setItem(`flashcard_due_date_${userId}`, today);
         localStorage.setItem(`flashcard_initial_due_${userId}`, newInitialCount.toString());
+        localStorage.setItem(`flashcard_initial_total_${userId}`, newInitialTotalCount.toString());
         localStorage.setItem(`flashcard_completed_today_${userId}`, '0');
         localStorage.setItem(`flashcard_initial_category_stats_${userId}`, JSON.stringify(newCategoryStats));
         localStorage.setItem(`flashcard_category_completed_${userId}`, JSON.stringify({}));
@@ -1833,14 +2399,15 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         localStorage.setItem(`flashcard_subcategory_completed_${userId}`, JSON.stringify({}));
       } else {
         // Restore counts from localStorage
-        setInitialDueCardsCount(parseInt(storedCount) || allDueCards.length);
+        setInitialDueCardsCount(parseInt(storedCount) || cardsDueToday.length);
+        setInitialTotalCardsCount(parseInt(storedTotalCount) || flashcards.filter(card => card.active !== false).length);
         setCardsCompletedToday(parseInt(storedCompleted) || 0);
         setCategoryCompletedCounts(storedCategoryCompleted ? JSON.parse(storedCategoryCompleted) : {});
         setInitialSubCategoryStats(storedSubCategoryStats ? JSON.parse(storedSubCategoryStats) : getAllSubCategoryStats());
         setSubCategoryCompletedCounts(storedSubCategoryCompleted ? JSON.parse(storedSubCategoryCompleted) : {});
       }
     }
-  }, [userId, allDueCards.length, categoryStats, getAllSubCategoryStats]);
+  }, [userId, cardsDueToday.length, categoryStats, getAllSubCategoryStats, subCategoryStats]);
 
   // Fix completion count inconsistencies - DISABLED to prevent infinite loop
   useEffect(() => {
@@ -1965,6 +2532,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       debugDueCards(flashcards, selectedCategory, selectedSubCategory);
     }
   }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory, flashcards]);
+  // Added cardsDueToday and pastDueCards to dependency array
 
   // CATEGORY SYNC DEBUG: Track category changes to identify timing issues
   useEffect(() => {
@@ -2369,6 +2937,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           case 'easy':
             stats.easy++;
             break;
+          default:
+            break;
         }
       }
     });
@@ -2441,14 +3011,27 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   <button
                     className="btn btn-secondary"
                     onClick={() => setShowApiKeyModal(true)}
-                    title="Show API Keys"
-                    style={{ minWidth: '110px' }}
+                    title={(!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini) 
+                      ? "⚠️ No valid API key configured - Click to add one" 
+                      : "Show API Keys"}
+                    style={{ 
+                      minWidth: '110px',
+                      border: (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini) ? '3px solid #ef4444' : undefined,
+                      boxShadow: (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini) ? '0 0 0 2px rgba(239, 68, 68, 0.3)' : undefined
+                    }}
                   >
                     🔑 API Key
                   </button>
                   {/* API Key Modal will be moved to end of component */}
                 </div>
 
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleViewModeToggle}
+                  title={`View: ${viewModes[viewModeIndex].description} (Click to cycle)`}
+                >
+                  {viewModes[viewModeIndex].icon} {viewModes[viewModeIndex].name} ⇄
+                </button>
                 <button
                   className="btn btn-secondary"
                   onClick={() => setShowSettingsModal(true)}
@@ -2464,15 +3047,56 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   👤 Account
                 </button>
 
-                {/* Header Toggle Arrow */}
-                <button 
-                  className="header-arrow-toggle"
-                  onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-                  aria-label="Collapse header"
-                  title="Hide header controls"
-                >
-                  ▲
-                </button>
+                {/* Right-centered section for progress bar and toggle arrow */}
+                <div className="header-right-center">
+                  {/* Daily Progress Bar - Compact header version */}
+                  {(flashcards.length > 0 || cardsCompletedToday > 0) && (
+                    <div className="header-progress-bar">
+                      <div className="progress-text">
+                        {(() => {
+                          const denominator = showDueTodayOnly ? initialDueCardsCount : initialTotalCardsCount;
+                          console.log('🔢 PROGRESS BAR VALUES:');
+                          console.log('  cardsCompletedToday:', cardsCompletedToday);
+                          console.log('  showDueTodayOnly:', showDueTodayOnly);
+                          console.log('  initialDueCardsCount:', initialDueCardsCount);
+                          console.log('  initialTotalCardsCount:', initialTotalCardsCount);
+                          console.log('  cardsDueToday.length:', cardsDueToday.length);
+                          console.log('  flashcards.length:', flashcards.length);
+                          console.log('  filteredFlashcards.length:', filteredFlashcards.length);
+                          console.log('  DENOMINATOR USED:', denominator);
+                          console.log('  DISPLAY:', `${cardsCompletedToday}/${denominator}`);
+                          return null;
+                        })()}
+                        {cardsCompletedToday}/{showDueTodayOnly ? initialDueCardsCount : initialTotalCardsCount}
+                      </div>
+                      <div className="progress-bar-container-header">
+                        <div 
+                          className="progress-bar-fill" 
+                          style={{
+                            width: `${Math.min(100, showDueTodayOnly ?
+                              (initialDueCardsCount > 0 ? (cardsCompletedToday / initialDueCardsCount) * 100 : 0) :
+                              (initialTotalCardsCount > 0 ? (cardsCompletedToday / initialTotalCardsCount) * 100 : 0))}%`
+                          }}
+                        />
+                      </div>
+                      <div className="progress-percentage-header">
+                        {Math.round(Math.min(100, showDueTodayOnly ?
+                          (initialDueCardsCount > 0 ? (cardsCompletedToday / initialDueCardsCount) * 100 : 0) :
+                          (initialTotalCardsCount > 0 ? (cardsCompletedToday / initialTotalCardsCount) * 100 : 0)))}%
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Header Toggle Arrow */}
+                  <button 
+                    className="header-arrow-toggle"
+                    onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+                    aria-label="Collapse header"
+                    title="Hide header controls"
+                  >
+                    ▲
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2545,7 +3169,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
         {filteredFlashcards.length === 0 ? (
           <div className="flashcard-area">
-            <div className="flashcard-with-notes-container">
+            <div className={`flashcard-with-notes-container ${isNotesHidden ? 'notes-hidden' : ''}`}>
               {/* Filters Section - Left panel (same as when cards are available) */}
               <div className="filters-section-left">
                 <div className="filters-group">
@@ -2637,28 +3261,17 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             ) : (
               // Regular no cards message with auto-navigation
               <>
-                {selectedCategory === 'All' ? (
-                  // When "All" categories selected and no cards
-                  <>
-                    <h2>No flashcards available for the current filters.</h2>
-                    <p>
-                      Try adjusting your filters (category, subcategory, level, due/starred toggles) or
-                      <strong>create new flashcards</strong> or <strong>import existing collections</strong> to get started!
-                    </p>
-                  </>
-                ) : (
-                  // When specific category selected but no cards - auto-navigate to optimal category/subcategory
-                  <AutoNavigateToOptimalCards 
-                    currentCategory={selectedCategory}
-                    currentSubCategory={selectedSubCategory}
-                    showDueTodayOnly={showDueTodayOnly}
-                    getNextCategoryWithLeastCards={getNextCategoryWithLeastCards}
-                    getNextSubCategoryWithLeastCards={getNextSubCategoryWithLeastCards}
-                    setSelectedCategory={setSelectedCategory}
-                    setSelectedSubCategory={setSelectedSubCategory}
-                    setMessage={setMessage}
-                  />
-                )}
+                {/* Auto-navigate to optimal category/subcategory when no cards available */}
+                <AutoNavigateToOptimalCards 
+                  currentCategory={selectedCategory}
+                  currentSubCategory={selectedSubCategory}
+                  showDueTodayOnly={showDueTodayOnly}
+                  getNextCategoryWithLeastCards={getNextCategoryWithLeastCards}
+                  getNextSubCategoryWithLeastCards={getNextSubCategoryWithLeastCards}
+                  setSelectedCategory={setSelectedCategory}
+                  setSelectedSubCategory={setSelectedSubCategory}
+                  setMessage={setMessage}
+                />
                 <div className="no-cards-actions">
                   <button 
                     className="btn btn-primary"
@@ -2686,7 +3299,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           </div>
         ) : (
           <div className="flashcard-area">
-            <div className="flashcard-with-notes-container">
+            <div className={`flashcard-with-notes-container ${isNotesHidden ? 'notes-hidden' : ''}`}>
               {/* Filters Section - Left of flashcard */}
               <div className="filters-section-left">
                 <div className="filters-group">
@@ -3022,6 +3635,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                           </button>
                           {levels.map(level => {
                             const count = levelStats[level] || 0;
+                            if (count === 0) return null;
                             return (
                               <button
                                 key={level}
@@ -3088,28 +3702,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   </div>
                 )}
 
-                {/* Progress Bar - Shows daily completion progress using consistent real-time counting */}
-                {((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
-                  <div className="daily-progress-section-wide">
-                    <div className="progress-header">
-                      <h4>Daily Progress</h4>
-                      <span className="progress-stats">
-                        {cardsCompletedToday} / {cardsCompletedToday + cardsDueToday.length} cards completed
-                      </span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div 
-                        className="progress-bar-fill" 
-                        style={{ 
-                          width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%` 
-                        }}
-                      />
-                    </div>
-                    <div className="progress-percentage">
-                      {Math.round(Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100))}%
-                    </div>
-                  </div>
-                )}
+                {/* Progress Bar moved to header */}
               </div>
 
               <div className={`flashcard-main-content ${isMaximized || isPopouted ? 'windowed' : ''}`}>
@@ -3132,6 +3725,14 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                 
                 <div 
                   className={`flashcard-window${isMaximized ? ' maximized' : ''}${isPopouted && !isMaximized ? ' popout' : ''}`}
+                  tabIndex={isMaximized ? 0 : -1}
+                  onClick={isMaximized ? (e) => {
+                    // Ensure the flashcard window gets focus when clicked in maximized mode
+                    if (e.currentTarget === e.target || e.target.closest('.flashcard-window.maximized')) {
+                      e.currentTarget.focus();
+                      console.log('🎯 Flashcard window clicked and focused in max mode');
+                    }
+                  } : undefined}
                   style={isMaximized ? {
                     backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
                   } : isPopouted ? {
@@ -3190,162 +3791,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     </div>
                   )}
                   
-                  {/* Window Control Buttons - Top Right - Hide when API dropdown is open */}
-                  {!showApiKeyModal && (isMaximized ? (
-                    /* Floating Restore Button - Only when maximized */
-                    <button
-                      onClick={handleRestore}
-                      style={{
-                        position: 'absolute',
-                        top: '16px',
-                        right: '16px',
-                        zIndex: 10001,
-                        padding: '10px 10px',
-                        backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '20px',
-                        lineHeight: '1',
-                        color: isDarkMode ? '#d1d5db' : '#374151',
-                        transition: 'all 0.2s',
-                        backdropFilter: 'blur(4px)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                      }}
-                      onMouseOver={(e) => {
-                        e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                      }}
-                      title="Exit Fullscreen (ESC)"
-                    >
-                      ⊡
-                    </button>
-                  ) : isPopouted ? (
-                    /* Popout mode - Maximize and Close buttons */
-                    <div style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '20px',
-                      zIndex: 10001,
-                      display: 'flex',
-                      gap: '4px'
-                    }}>
-                      <button
-                        onClick={handleMaximize}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Maximize to fullscreen"
-                      >
-                        ⛶
-                      </button>
-                      <button
-                        onClick={handleRestorePosition}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Close popout and restore to normal view"
-                      >
-                        ⊡
-                      </button>
-                    </div>
-                  ) : (
-                    /* Normal mode - Maximize and Popout buttons */
-                    <div style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '20px',
-                      zIndex: 10001,
-                      display: 'flex',
-                      gap: '4px'
-                    }}>
-                      <button
-                        onClick={handleMaximize}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Maximize to fullscreen"
-                      >
-                        ⛶
-                      </button>
-                      <button
-                        onClick={handlePopout}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Popout window"
-                      >
-                        {/* Unicode popout icon */}
-                        <span style={{fontSize: '1.2em'}}>⧉</span>
-                      </button>
-                    </div>
-                  ))}
+
                   
                   {/* Flashcard Content */}
                   <div
@@ -3363,6 +3809,29 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       transition: 'height 0.1s ease',
                     }}
                   >
+                    {/* Exit Button for Maximized Mode */}
+                    {isMaximized && (
+                      <>
+                        {/* EXIT BUTTON - DO NOT REMOVE */}
+                        <button
+                          onClick={handleRestore}
+                          className="notes-close-btn"
+                          style={{
+                            position: 'fixed',
+                            top: '20px',
+                            right: '20px',
+                            zIndex: 100003,
+                          }}
+                          title="Exit Fullscreen (ESC)"
+                        >
+                          ✕
+                        </button>
+                        
+                        {/* NAVIGATION ARROWS - REMOVED IN MAX VIEW */}
+                        {/* Navigation arrows removed as requested */}
+                      </>
+                    )}
+
                     <FlashcardDisplay
                       card={currentCard}
                       showAnswer={showAnswer}
@@ -3377,6 +3846,59 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       onToggleStarCard={toggleStarCard}
                       onEditCard={handleEditCard}
                       onGenerateQuestions={() => setShowGenerateModal(true)}
+                      windowControlButtons={
+                        !showApiKeyModal && (isMaximized ? (
+                          /* No buttons in maximized mode - exit button is fixed positioned */
+                          null
+                        ) : isPopouted ? (
+                          /* Popout mode - Close and Maximize buttons */
+                          <>
+                            <button
+                              onClick={handleRestorePosition}
+                              className="window-control-btn"
+                              title="Close popout and restore to normal view"
+                              style={{
+                                backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
+                                color: isDarkMode ? '#d1d5db' : '#374151',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '16px',
+                                padding: '4px 8px',
+                                marginLeft: '8px',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              ⊡
+                            </button>
+                            <button
+                              onClick={handleMaximize}
+                              className="flashcard-maximize-btn"
+                              title="Maximize to fullscreen"
+                            >
+                              ⬛
+                            </button>
+                          </>
+                        ) : (
+                          /* Normal mode - Popout and Maximize buttons */
+                          <>
+                            <button
+                              onClick={handlePopout}
+                              className="flashcard-popout-btn"
+                              title="Popout window"
+                            >
+                              ⬜
+                            </button>
+                            <button
+                              onClick={handleMaximize}
+                              className="flashcard-maximize-btn"
+                              title="Maximize to fullscreen"
+                            >
+                              ⬛
+                            </button>
+                          </>
+                        ))
+                      }
                     />
                   </div>
                   
@@ -3401,19 +3923,35 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               
               {/* Right Side Content - Notes and Review Panel */}
               <div className="right-side-content">
-                {/* Session Notes - Always visible (unless popped out) */}
-                {!isNotesPopouted && (
-                <div className={`notes-section-permanent ${isNotesCollapsed ? 'collapsed' : ''}`}>
+                {/* Session Notes - Always visible (unless popped out or hidden) */}
+                {!isNotesPopouted && !isNotesHidden && (
+                <div className="notes-section-permanent">
                   <div className="notes-header">
                     <h4>📝 Notes</h4>
                     <div className="notes-header-controls">
                       <button
                         className="explain-btn notes-explain-btn"
                         onClick={handleOpenExplain}
-                        aria-label="Generate explanation"
-                        title="Generate AI explanation about the current question"
+                        aria-label="Generate note"
+                        title="Generate AI note about the current question"
                       >
                         💡 Explain
+                      </button>
+                      <button
+                        className="explain-btn notes-edit-btn"
+                        onClick={() => handleEditCard(currentCard)}
+                        aria-label="Edit card"
+                        title="Edit this card"
+                      >
+                        ✏️ Edit Card
+                      </button>
+                      <button
+                        className="explain-btn notes-generate-btn"
+                        onClick={() => setShowGenerateModal(true)}
+                        aria-label="Generate questions"
+                        title="Generate similar questions"
+                      >
+                        🤖 Similar Questions
                       </button>
                       <button
                         className="popout-btn notes-popout-btn"
@@ -3424,14 +3962,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                         ⬜
                       </button>
                       <button
-                        className="collapse-toggle notes-collapse-toggle"
-                        onClick={() => {
-                          console.log('Notes collapse clicked, current state:', isNotesCollapsed);
-                          setIsNotesCollapsed(!isNotesCollapsed);
-                        }}
-                        aria-label={isNotesCollapsed ? "Expand notes" : "Collapse notes"}
+                        className="close-btn notes-close-btn"
+                        onClick={() => setIsNotesHidden(true)}
+                        aria-label="Close notes completely"
+                        title="Close notes panel completely"
                       >
-                        {isNotesCollapsed ? '▼' : '▲'}
+                        ✕
                       </button>
                     </div>
                   </div>
@@ -3439,25 +3975,73 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   <div className="notes-content">
                     <div className="notes-content-wrapper">
                       <div className="notes-editor-container">
-                        <RichTextEditor
-                          value={notes}
-                          onChange={handleNotesChange}
-                          placeholder="Take notes for your study session..."
-                          className="notes-textarea-permanent"
-                          minHeight="700px"
-                        />
+                        {isNotesEditMode ? (
+                          // Use RichTextEditor with HTML content support
+                          <RichTextEditor
+                            value={notes}
+                            onChange={setNotes}
+                            placeholder="Type your notes here... Use the toolbar above for formatting options."
+                            className="notes-textarea-permanent"
+                            minHeight="700px"
+                            enableRichText={true}
+                          />
+                        ) : (
+                          <div
+                            className="notes-html-content notes-textarea-permanent"
+                            style={{ width: '100%', minHeight: '700px', background: 'white', borderRadius: '0.375rem', padding: '12px', fontSize: '14px', lineHeight: '1.5', fontFamily: 'inherit', border: '1px solid #d1d5db', overflowY: 'auto' }}
+                            dangerouslySetInnerHTML={{ __html: notes }}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
                   
                   <div className="notes-footer">
+                      {/* Quick add buttons for different note types */}
+                      <div style={{ display: 'flex', gap: '0.25rem', marginRight: '1rem' }}>
+                        <button 
+                          className="notes-footer-btn"
+                          onClick={handleOpenNoteModal}
+                          title="Add a note with text editing options"
+                          style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                        >
+                          📝 Note
+                        </button>
+                        <button 
+                          className="notes-footer-btn"
+                          onClick={handleEditNotes}
+                          title="Edit notes with formatting toolbar"
+                          style={{ 
+                            fontSize: '0.8rem', 
+                            padding: '0.25rem 0.5rem',
+                            backgroundColor: isNotesEditMode ? '#3b82f6' : '',
+                            color: isNotesEditMode ? 'white' : ''
+                          }}
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button 
+                          className="notes-footer-btn"
+                          onClick={handlePreviewNotes}
+                          title="Preview notes (read-only view)"
+                          style={{ 
+                            fontSize: '0.8rem', 
+                            padding: '0.25rem 0.5rem',
+                            backgroundColor: !isNotesEditMode ? '#10b981' : '',
+                            color: !isNotesEditMode ? 'white' : ''
+                          }}
+                        >
+                          👁️ Preview
+                        </button>
+                      </div>
+                      
                       <button 
                         className="notes-footer-btn copy-btn"
                         onClick={() => {
-                          // Copy notes content to clipboard
+                          // Copy notes content to clipboard (convert HTML to plain text if needed)
                           const tempDiv = document.createElement('div');
                           tempDiv.innerHTML = notes;
-                          const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                          const textContent = tempDiv.textContent || tempDiv.innerText || notes;
                           navigator.clipboard.writeText(textContent).then(() => {
                             setNotesCopied(true);
                             setTimeout(() => setNotesCopied(false), 2000);
@@ -3596,8 +4180,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     fontSize: '0.875rem',
                     transition: 'all 0.2s ease'
                   }}
-                  aria-label="Generate explanation"
-                  title="Generate AI explanation about the current question"
+                  aria-label="Generate note"
+                  title="Generate AI note about the current question"
                 >
                   💡 Explain
                 </button>
@@ -3621,13 +4205,23 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             
             {/* Notes content */}
             <div style={{ flex: 1, padding: '1rem', overflow: 'auto' }}>
-              <RichTextEditor
-                value={notes}
-                onChange={handleNotesChange}
-                placeholder="Take notes for your study session..."
-                className="notes-textarea-popout"
-                minHeight="100%"
-              />
+              {isNotesEditMode ? (
+                // Use RichTextEditor with HTML content support
+                <RichTextEditor
+                  value={notes}
+                  onChange={setNotes}
+                  placeholder="Type your notes here... Use the toolbar above for formatting options."
+                  className="notes-textarea-popout"
+                  minHeight="100%"
+                  enableRichText={true}
+                />
+              ) : (
+                <div
+                  className="notes-html-content notes-textarea-popout"
+                  style={{ width: '100%', minHeight: '100%', background: isDarkMode ? '#1e293b' : 'white', borderRadius: '0.375rem', padding: '12px', fontSize: '14px', lineHeight: '1.5', fontFamily: 'inherit', border: `1px solid ${isDarkMode ? '#475569' : '#d1d5db'}`, overflowY: 'auto', color: isDarkMode ? '#f1f5f9' : '#374151' }}
+                  dangerouslySetInnerHTML={{ __html: notes }}
+                />
+              )}
             </div>
             
             {/* Notes actions */}
@@ -3636,10 +4230,80 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               borderTop: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
               display: 'flex',
               gap: '0.5rem',
-              justifyContent: 'flex-end'
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
-              <button 
-                className="notes-action-btn"
+              {/* Quick add buttons */}
+              <div style={{ display: 'flex', gap: '0.25rem' }}>
+                <button 
+                  onClick={() => {
+                    const noteContent = prompt('Enter your note:');
+                    if (noteContent?.trim()) {
+                      addToNotes(noteContent.trim(), 'note');
+                    }
+                  }}
+                  title="Add a quick note"
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '0.25rem',
+                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
+                    background: isDarkMode ? '#475569' : '#f3f4f6',
+                    color: isDarkMode ? '#f1f5f9' : '#374151',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem'
+                  }}
+                >
+                  📝
+                </button>
+                <button 
+                  onClick={() => {
+                    if (currentCard) {
+                      const questionText = currentCard.question?.replace(/<[^>]*>/g, '') || 'Current question';
+                      addToNotes(questionText, 'question');
+                    }
+                  }}
+                  title="Add current question to notes"
+                  disabled={!currentCard}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '0.25rem',
+                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
+                    background: isDarkMode ? '#475569' : '#f3f4f6',
+                    color: isDarkMode ? '#f1f5f9' : '#374151',
+                    cursor: currentCard ? 'pointer' : 'not-allowed',
+                    fontSize: '0.8rem',
+                    opacity: currentCard ? 1 : 0.5
+                  }}
+                >
+                  ❓
+                </button>
+                <button 
+                  onClick={() => {
+                    if (currentCard) {
+                      const answerText = currentCard.answer?.replace(/<[^>]*>/g, '') || 'Current answer';
+                      addToNotes(answerText, 'answer');
+                    }
+                  }}
+                  title="Add current answer to notes"
+                  disabled={!currentCard}
+                  style={{
+                    padding: '0.25rem 0.5rem',
+                    borderRadius: '0.25rem',
+                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
+                    background: isDarkMode ? '#475569' : '#f3f4f6',
+                    color: isDarkMode ? '#f1f5f9' : '#374151',
+                    cursor: currentCard ? 'pointer' : 'not-allowed',
+                    fontSize: '0.8rem',
+                    opacity: currentCard ? 1 : 0.5
+                  }}
+                >
+                  ✅
+                </button>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button 
+                  className="notes-action-btn"
                 onClick={() => {
                   // Copy notes content to clipboard
                   const tempDiv = document.createElement('div');
@@ -3718,6 +4382,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             <div className="resize-handle resize-w" onMouseDown={(e) => handleNotesResizeStart(e, 'w')} />
             <div className="resize-handle resize-nw" onMouseDown={(e) => handleNotesResizeStart(e, 'nw')} />
           </div>
+          </div>
         </>
       )}
 
@@ -3758,7 +4423,9 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   id="explain-prompt"
                   value={explainPrompt}
                   onChange={(e) => setExplainPrompt(e.target.value)}
-                  placeholder="Explain the current topic including concepts and why it is important to know..."
+                  placeholder={currentCard ? 
+                    `Explain "${currentCard.question?.replace(/<[^>]*>/g, '') || 'this question'}" including concepts and why it is important to know...` : 
+                    "Explain the current topic including concepts and why it is important to know..."}
                   style={{
                     width: '100%',
                     minHeight: '100px',
@@ -3800,6 +4467,67 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                 </label>
               </div>
 
+              {/* Checkbox to add explanation to study notes */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  color: isDarkMode ? '#f1f5f9' : '#374151'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={addToStudyNotes}
+                    onChange={(e) => setAddToStudyNotes(e.target.checked)}
+                    style={{
+                      width: '16px',
+                      height: '16px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  Add to study Notes
+                </label>
+              </div>
+
+              {/* Study notes textarea - shown when checkbox is checked */}
+              {addToStudyNotes && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <label 
+                    htmlFor="study-notes-text" 
+                    style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontWeight: '600',
+                      color: isDarkMode ? '#f1f5f9' : '#374151'
+                    }}
+                  >
+                    Study Notes
+                  </label>
+                  <textarea
+                    id="study-notes-text"
+                    value={studyNotesText}
+                    onChange={(e) => setStudyNotesText(e.target.value)}
+                    placeholder="Enter additional study notes that will be added to the explanation..."
+                    style={{
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '0.75rem',
+                      border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
+                      borderRadius: '0.5rem',
+                      backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+                      color: isDarkMode ? '#f1f5f9' : '#374151',
+                      fontSize: '0.95rem',
+                      lineHeight: '1.5',
+                      resize: 'vertical',
+                      fontFamily: 'inherit'
+                    }}
+                    rows={3}
+                  />
+                </div>
+              )}
+
               {explainError && (
                 <div style={{
                   color: '#dc2626',
@@ -3811,6 +4539,28 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   fontSize: '0.875rem'
                 }}>
                   ❌ {explainError}
+                  {(explainError.toLowerCase().includes('api key') || 
+                    explainError.toLowerCase().includes('configure')) && (
+                    <div style={{ marginTop: '10px' }}>
+                      <button 
+                        onClick={() => {
+                          setShowExplainModal(false);
+                          setShowApiKeyModal(true);
+                        }}
+                        style={{
+                          backgroundColor: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        🔑 Configure API Keys
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3821,24 +4571,41 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               borderTop: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
               display: 'flex',
               gap: '0.75rem',
-              justifyContent: 'flex-end'
+              justifyContent: 'space-between'
             }}>
               <button 
-                className="btn btn-secondary"
-                onClick={handleCloseExplain}
-                disabled={isGeneratingExplanation}
+                className="btn btn-outline"
+                onClick={() => setExplainPrompt('')}
+                disabled={isGeneratingExplanation || !explainPrompt.trim()}
                 style={{
                   padding: '0.75rem 1.5rem',
                   borderRadius: '0.5rem',
                   border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                  backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                  backgroundColor: 'transparent',
                   color: isDarkMode ? '#f1f5f9' : '#374151',
-                  cursor: 'pointer'
+                  cursor: isGeneratingExplanation || !explainPrompt.trim() ? 'not-allowed' : 'pointer'
                 }}
+                title="Clear the input text"
               >
-                Cancel
+                Clear
               </button>
-              <button 
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button 
+                  className="btn btn-secondary"
+                  onClick={handleCloseExplain}
+                  disabled={isGeneratingExplanation}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '0.5rem',
+                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
+                    backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
+                    color: isDarkMode ? '#f1f5f9' : '#374151',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
                 className="btn btn-primary"
                 onClick={handleGenerateExplanation}
                 disabled={isGeneratingExplanation || !explainPrompt.trim()}
@@ -3870,6 +4637,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   <>🧠 Generate Explanation</>
                 )}
               </button>
+              </div>
             </div>
           </div>
         </div>
@@ -3997,7 +4765,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                 fontSize: '14px',
                 color: isDarkMode ? '#9ca3af' : '#6b7280'
               }}>
-                Configure your AI providers for question generation, explanations, and other AI features. Your API keys enable direct communication with AI services.
+                Configure your AI providers for question generation, notes, and other AI features. Your API keys enable direct communication with AI services.
               </p>
               
               {/* Currently Selected Provider Display */}
@@ -4131,7 +4899,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                         <strong>📝 Question Generation:</strong> When you click "Generate Questions", your API key is used to create new flashcard questions based on your content.
                       </p>
                       <p style={{ margin: '0 0 6px 0' }}>
-                        <strong>💡 AI Explanations:</strong> The "Explain" feature uses your key to provide detailed explanations of flashcard content.
+                        <strong>💡 Note:</strong> The "Explain" feature uses your key to provide detailed notes about flashcard content.
                       </p>
                       <p style={{ margin: '0 0 6px 0' }}>
                         <strong>📚 Study Guide Creation:</strong> Your key enables AI-powered study guide generation from your difficult cards.
@@ -4501,7 +5269,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       color: isDarkMode ? '#cbd5e1' : '#475569',
                       lineHeight: '1.4'
                     }}>
-                      Question generation, answer explanations, study guide creation, content analysis, and interactive learning assistance. More features coming soon!
+                      Question generation, answer notes, study guide creation, content analysis, and interactive learning assistance. More features coming soon!
                     </p>
                   </div>
                 </div>
@@ -5012,6 +5780,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         isDarkMode={isDarkMode}
         apiKeys={apiKeys}
         selectedProvider={selectedProvider}
+        onOpenApiConfig={() => setShowApiKeyModal(true)}
       />
 
       <ManageCardsModal
@@ -5029,6 +5798,51 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         }}
         isDarkMode={isDarkMode}
       />
+
+      {/* Note Modal */}
+      {showNoteModal && (
+        <div className="modal-overlay" onClick={handleCloseNoteModal}>
+          <div className="modal-content note-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📝 Add Note</h3>
+              <button 
+                className="modal-close-btn"
+                onClick={handleCloseNoteModal}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <RichTextEditor
+                value={currentNoteText}
+                onChange={setCurrentNoteText}
+                placeholder="Type your note here... Use the toolbar above for formatting options."
+                className="note-editor"
+                minHeight="300px"
+                enableRichText={true}
+              />
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary"
+                onClick={handleCloseNoteModal}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleSaveNote}
+                disabled={!currentNoteText.trim()}
+              >
+                Add Note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Loading Overlay */}
       {(authLoading || flashcardsLoading || settingsLoading) && (

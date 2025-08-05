@@ -10,13 +10,34 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 1.08rem;
-  font-weight: 500;
-  color: #1e40af;
+
 }
-.due-cards-panel strong {
-  font-weight: 700;
-  color: #1e40af;
+
+/* Navigation arrows for maximized flashcard view */
+.flashcard-nav-arrow {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10002;
+  background: rgba(59,130,246,0.12);
+  border-radius: 50%;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border: none;
+  transition: background 0.2s;
+  user-select: none;
+}
+.flashcard-nav-arrow.prev {
+left: 50px; /* Moved closer to edge to avoid logo overlap */
+}
+.flashcard-nav-arrow.next {
+right: 50px; /* Moved closer to edge for symmetry */
 }
 .due-cards-panel .past-due {
   color: #ff6b6b;
@@ -32,7 +53,7 @@
 .dark .due-cards-panel strong {
   color: #93c5fd;
 }
-/* AI Explanation Lightbulb Tooltip Styles */
+/* Note Lightbulb Tooltip Styles */
 .ai-explanation-lightbulb {
   cursor: help;
   color: #3b82f6;
@@ -56,7 +77,7 @@
 .ai-explanation-lightbulb:hover::after {
   content: attr(title);
   position: absolute;
-  bottom: 130%;
+  top: 150%;
   left: 50%;
   transform: translateX(-50%);
   background-color: rgba(0, 0, 0, 0.95);
@@ -79,11 +100,11 @@
 .ai-explanation-lightbulb:hover::before {
   content: '';
   position: absolute;
-  bottom: 120%;
+  top: 140%;
   left: 50%;
   transform: translateX(-50%);
   border: 8px solid transparent;
-  border-top-color: rgba(0, 0, 0, 0.95);
+  border-bottom-color: rgba(0, 0, 0, 0.95);
   z-index: 10000;
   pointer-events: none;
 }
@@ -106,7 +127,7 @@
 }
 
 .dark .ai-explanation-lightbulb:hover::before {
-  border-top-color: rgba(255, 255, 255, 0.95);
+  border-bottom-color: rgba(255, 255, 255, 0.95);
 }
 
 /* FlashcardForm Preview/Edit Toggle Styles */
@@ -542,6 +563,84 @@ p {
   width: 100%;
 }
 
+/* Header Right Center Container */
+.header-right-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-left: auto;
+  margin-right: 20px;
+  flex-shrink: 0;
+}
+
+/* Header Progress Bar Styling */
+.header-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  border: 2px solid var(--primary-color);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px; /* Reduced vertical padding to match button height */
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  height: 32px; /* Match other header buttons */
+  box-sizing: border-box; /* Include border in height calculation */
+}
+
+.progress-text {
+  font-size: 0.9rem; /* Match other header buttons */
+  font-weight: 600;
+  color: var(--primary-color);
+  white-space: nowrap;
+  min-width: 30px;
+}
+
+.progress-bar-container-header {
+  width: 80px; /* Shorter progress bar */
+  height: 6px;
+  background-color: rgba(59, 130, 246, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-container-header .progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), #2563eb);
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+.progress-percentage-header {
+  font-size: 0.9rem; /* Match other header buttons */
+  font-weight: 600;
+  color: var(--primary-color);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Dark mode support for header progress bar */
+.dark .header-right-center {
+  /* No special dark mode styling needed for container */
+}
+
+.dark .header-progress-bar {
+  background: rgba(31, 41, 55, 0.95);
+  border-color: #93c5fd;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.dark .progress-text,
+.dark .progress-percentage-header {
+  color: #93c5fd;
+}
+
+.dark .progress-bar-container-header {
+  background-color: rgba(147, 197, 253, 0.2);
+}
+
 .app-logo {
   margin: 0;
   font-size: 2rem;
@@ -587,6 +686,7 @@ p {
   font-size: 0.9rem;
   padding: 0 !important;
   gap: 0 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Match progress bar shadow */
 }
 
 .header-collapse-toggle:hover {
@@ -833,14 +933,32 @@ p {
   border: 1px solid rgba(255, 255, 255, 0.3);
   color: white;
   font-weight: bold;
-  min-width: 32px;
-  height: 32px;
+  min-width: 28px; /* Reduced width */
+  height: 28px; /* Reduced height */
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem; /* Smaller font */
+  transition: all 0.2s ease;
+  position: static !important; /* Override the global .collapse-toggle absolute positioning */
+}
+
+/* Ensure notes header controls stay in flex layout */
+.notes-header-controls .notes-collapse-toggle {
+  position: static !important; /* Force static positioning within header controls */
+  top: auto !important;
+  right: auto !important;
+}
+
+/* Ensure all buttons within notes header controls maintain proper positioning */
+.notes-header-controls button {
+  position: static !important; /* Override any absolute positioning */
+  top: auto !important;
+  right: auto !important;
+  left: auto !important;
+  bottom: auto !important;
 }
 
 /* Legacy positioning for filter sections (categories/subcategories) - keep for other uses */
@@ -1111,6 +1229,35 @@ button:active::after {
   background-color: var(--primary-color);
   color: white;
   border-radius: var(--radius-sm) !important;
+}
+
+/* Header button width standardization */
+.app-header .btn.btn-secondary {
+  width: 175px !important;
+  min-width: 175px !important;
+  max-width: 175px !important;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ensure header right section has enough space and doesn't overlap logo */
+.header-right {
+  flex-wrap: wrap !important;
+  overflow: visible !important;
+  margin-left: auto !important;
+  min-width: 0 !important;
+}
+
+.action-buttons {
+  flex-wrap: wrap !important;
+  gap: var(--space-2) !important;
+}
+
+.header-layout {
+  overflow: visible !important;
+  grid-template-columns: auto 1fr auto !important;
 }
 
 .btn-secondary:hover {
@@ -2360,14 +2507,15 @@ label {
   position: relative;
   z-index: 1;
   /* Border frame - thicker top border */
-  border-left: 6px solid #1e40af !important;
-  border-right: 6px solid #1e40af !important;
-  border-bottom: 6px solid #1e40af !important;
-  border-top: 12px solid #1e40af !important; /* Thicker top border */
+  border-left: 6px solid #93c5fd !important;  /* Light blue */
+  border-right: 6px solid #93c5fd !important;  /* Light blue */
+  border-bottom: 6px solid #93c5fd !important;  /* Light blue */
+  border-top: 12px solid #93c5fd !important; /* Thicker top border - light blue */
   border-radius: 0 !important; /* Clean rectangular frame */
   /* Background and sizing */
   background-color: #ffffff !important; /* White background inside border */
   box-sizing: border-box !important;
+  overflow: visible !important; /* Allow floating elements to appear outside */
   /* Proper dimensions */
   width: 100% !important;
   min-height: 950px !important; /* Optimal card height */
@@ -2377,19 +2525,20 @@ label {
   /* Ensure no overflow issues */
   overflow: visible !important;
   /* Clean presentation */
-  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.1) !important; /* Subtle blue shadow */
+  box-shadow: 0 0px 2px rgba(30, 64, 175, 0.03) !important; /* Much lower, very subtle blue shadow */
 }
 
 /* Dark mode support for flashcard container */
 .dark .flashcard-container {
   background-color: #1f2937 !important; /* Dark background inside border */
-  box-shadow: 0 2px 8px rgba(30, 64, 175, 0.2) !important; /* Slightly stronger shadow */
+  box-shadow: 0 0px 2px rgba(30, 64, 175, 0.05) !important; /* Much lower, very subtle blue shadow for dark mode */
 }
 
 /* Dark mode support for flashcard sections */
 .dark .flashcard-section {
-  background-color: #374151; /* Darker background for content sections */
-  border-color: #4b5563; /* Darker inner border */
+  background: linear-gradient(145deg, #1f2937 0%, #374151 100%); /* Dark gradient for depth */
+  border: none; /* Remove border for cleaner look */
+  box-shadow: none; /* Remove shadow layer */
 }
 
 .flashcard-inner {
@@ -2608,10 +2757,10 @@ input:checked + .switch-slider:before {
   overflow-wrap: break-word !important;
   min-height: 300px !important; /* Increased for larger panel */
   padding: 3rem !important; /* Increased padding for larger area */
-  background-color: #ffffff !important; /* Pure white background */
+  background-color: transparent !important; /* Remove background layer */
   border-radius: var(--radius-md) !important; /* Add rounded corners */
   margin: 0.5rem 0 !important; /* Add margin for separation */
-  border: 1px solid #e9ecef !important;
+  border: none !important; /* Remove border line */
 }
 
 /* Flexible content areas in windowed mode */
@@ -3169,19 +3318,19 @@ input:checked + .switch-slider:before {
 /* Flashcard Display */
 .flashcard-container {
   background-color: transparent; /* Removed background square */
-  border: 2px solid var(--primary-color); /* Consistent frame border */
+  border: 2px solid #93c5fd; /* Light blue frame border */
   border-radius: var(--radius-lg);
   padding: 0; /* Removed all padding */
   box-shadow: none; /* Removed shadow to eliminate any background effect */
-  margin-bottom: 2rem; /* Reduced bottom margin */
+  margin-bottom: 0; /* Remove bottom margin to eliminate white bar */
+  margin-top: 0; /* Remove top margin */
   display: flex;
   flex-direction: column;
   height: 950px; /* Match notes section height */
   min-height: 950px; /* Match notes section height */
   max-height: 950px; /* Match notes section height */
   position: relative;
-  overflow-y: auto; /* Allow vertical scrolling */
-  overflow-x: hidden; /* Prevent horizontal overflow */
+  overflow: visible; /* Allow floating elements to appear outside */
   box-sizing: border-box !important; /* Ensure borders are included */
 }
 
@@ -3379,49 +3528,60 @@ input:checked + .switch-slider:before {
 .flashcard-bottom {
   margin-top: 0; /* No space from content above */
   padding-top: 0;
-  border-top: 1px solid var(--border);
+  border-top: none; /* Remove border to fix overlap */
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem; /* Reduced gap from 1rem to 0.5rem */
   align-items: center;
   flex-shrink: 0;
   background-color: var(--primary-color); /* Darker blue background */
   margin-left: -2rem;
   margin-right: -2rem;
   margin-bottom: -2rem;
-  padding-left: 2rem;
-  padding-right: 2rem;
-  padding-bottom: 2rem;
+  padding-left: 1rem; /* Reduced from 2rem to 1rem */
+  padding-right: 1rem; /* Reduced from 2rem to 1rem */
+  padding-bottom: 1rem; /* Reduced from 2rem to 1rem */
   position: relative; /* Ensure it flows with content */
 }
 
 /* Style buttons and text in the bottom section for visibility on dark blue */
 .flashcard-bottom .show-answer-btn {
-  background-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1));
   color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  backdrop-filter: blur(10px);
 }
 
 .flashcard-bottom .show-answer-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.2));
   color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-6px) scale(1.02);
 }
 
 .flashcard-bottom .nav-btn {
-  background-color: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.1));
   color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-4px);
+  backdrop-filter: blur(10px);
 }
 
 .flashcard-bottom .nav-btn:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.2));
   color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-6px) scale(1.02);
 }
 
 .flashcard-bottom .keyboard-hints {
   color: rgba(255, 255, 255, 0.8);
+  font-weight: bold !important; /* Make flashcard bottom keyboard hints bold */
 }
 
 .flashcard-bottom .keyboard-hints kbd {
@@ -3721,14 +3881,14 @@ input:checked + .switch-slider:before {
 /* Card Info Header - Positioned at top corners */
 .card-info-header {
   position: absolute;
-  top: 1rem;
+  top: -6px; /* Position in middle of top border (12px border / 2) */
   left: 1rem;
   right: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
-  z-index: 10;
+  z-index: 100;
   pointer-events: none;
   /* Debug: Add temporary background to see positioning */
   /* background: rgba(255, 0, 0, 0.1); */
@@ -3752,21 +3912,38 @@ input:checked + .switch-slider:before {
 
 .category-badge {
   display: inline-block;
-  background: rgba(135, 206, 235, 0.2);
+  background: rgba(255, 255, 255, 0.95);
   color: #1e40af;
-  border: 1px solid rgba(135, 206, 235, 0.4);
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-sm);
+  border: 1px solid rgba(135, 206, 235, 0.3);
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 600;
   margin: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+}
+
+.category-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.dark .category-badge {
+  background: rgba(31, 41, 55, 0.95);
+  color: #93c5fd;
+  border-color: rgba(135, 206, 235, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .card-tags {
   display: flex;
   flex-direction: row;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
+  padding: 8px;
+  background: transparent;
 }
 
 /* When inside card-info-section, no absolute positioning */
@@ -3786,101 +3963,125 @@ input:checked + .switch-slider:before {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 500;
   white-space: nowrap;
 }
 
 .subcategory-tag {
-  background: rgba(135, 206, 235, 0.2);
+  background: rgba(255, 255, 255, 0.95);
   color: #1e40af;
-  border: 1px solid rgba(135, 206, 235, 0.4);
+  border: 1px solid rgba(135, 206, 235, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+}
+
+.subcategory-tag:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.08);
 }
 
 .dark .subcategory-tag {
-  background: rgba(135, 206, 235, 0.25);
-  border-color: rgba(135, 206, 235, 0.5);
+  background: rgba(31, 41, 55, 0.95);
+  border-color: rgba(135, 206, 235, 0.4);
   color: #93c5fd;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .level-tag {
   border: 1px solid;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
+  transition: all 0.2s ease;
+}
+
+.level-tag:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.08);
 }
 
 .level-tag[data-level="new"] {
-  background: rgba(135, 206, 235, 0.15);
+  background: rgba(255, 255, 255, 0.95);
   color: #1e40af;
-  border-color: rgba(135, 206, 235, 0.4);
+  border-color: rgba(135, 206, 235, 0.3);
 }
 
 .level-tag[data-level="again"] {
-  background: rgba(135, 206, 235, 0.15);
-  color: #1e40af;
-  border-color: rgba(135, 206, 235, 0.4);
+  background: rgba(255, 255, 255, 0.95);
+  color: #dc2626;
+  border-color: rgba(220, 38, 38, 0.3);
 }
 
 .level-tag[data-level="hard"] {
-  background: rgba(135, 206, 235, 0.15);
-  color: #1e40af;
-  border-color: rgba(135, 206, 235, 0.4);
+  background: rgba(255, 255, 255, 0.95);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .level-tag[data-level="good"] {
-  background: rgba(135, 206, 235, 0.15);
-  color: #1e40af;
-  border-color: rgba(135, 206, 235, 0.4);
+  background: rgba(255, 255, 255, 0.95);
+  color: #059669;
+  border-color: rgba(5, 150, 105, 0.3);
 }
 
 .level-tag[data-level="easy"] {
-  background: rgba(135, 206, 235, 0.15);
-  color: #1e40af;
-  border-color: rgba(135, 206, 235, 0.4);
+  background: rgba(255, 255, 255, 0.95);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
 }
 
 .dark .level-tag[data-level="new"] {
-  background: rgba(135, 206, 235, 0.2);
-  border-color: rgba(135, 206, 235, 0.5);
+  background: rgba(31, 41, 55, 0.95);
+  border-color: rgba(135, 206, 235, 0.4);
   color: #93c5fd;
 }
 
 .dark .level-tag[data-level="again"] {
-  background: rgba(135, 206, 235, 0.2);
-  border-color: rgba(135, 206, 235, 0.5);
-  color: #93c5fd;
+  background: rgba(31, 41, 55, 0.95);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
 }
 
 .dark .level-tag[data-level="hard"] {
-  background: rgba(135, 206, 235, 0.2);
-  border-color: rgba(135, 206, 235, 0.5);
-  color: #93c5fd;
+  background: rgba(31, 41, 55, 0.95);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
 }
 
 .dark .level-tag[data-level="good"] {
-  background: rgba(135, 206, 235, 0.2);
-  border-color: rgba(135, 206, 235, 0.5);
-  color: #93c5fd;
+  background: rgba(31, 41, 55, 0.95);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
 }
 
 .dark .level-tag[data-level="easy"] {
-  background: rgba(135, 206, 235, 0.2);
-  border-color: rgba(135, 206, 235, 0.5);
-  color: #93c5fd;
+  background: rgba(31, 41, 55, 0.95);
+  border-color: rgba(52, 211, 153, 0.4);
+  color: #34d399;
 }
 
 /* Star Toggle Button - Inline with tags */
 .star-toggle-btn-inline {
-  background: none;
-  border: none;
-  font-size: 1.25rem; /* Increased from 1rem */
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(156, 163, 175, 0.2);
+  font-size: 1rem; /* Smaller font size */
   cursor: pointer;
   color: #9ca3af; /* Default gray color */
   padding: 0.25rem;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-normal);
+  border-radius: 6px; /* Square with rounded corners */
+  transition: all 0.2s ease;
   line-height: 1;
   display: flex;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(10px);
+  width: 28px; /* Smaller width */
+  height: 28px; /* Smaller height */
+  align-items: center;
+  justify-content: center;
   align-items: center;
   justify-content: center;
   margin-left: 4px;
@@ -3889,58 +4090,75 @@ input:checked + .switch-slider:before {
 
 .star-toggle-btn-inline:hover {
   color: #f59e0b; /* Bright amber/gold */
-  background-color: rgba(245, 158, 11, 0.15);
-  transform: scale(1.15); /* Slightly bigger scale */
+  background-color: rgba(255, 255, 255, 0.98);
+  transform: translateY(-2px) scale(1.1);
   text-shadow: 0 2px 4px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 6px 16px rgba(245, 158, 11, 0.2), 0 3px 6px rgba(0, 0, 0, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .star-toggle-btn-inline.starred {
   color: #f59e0b; /* Bright amber/gold for starred */
   text-shadow: 0 2px 4px rgba(245, 158, 11, 0.4);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(254, 243, 199, 0.95));
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .star-toggle-btn-inline.starred:hover {
   color: #dc2626; /* Red color on hover when starred (to unstar) */
-  background-color: rgba(220, 38, 38, 0.1);
+  background-color: rgba(255, 255, 255, 0.98);
   text-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+  transform: translateY(-2px) scale(1.1);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.2), 0 3px 6px rgba(0, 0, 0, 0.08);
+  border-color: rgba(220, 38, 38, 0.3);
 }
 
 .dark .star-toggle-btn-inline {
   color: #6b7280; /* Darker gray for dark mode */
+  background: rgba(31, 41, 55, 0.95);
+  border-color: rgba(107, 114, 128, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .dark .star-toggle-btn-inline:hover {
   color: #fbbf24; /* Bright yellow/gold */
-  background-color: rgba(251, 191, 36, 0.2);
-  transform: scale(1.15);
+  background-color: rgba(31, 41, 55, 0.98);
+  transform: translateY(-2px) scale(1.1);
   text-shadow: 0 2px 4px rgba(251, 191, 36, 0.4);
+  box-shadow: 0 6px 16px rgba(251, 191, 36, 0.3), 0 3px 6px rgba(0, 0, 0, 0.3);
+  border-color: rgba(251, 191, 36, 0.4);
 }
 
 .dark .star-toggle-btn-inline.starred {
   color: #fbbf24; /* Bright yellow/gold for starred */
   text-shadow: 0 2px 4px rgba(251, 191, 36, 0.5);
+  background: linear-gradient(135deg, rgba(31, 41, 55, 0.98), rgba(55, 48, 37, 0.95));
+  border-color: rgba(251, 191, 36, 0.4);
 }
 
 .dark .star-toggle-btn-inline.starred:hover {
   color: #f87171; /* Light red on hover when starred (to unstar) */
-  background-color: rgba(248, 113, 113, 0.15);
+  background-color: rgba(31, 41, 55, 0.98);
   text-shadow: 0 2px 4px rgba(248, 113, 113, 0.4);
+  transform: translateY(-2px) scale(1.1);
+  box-shadow: 0 6px 16px rgba(248, 113, 113, 0.3), 0 3px 6px rgba(0, 0, 0, 0.3);
+  border-color: rgba(248, 113, 113, 0.4);
 }
 
 /* Removed duplicate - using the definition above in card-info-header section */
 
 .flashcard-section {
-  margin-bottom: 1rem;
-  background-color: #f8fafc; /* Light background for content sections */
-  border: 1px solid #e2e8f0; /* Subtle inner border */
+  margin-bottom: 0; /* Remove blank space above footer */
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%); /* Clean white to light gradient */
+  border: none; /* Remove border for cleaner look */
   border-radius: var(--radius-lg);
   padding: 3rem; /* Increased padding for larger area */
-  min-height: 350px; /* Base min height */
+  min-height: 450px; /* Increased min height to extend text area down */
   height: auto !important; /* Expand with content */
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+  box-shadow: none; /* Remove shadow layer */
   overflow: visible !important; /* Ensure dropdown content is visible */
   /* Ensure content fits within border frame */
   margin-left: 0;
@@ -3957,6 +4175,7 @@ input:checked + .switch-slider:before {
   min-height: 300px;
   display: flex;
   flex-direction: column;
+  margin-bottom: 0 !important; /* Remove blank space above footer in windowed modes */
 }
 
 .section-label {
@@ -3976,9 +4195,9 @@ input:checked + .switch-slider:before {
   min-height: 300px; /* Reduced to fit within flashcard section */
   height: auto; /* Allow content to expand */
   padding: 2rem; /* Reduced to fit within parent container */
-  background-color: #f8f9fa;
+  background-color: transparent; /* Remove background layer */
   border-radius: var(--radius-md);
-  border: 1px solid #e9ecef;
+  border: none; /* Remove border line */
   display: block;
   width: 100%;
   max-width: 100%; /* Changed from 1200px to prevent overflow */
@@ -4012,15 +4231,17 @@ input:checked + .switch-slider:before {
   margin: 0.5rem 0 !important; /* Add margin for separation */
   display: flex !important;
   flex-direction: column !important;
+  align-items: center !important; /* Center content horizontally */
+  justify-content: center !important; /* Center content vertically */
   min-height: 300px !important; /* Increased for larger panel */
   width: 100% !important; /* Force full width */
   max-width: 100% !important; /* Ensure doesn't shrink */
   position: relative !important;
-  background-color: #ffffff !important; /* Pure white background */
+  background-color: transparent !important; /* Remove background layer */
   padding: 3rem !important; /* Increased padding for larger area */
   box-sizing: border-box !important; /* Include padding in width */
   border-radius: var(--radius-md) !important; /* Add rounded corners */
-  border: 1px solid #e9ecef !important; /* Add subtle border */
+  border: none !important; /* Remove border line */
 }
 
 /* Answer text styling */
@@ -4151,32 +4372,37 @@ input:checked + .switch-slider:before {
 .show-answer-btn {
   display: flex;
   margin: 0;
-  padding: 0.5rem 0.75rem;
-  background-color: rgba(255, 255, 255, 0.9);
+  padding: 0.75rem 1.25rem; /* Larger padding */
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
   color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: bold;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px; /* More rounded */
+  font-size: 1rem; /* Larger font */
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2), 0 6px 12px rgba(0, 0, 0, 0.1); /* Even higher elevated shadow */
   align-items: center;
   gap: 0.5rem;
   justify-content: center;
+  transform: translateY(-12px); /* Raise the button even higher */
+  backdrop-filter: blur(10px);
 }
 
 .show-answer-btn:hover {
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, var(--primary-color), #2563eb);
   color: white;
   border-color: var(--primary-color);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 16px 32px rgba(59, 130, 246, 0.4), 0 8px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-14px) scale(1.02); /* Even more elevation on hover */
 }
 
 .dark .show-answer-btn {
-  background-color: rgba(30, 41, 59, 0.9);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(55, 65, 81, 0.95));
   color: var(--text-dark-primary);
-  border-color: var(--border-dark);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5), 0 6px 12px rgba(0, 0, 0, 0.4);
+  transform: translateY(-12px);
 }
 
 .navigation-controls {
@@ -4185,30 +4411,41 @@ input:checked + .switch-slider:before {
   align-items: center;
   margin-top: 2rem;
   width: 100%;
+  transform: translateY(-16px); /* Raise buttons even higher in normal/focus view */
+  position: relative;
+  z-index: 10;
 }
 
 .nav-btn {
   padding: 0.75rem 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background-color: transparent;
-  color: var(--text-secondary);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px; /* More rounded */
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
+  color: var(--text-primary);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  opacity: 0.7;
-  font-weight: bold;
+  transition: all 0.2s ease;
+  opacity: 0.9;
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2), 0 6px 12px rgba(0, 0, 0, 0.1); /* Even higher elevated shadow */
+  transform: translateY(-12px); /* Raise the button even higher */
+  backdrop-filter: blur(10px);
 }
 
 .nav-btn:hover:not(:disabled) {
-  background-color: var(--bg-secondary);
+  background: linear-gradient(135deg, var(--primary-color), #2563eb);
   border-color: var(--primary-color);
-  color: var(--primary-color);
+  color: white;
   opacity: 1;
+  box-shadow: 0 16px 32px rgba(59, 130, 246, 0.4), 0 8px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-14px) scale(1.02); /* Even more elevation on hover */
 }
 
 .nav-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
+  transform: translateY(-4px); /* Less elevation when disabled */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .card-metadata {
@@ -4223,6 +4460,7 @@ input:checked + .switch-slider:before {
   text-align: center;
   margin-top: 1rem;
   color: var(--text-secondary);
+  font-weight: bold !important; /* Make keyboard hints bold */
 }
 
 .keyboard-hints kbd {
@@ -4367,6 +4605,7 @@ input:checked + .switch-slider:before {
   max-height: none !important;
   display: flex !important;
   flex-direction: column !important;
+  outline: none !important; /* Remove focus outline since we're making it focusable */
 }
 
 /* Ensure flashcard-container fills maximized window, but constrain popout */
@@ -4915,6 +5154,50 @@ body.has-popout {
   padding: var(--space-1) var(--space-5);
   min-width: 120px;
   border-radius: var(--radius-sm) !important;
+}
+
+/* Window control buttons next to star button in card header */
+.window-control-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+  align-items: center;
+}
+
+.window-control-btn {
+  background: rgba(135, 206, 235, 0.2);
+  border: 1px solid rgba(135, 206, 235, 0.4);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  transition: all 0.2s ease;
+  color: #1e40af;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+}
+
+.window-control-btn:hover {
+  background: rgba(135, 206, 235, 0.3);
+  border-color: rgba(135, 206, 235, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Dark mode styles for window control buttons */
+.dark .window-control-btn {
+  background: rgba(135, 206, 235, 0.15);
+  border-color: rgba(135, 206, 235, 0.3);
+  color: #93c5fd;
+}
+
+.dark .window-control-btn:hover {
+  background: rgba(135, 206, 235, 0.25);
+  border-color: rgba(135, 206, 235, 0.5);
 }
 
 /* Review Buttons */
@@ -7917,19 +8200,25 @@ body.has-popout {
 
 /* New keyboard shortcuts styling */
 .keyboard-shortcuts {
-  margin-top: var(--space-3);
+  margin-top: 0; /* Remove margin to move text further up */
+  transform: translateY(-8px); /* Raise to middle of footer to match navigation */
+  position: relative;
+  z-index: 10;
 }
 
 .shortcuts-hint {
-  color: #6b7280 !important; /* Gray text */
+  color: #1f2937 !important; /* Dark black text */
+  font-weight: bold !important; /* Make entire text bold */
 }
 
 .shortcuts-hint small {
-  color: #6b7280 !important; /* Gray text for small element */
+  color: #1f2937 !important; /* Dark black text for small element */
+  font-weight: bold !important; /* Make small element bold */
 }
 
 .shortcuts-hint strong {
-  color: #6b7280 !important; /* Gray text for strong element */
+  color: #1f2937 !important; /* Dark black text for strong element */
+  font-weight: bold !important; /* Ensure strong element is bold */
 }
 
 .keyboard-shortcuts-hint kbd {
@@ -8212,6 +8501,7 @@ body.has-popout {
   height: fit-content; /* Fit to content height */
   position: relative;
   justify-content: flex-start;
+  overflow: visible; /* Allow floating elements */
   padding-bottom: 0; /* Remove bottom padding behind border */
   overflow: visible; /* Ensure borders are not clipped */
   border: none !important; /* Remove container border - let individual components have borders */
@@ -8651,18 +8941,25 @@ body.has-popout {
 }
 
 .filters-section-left .filter-btn.active {
-  background: rgba(135, 206, 235, 0.4); /* Light blue for active state */
-  border-color: rgba(135, 206, 235, 0.7);
-  color: #1e40af;
-  font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: #3b82f6; /* Solid blue background for better contrast */
+  border: 3px solid #2563eb; /* Darker border for definition */
+  color: white; /* White text for maximum contrast */
+  font-weight: 700;
+  font-size: 0.8rem; /* Slightly larger text */
+  padding: var(--space-2) var(--space-3); /* Increased padding for better visibility */
+  min-height: 36px; /* Taller buttons */
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: scale(1.02); /* Slightly larger scale */
+  border-radius: 8px; /* More rounded corners */
+  position: relative;
 }
 
 .filters-section-left .filter-btn.active:hover {
-  background: rgba(135, 206, 235, 0.5); /* Darker light blue for active hover */
-  border-color: rgba(135, 206, 235, 0.8);
-  color: #1e40af;
-  transform: translateX(2px);
+  background: #2563eb; /* Darker blue on hover */
+  border-color: #1d4ed8; /* Even darker border on hover */
+  color: white; /* Keep white text on hover */
+  transform: scale(1.02) translateX(1px); /* Maintain scale with slight movement */
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Dark mode filter button adjustments */
@@ -8679,15 +8976,25 @@ body.has-popout {
 }
 
 .dark .filters-section-left .filter-btn.active {
-  background: rgba(135, 206, 235, 0.3);
-  border-color: rgba(135, 206, 235, 0.6);
-  color: #93c5fd;
+  background: #3b82f6; /* Solid blue background for dark mode */
+  border: 3px solid #60a5fa; /* Brighter border for dark mode visibility */
+  color: white; /* White text for maximum contrast in dark mode */
+  font-weight: 700;
+  font-size: 0.8rem; /* Slightly larger text */
+  padding: var(--space-2) var(--space-3); /* Increased padding for better visibility */
+  min-height: 36px; /* Taller buttons */
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: scale(1.02); /* Slightly larger scale */
+  border-radius: 8px; /* More rounded corners */
+  position: relative;
 }
 
 .dark .filters-section-left .filter-btn.active:hover {
-  background: rgba(135, 206, 235, 0.4);
-  border-color: rgba(135, 206, 235, 0.7);
-  color: #93c5fd;
+  background: #2563eb; /* Darker blue on hover for dark mode */
+  border-color: #3b82f6; /* Slightly darker border on hover */
+  color: white; /* Keep white text on hover in dark mode */
+  transform: scale(1.02) translateX(1px); /* Maintain scale with slight movement */
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 /* Dark mode filter section separators */
@@ -8988,6 +9295,7 @@ body.has-popout {
   background-color: rgba(248, 250, 252, 0.95) !important; /* Semi-transparent background */
   backdrop-filter: blur(8px) !important; /* Add blur effect */
   box-shadow: 0 0 0 1000px rgba(248, 250, 252, 0.8) !important; /* Extend background behind dropdowns */
+  margin-bottom: 0 !important; /* Remove blank space above footer in maximized view */
 }
 
 /* Dark mode background for maximized flashcard section */
@@ -8999,7 +9307,7 @@ body.has-popout {
 /* Maximize question and answer sections in maximized view */
 .flashcard-window.maximized .question-section,
 .flashcard-window.maximized .answer-section {
-  min-height: 70vh !important;
+  min-height: 85vh !important; /* Increased from 70vh to cover blank space */
   height: auto !important;
   flex: 1 1 auto !important;
   display: flex !important;
@@ -9009,7 +9317,7 @@ body.has-popout {
 /* Maximize the content within sections */
 .flashcard-window.maximized .flashcard-section .content {
   flex: 1 1 auto !important;
-  min-height: 60vh !important;
+  min-height: 75vh !important; /* Increased from 60vh to extend over blank space */
   padding: 2rem !important;
   font-size: 1.3rem !important;
   line-height: 1.6 !important;
@@ -9063,17 +9371,140 @@ body.has-popout {
   width: 100% !important;
   margin: 0 !important;
   box-sizing: border-box !important;
+  border-top: none !important;
+  border: none !important; /* Remove all borders */
 }
 
 /* Maximize navigation and button controls */
 .flashcard-window.maximized .navigation-controls {
   gap: 1.5rem !important;
   padding: 0.5rem !important;
+  border: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important; /* Remove any shadows */
+  transform: translateY(-12px) !important; /* Extra raise in maximized mode */
+}
+
+/* Remove any borders from keyboard shortcuts in maximized mode */
+.flashcard-window.maximized .keyboard-shortcuts {
+  border: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  transform: translateY(-12px) !important; /* Extra raise in maximized mode */
+}
+
+.flashcard-window.maximized .shortcuts-hint {
+  border: none !important;  
+  border-top: none !important;
+  border-bottom: none !important;
 }
 
 .flashcard-window.maximized .navigation-controls button {
   padding: 0.75rem 1.5rem !important;
   font-size: 1rem !important;
+}
+
+/* Position prev/next buttons on the sides in maximized mode */
+.flashcard-window.maximized .nav-btn.prev-btn,
+.flashcard-window.maximized .nav-btn.next-btn {
+  position: fixed !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  z-index: 10002 !important; /* Ensure buttons appear above all content */
+  background-color: rgba(59, 130, 246, 0.9) !important;
+  color: white !important;
+  border: 2px solid rgba(59, 130, 246, 0.8) !important;
+  border-radius: 50% !important;
+  width: 80px !important;
+  height: 80px !important;
+  padding: 0 !important;
+  font-size: 2.5rem !important;
+  font-weight: bold !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+
+.flashcard-window.maximized .nav-btn.prev-btn {
+  left: 50px !important; /* Previous button on left side - moved closer to edge to avoid logo overlap */
+  text-indent: -9999px !important; /* Hide text */
+}
+
+.flashcard-window.maximized .nav-btn.next-btn {
+  right: 50px !important; /* Next button on right side - moved closer to edge for symmetry */
+  text-indent: -9999px !important; /* Hide text */
+}
+
+/* Remove pseudo-element arrows for footer buttons in maximized mode */
+.flashcard-window.maximized .navigation-controls .nav-btn.prev-btn::after,
+.flashcard-window.maximized .navigation-controls .nav-btn.next-btn::after {
+  display: none !important; /* Hide pseudo-element arrows in footer */
+}
+
+/* Footer button hover effects in maximized mode */
+.flashcard-window.maximized .navigation-controls .nav-btn.prev-btn:hover:not(:disabled),
+.flashcard-window.maximized .navigation-controls .nav-btn.next-btn:hover:not(:disabled) {
+  transform: translateY(-50%) translateY(-8px) scale(1.1) !important; /* Elevate and scale on hover */
+}
+
+/* Layout navigation controls with all three buttons in maximized mode */
+.flashcard-window.maximized .navigation-controls {
+  justify-content: center !important; /* Center the show answer button */
+  align-items: center !important;
+  width: 100% !important;
+  max-width: 800px !important; /* Wider to push arrows to edges */
+  margin: 0 auto !important;
+  position: relative !important;
+}
+
+/* Arrow buttons styling for navigation */
+.arrow-btn {
+  width: 50px !important;
+  height: 50px !important;
+  border-radius: 50% !important; /* Circular */
+  padding: 0 !important;
+  font-size: 1.8rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  min-width: 50px !important; /* Prevent shrinking */
+  flex-shrink: 0 !important; /* Don't shrink in flex container */
+}
+
+/* Show the navigation buttons in the footer for maximized mode */
+.flashcard-window.maximized .navigation-controls .nav-btn.prev-btn,
+.flashcard-window.maximized .navigation-controls .nav-btn.next-btn {
+  display: flex !important;
+  text-indent: 0 !important; /* Show text instead of hiding it */
+  position: absolute !important; /* Position at edges */
+  top: 50% !important;
+  transform: translateY(-50%) translateY(-4px) !important; /* Center vertically and elevate */
+  width: 50px !important;
+  height: 50px !important;
+  border-radius: 50% !important;
+  font-size: 2rem !important;
+  z-index: 20 !important;
+}
+
+/* Position arrows at edges */
+.flashcard-window.maximized .navigation-controls .nav-btn.prev-btn {
+  left: -60px !important; /* Move to left edge */
+}
+
+.flashcard-window.maximized .navigation-controls .nav-btn.next-btn {
+  right: -60px !important; /* Move to right edge */
+}
+
+/* Center the show answer button in maximized mode */
+.flashcard-window.maximized .navigation-controls .show-answer-btn {
+  position: relative !important;
+  margin: 0 auto !important;
+  z-index: 15 !important;
 }
 
 /* Popout navigation and button controls */
@@ -9275,25 +9706,7 @@ body.has-popout {
 
 /* Make card actions section horizontal bar above footer in maximized mode */
 .flashcard-window.maximized .card-info-section {
-  position: relative !important; /* Changed from fixed to relative */
-  bottom: auto !important;
-  left: auto !important;
-  right: auto !important;
-  z-index: 5 !important; /* Lower z-index since it's not overlaying */
-  background: rgba(248, 250, 252, 0.95) !important;
-  border: 1px solid #e5e7eb !important;
-  border-radius: 0.5rem !important;
-  padding: 0.5rem 1rem !important; /* Compact padding */
-  backdrop-filter: none !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
-  width: auto !important;
-  max-width: 100% !important;
-  min-width: auto !important;
-  pointer-events: auto !important;
-  margin: 1rem 0 !important; /* Add margin for spacing */
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
+  display: none !important; /* Hide the clickable bar in maximized mode */
   justify-content: space-between !important;
   gap: 1rem !important;
   box-sizing: border-box !important;
@@ -9350,6 +9763,38 @@ body.has-popout {
   background: rgba(37, 99, 235, 1) !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Hide dropdown arrow for card info */
+.info-dropdown.no-arrow summary {
+  list-style: none;
+}
+
+.info-dropdown.no-arrow summary::-webkit-details-marker {
+  display: none;
+}
+
+.info-dropdown.no-arrow summary::marker {
+  display: none;
+}
+
+/* Style icon-only summary */
+.info-header.icon-only {
+  cursor: pointer;
+  padding: 0.4rem !important;
+  border-radius: 0.375rem !important;
+  transition: all 0.2s ease;
+  background: transparent !important;
+  color: #6b7280 !important;
+  font-size: 1.1rem !important;
+  border: none !important;
+}
+
+.info-header.icon-only:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  color: #374151 !important;
 }
 
 /* Style the card info content dropdown for normal, popout, and maximized mode */
@@ -9424,10 +9869,11 @@ body.has-popout {
 
 /* Constrain star toggle button in maximized mode */
 .flashcard-window.maximized .star-toggle-btn-inline {
-  font-size: 1rem !important;
-  padding: 0.25rem !important;
-  width: 28px !important;
-  height: 28px !important;
+  font-size: 0.875rem !important;
+  padding: 0.2rem !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 5px !important; /* Maintain square shape */
 }
 
 
@@ -9441,9 +9887,11 @@ body.has-popout {
 }
 
 .flashcard-window.maximized .star-toggle-btn-inline {
-  font-size: 1.5rem !important;
-  padding: 0.5rem !important;
-  border-radius: 0.5rem !important;
+  font-size: 1.1rem !important;
+  padding: 0.3rem !important;
+  border-radius: 6px !important; /* Square shape */
+  width: 32px !important;
+  height: 32px !important;
 }
 
 /* Dark mode adjustments for maximized card info */
@@ -9725,10 +10173,11 @@ body.has-popout {
 
 /* Constrain star toggle button in popout mode */
 .flashcard-window.popout .star-toggle-btn-inline {
-  font-size: 1rem !important;
-  padding: 0.25rem !important;
-  width: 28px !important;
-  height: 28px !important;
+  font-size: 0.875rem !important;
+  padding: 0.2rem !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 5px !important; /* Maintain square shape */
 }
 
 .flashcard-window.popout .category-badge,
@@ -9741,9 +10190,11 @@ body.has-popout {
 }
 
 .flashcard-window.popout .star-toggle-btn-inline {
-  font-size: 1.25rem !important;
-  padding: 0.5rem !important;
-  border-radius: 0.5rem !important;
+  font-size: 1rem !important;
+  padding: 0.25rem !important;
+  border-radius: 6px !important; /* Square shape */
+  width: 30px !important;
+  height: 30px !important;
 }
 
 /* Dark mode adjustments for popout card info */
@@ -10073,23 +10524,31 @@ body.has-popout {
   flex-shrink: 0;
   border-radius: 0; /* Remove radius to match parent */
   position: relative; /* For button positioning */
+  flex-wrap: nowrap; /* Prevent wrapping */
+  min-height: 48px; /* Ensure minimum height for buttons */
 }
 
 .notes-header-controls {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  min-width: fit-content;
+  justify-content: flex-end;
+  position: relative;
 }
 
 .notes-popout-btn {
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
   color: white;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.375rem; /* Same padding as close button */
   border-radius: 0.25rem;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.75rem; /* Slightly smaller font */
   transition: all 0.2s ease;
+  white-space: nowrap; /* Prevent text wrapping */
 }
 
 .notes-popout-btn:hover {
@@ -10098,21 +10557,125 @@ body.has-popout {
   transform: translateY(-1px);
 }
 
+/* Flashcard popout button - same style as notes popout */
+.flashcard-popout-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.25rem 0.375rem; /* Same padding as notes popout button */
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.75rem; /* Same font size as notes popout */
+  transition: all 0.2s ease;
+  white-space: nowrap; /* Prevent text wrapping */
+  margin-left: 8px; /* Keep the margin from the original inline style */
+}
+
+.flashcard-popout-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Flashcard maximize button - same style as popout button */
+.flashcard-maximize-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.25rem 0.375rem; /* Same padding as popout button */
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.75rem; /* Same font size as popout */
+  transition: all 0.2s ease;
+  white-space: nowrap; /* Prevent text wrapping */
+  margin-left: 4px; /* Keep the margin from the original inline style */
+}
+
+.flashcard-maximize-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.notes-close-btn {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: white;
+  padding: 0.25rem 0.375rem; /* Reduced horizontal padding */
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.75rem; /* Slightly smaller font */
+  transition: all 0.2s ease;
+  font-weight: bold;
+  white-space: nowrap; /* Prevent text wrapping */
+}
+
+.notes-close-btn:hover {
+  background: rgba(239, 68, 68, 0.4);
+  border-color: rgba(239, 68, 68, 0.6);
+  transform: translateY(-1px);
+}
+
 .notes-explain-btn {
   background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.3);
   color: white;
-  padding: 0.25rem 0.5rem;
+  padding: 0.25rem 0.375rem; /* Reduced horizontal padding */
   border-radius: 0.25rem;
   cursor: pointer;
-  font-size: 0.875rem;
+  font-size: 0.75rem; /* Slightly smaller font */
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  white-space: nowrap; /* Prevent text wrapping */
 }
 
 .notes-explain-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Edit Card button - same style as explain */
+.notes-edit-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.25rem 0.375rem; /* Same padding as explain button */
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.75rem; /* Same font size as explain */
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap; /* Prevent text wrapping */
+}
+
+.notes-edit-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Generate Similar Questions button - same style as explain */
+.notes-generate-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.25rem 0.375rem; /* Same padding as explain button */
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.75rem; /* Same font size as explain */
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap; /* Prevent text wrapping */
+}
+
+.notes-generate-btn:hover {
   background: rgba(255, 255, 255, 0.3);
   border-color: rgba(255, 255, 255, 0.5);
   transform: translateY(-1px);
@@ -10260,18 +10823,72 @@ div.notes-textarea-permanent {
   box-sizing: border-box !important;
 }
 
-/* Force blue borders on flashcard containers with highest specificity - top left only */
+/* Force borders on flashcard containers - light blue borders */
 .app .flashcard-container,
 .app.dark-mode .flashcard-container,
 .flashcard-with-notes-container .flashcard-container,
 .flashcard-main-content .flashcard-container {
-  border-left: 6px solid var(--primary-color) !important; /* Blue left border */
-  border-top: 12px solid var(--primary-color) !important; /* Blue top border */
-  border-right: none !important; /* Remove right border */
+  border-left: 6px solid #93c5fd !important; /* Light blue left border */
+  border-top: 6px solid #93c5fd !important; /* Light blue top border */
+  border-right: 6px solid #93c5fd !important; /* Light blue right border */
   border-bottom: none !important; /* Remove bottom border */
-  margin-top: -8px !important; /* Raise border higher */
+  margin-top: 0 !important; /* Remove top margin */
   margin-bottom: 0 !important; /* Reset bottom margin */
   box-sizing: border-box !important;
+  position: relative !important; /* For absolute positioning of children */
+  overflow: visible !important; /* Allow headers to show properly */
+}
+
+/* Create header-style top border for flashcards - removed in favor of section-specific headers */
+
+/* Add padding to flashcard content to account for header space */
+.app .flashcard-container .flashcard-section,
+.app.dark-mode .flashcard-container .flashcard-section,
+.flashcard-with-notes-container .flashcard-container .flashcard-section,
+.flashcard-main-content .flashcard-container .flashcard-section {
+  padding-top: calc(48px + var(--space-4)) !important; /* Header height + normal padding */
+  position: relative;
+  z-index: 2; /* Above the header pseudo-element */
+}
+
+/* Style section labels with distinct headers */
+.app .flashcard-container .section-label,
+.app.dark-mode .flashcard-container .section-label,
+.flashcard-with-notes-container .flashcard-container .section-label,
+.flashcard-main-content .flashcard-container .section-label {
+  position: absolute !important;
+  top: 0 !important;
+  left: -6px !important; /* Extend to cover left border */
+  right: 0 !important;
+  height: 48px !important; /* Same height as notes header */
+  margin: 0 !important;
+  padding: var(--space-3) var(--space-4) !important; /* Same padding as notes header */
+  color: white !important; /* White text */
+  font-size: 1rem !important; /* Same size as notes header */
+  font-weight: 600 !important; /* Same weight as notes header */
+  display: flex !important;
+  align-items: center !important;
+  z-index: 3 !important; /* Above card content */
+  border: none !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important; /* Subtle shadow for readability */
+}
+
+/* Question section header - Purple/Indigo gradient */
+.app .flashcard-container .question-section .section-label,
+.app.dark-mode .flashcard-container .question-section .section-label,
+.flashcard-with-notes-container .flashcard-container .question-section .section-label,
+.flashcard-main-content .flashcard-container .question-section .section-label {
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%) !important; /* Purple to indigo gradient */
+  border-top: 2px solid #8b5cf6 !important; /* Lighter purple top accent */
+}
+
+/* Answer section header - Green gradient */
+.app .flashcard-container .answer-section .section-label,
+.app.dark-mode .flashcard-container .answer-section .section-label,
+.flashcard-with-notes-container .flashcard-container .answer-section .section-label,
+.flashcard-main-content .flashcard-container .answer-section .section-label {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important; /* Emerald to green gradient */
+  border-top: 2px solid #34d399 !important; /* Lighter green top accent */
 }
 
 /* Restore normal spacing - remove aggressive overrides */
@@ -10281,8 +10898,60 @@ div.notes-textarea-permanent {
   background: var(--secondary-color);
 }
 
+/* Responsive adjustments for notes header controls */
+@media (max-width: 480px) {
+  .notes-header-controls {
+    gap: 0.25rem; /* Reduce gap on small screens */
+  }
+  
+  .notes-popout-btn,
+  .notes-close-btn,
+  .notes-explain-btn,
+  .notes-edit-btn,
+  .notes-generate-btn {
+    padding: 0.25rem 0.375rem; /* Reduce padding on small screens */
+    font-size: 0.75rem; /* Slightly smaller font */
+    min-width: auto; /* Allow buttons to shrink */
+  }
+  
+  .notes-section-permanent .notes-header {
+    padding: var(--space-2) var(--space-3); /* Reduce header padding */
+  }
+}
+
 .dark .notes-action-btn:hover {
   background: var(--secondary-hover);
+}
+
+/* Expand flashcard area when notes are hidden */
+.flashcard-with-notes-container:has(.right-side-content:empty) .flashcard-main-content,
+.notes-hidden .flashcard-main-content {
+  flex: 1;
+  max-width: none;
+  margin-right: 0;
+}
+
+/* Hide right side content completely when notes are hidden */
+.flashcard-with-notes-container:has(.right-side-content:empty) .right-side-content,
+.notes-hidden .right-side-content {
+  display: none;
+  flex: 0 0 0;
+  width: 0;
+}
+
+/* Alternative for browsers that don't support :has() - add this class when notes are hidden */
+.notes-hidden .flashcard-with-notes-container {
+  gap: var(--space-4); /* Maintain gap between filters and flashcard */
+}
+
+.notes-hidden .right-side-content {
+  display: none !important;
+}
+
+.notes-hidden .flashcard-main-content {
+  flex: 1 !important;
+  max-width: none !important;
+  margin-right: 0 !important;
 }
 
 /* Daily Progress Bar Styles */
@@ -10614,7 +11283,7 @@ div.notes-textarea-permanent {
   display: none;
 }
 
-/* AI Explanation Dropdown Styling - Centered under question */
+/* Note Dropdown Styling - Centered under question */
 .ai-explanation-dropdown-wrapper {
   display: flex;
   justify-content: center;
@@ -10717,6 +11386,9 @@ div.notes-textarea-permanent {
 .flashcard-main-content.windowed .question-section .content {
   min-height: 600px; /* Even more space in maximized/windowed view */
   padding-bottom: 80px; /* More padding in expanded views */
+  font-size: 3rem !important; /* Bigger text in maximized mode */
+  font-weight: 800 !important; /* Bold weight for better visibility */
+  line-height: 1.2 !important; /* Adjust line height for larger text */
 }
 
 .flashcard-window.maximized .ai-explanation-dropdown-wrapper,
@@ -10917,13 +11589,14 @@ div.notes-textarea-permanent {
   padding: 0;
   margin-left: var(--space-3);
   transition: all var(--transition-fast);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Match progress bar shadow */
 }
 
 .header-arrow-toggle:hover {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
   transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); /* Match other header buttons */
 }
 
 /* Ensure proper layout in toggle controls row */
@@ -11072,18 +11745,25 @@ div.notes-textarea-permanent {
 }
 
 .filter-btn.active {
-  background: rgba(135, 206, 235, 0.4);
-  border-color: rgba(135, 206, 235, 0.7);
-  color: #1e40af;
-  font-weight: 600;
-  box-shadow: 0 4px 12px rgba(135, 206, 235, 0.35);
+  background: #3b82f6; /* Solid blue background for better contrast */
+  border: 3px solid #2563eb; /* Darker border for definition */
+  color: white; /* White text for maximum contrast */
+  font-weight: 700;
+  font-size: 0.8rem; /* Slightly larger text */
+  padding: var(--space-2) var(--space-3); /* Increased padding for better visibility */
+  min-height: 36px; /* Taller buttons */
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: scale(1.02); /* Slightly larger scale */
+  border-radius: 8px; /* More rounded corners */
+  position: relative;
 }
 
 .filter-btn.active:hover {
-  background: rgba(135, 206, 235, 0.5);
-  border-color: rgba(135, 206, 235, 0.8);
-  color: #1e40af;
-  transform: translateY(-1px);
+  background: #2563eb; /* Darker blue on hover */
+  border-color: #1d4ed8; /* Even darker border on hover */
+  color: white; /* Keep white text on hover */
+  transform: scale(1.02) translateY(-1px); /* Maintain scale with slight movement */
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 /* Dark mode filter button styles */
@@ -11102,16 +11782,25 @@ div.notes-textarea-permanent {
 }
 
 .dark .filter-btn.active {
-  background: rgba(135, 206, 235, 0.3);
-  border-color: rgba(135, 206, 235, 0.6);
-  color: #93c5fd;
-  box-shadow: 0 4px 12px rgba(135, 206, 235, 0.35);
+  background: #3b82f6; /* Solid blue background for dark mode */
+  border: 3px solid #60a5fa; /* Brighter border for dark mode visibility */
+  color: white; /* White text for maximum contrast in dark mode */
+  font-weight: 700;
+  font-size: 0.8rem; /* Slightly larger text */
+  padding: var(--space-2) var(--space-3); /* Increased padding for better visibility */
+  min-height: 36px; /* Taller buttons */
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: scale(1.02); /* Slightly larger scale */
+  border-radius: 8px; /* More rounded corners */
+  position: relative;
 }
 
 .dark .filter-btn.active:hover {
-  background: rgba(135, 206, 235, 0.4);
-  border-color: rgba(135, 206, 235, 0.7);
-  color: #93c5fd;
+  background: #2563eb; /* Darker blue on hover for dark mode */
+  border-color: #3b82f6; /* Slightly darker border on hover */
+  color: white; /* Keep white text on hover in dark mode */
+  transform: scale(1.02) translateY(-1px); /* Maintain scale with slight movement */
+  box-shadow: 0 6px 12px rgba(59, 130, 246, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 /* FINAL OVERRIDE: Force generate modal to always be light mode */
@@ -11148,6 +11837,71 @@ body.dark .generate-modal h4 {
 /* Prevent any dark mode inheritance */
 .generate-modal {
   isolation: isolate !important;
+}
+
+/* Note Modal Styles - Force light mode */
+.modal-overlay .note-modal,
+.modal-overlay .modal-content.note-modal,
+.modal-overlay.dark .note-modal,
+.modal-overlay.dark .modal-content.note-modal {
+  background: white !important;
+  color: #1f2937 !important;
+  border: 3px solid blue !important;
+  max-width: 800px !important;
+  width: 90% !important;
+  max-height: 80vh !important;
+}
+
+.modal-overlay .note-modal .modal-header,
+.modal-overlay.dark .note-modal .modal-header {
+  color: #1f2937 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+  padding: 1rem !important;
+}
+
+.modal-overlay .note-modal .modal-body,
+.modal-overlay.dark .note-modal .modal-body {
+  padding: 1rem !important;
+  max-height: 60vh !important;
+  overflow-y: auto !important;
+}
+
+.modal-overlay .note-modal .modal-footer,
+.modal-overlay.dark .note-modal .modal-footer {
+  padding: 1rem !important;
+  border-top: 1px solid #e5e7eb !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.5rem !important;
+}
+
+.modal-overlay .note-modal .note-editor,
+.modal-overlay.dark .note-modal .note-editor {
+  width: 100% !important;
+}
+
+.modal-overlay .note-modal .rich-text-editor-container,
+.modal-overlay.dark .note-modal .rich-text-editor-container {
+  background: white !important;
+}
+
+.modal-overlay .note-modal .rich-text-toolbar,
+.modal-overlay.dark .note-modal .rich-text-toolbar {
+  background: #f9fafb !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.modal-overlay .note-modal .rich-text-content-textarea,
+.modal-overlay.dark .note-modal .rich-text-content-textarea {
+  background: white !important;
+  color: #1f2937 !important;
+  border-color: #d1d5db !important;
+}
+
+.modal-overlay .note-modal .rich-text-content-textarea:focus,
+.modal-overlay.dark .note-modal .rich-text-content-textarea:focus {
+  border-color: #3b82f6 !important;
+  background: white !important;
 }
 
 /* Force light mode for AI Generate Answer modal in edit form */

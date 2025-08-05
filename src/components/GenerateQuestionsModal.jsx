@@ -19,7 +19,8 @@ const GenerateQuestionsModal = ({
   onGenerateQuestions,
   isDarkMode,
   apiKeys = {},
-  selectedProvider = 'openai'
+  selectedProvider = 'openai',
+  onOpenApiConfig
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState([]);
@@ -123,7 +124,7 @@ const GenerateQuestionsModal = ({
 
     const apiKey = apiKeys[selectedProvider];
     if (!apiKey) {
-      setError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
+      setError(`No ${selectedProvider.toUpperCase()} API key configured. Please click the 🔑 Configure API Keys button to add your API key, or try a different AI provider if you have one configured.`);
       return;
     }
 
@@ -166,7 +167,25 @@ const GenerateQuestionsModal = ({
       setStep('results');
     } catch (err) {
       console.error('❌ Generation error:', err);
-      setError(err.message);
+      
+      // Provide user-friendly error messages based on error type
+      let userMessage = 'Unable to generate questions. ';
+      
+      if (err.message.includes('401') || err.message.includes('403') || err.message.includes('Invalid API')) {
+        userMessage += 'Please check your API key configuration - it may be invalid or expired.';
+      } else if (err.message.includes('429') || err.message.includes('rate limit')) {
+        userMessage += 'API rate limit exceeded. Please wait a moment and try again.';
+      } else if (err.message.includes('network') || err.message.includes('fetch')) {
+        userMessage += 'Network connection issue. Please check your internet connection and try again.';
+      } else if (err.message.includes('quota') || err.message.includes('billing')) {
+        userMessage += 'API quota exceeded or billing issue. Please check your API account.';
+      } else if (err.message.includes('parse') || err.message.includes('Failed to parse')) {
+        userMessage += 'The AI response could not be processed. Please try again with a simpler request.';
+      } else {
+        userMessage += 'The AI service is currently unavailable. Please try again later or try a different AI provider.';
+      }
+      
+      setError(userMessage);
       setStep('input');
     } finally {
       setIsGenerating(false);
@@ -336,7 +355,7 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
 
     // Validate API key before making calls
     if (!apiKey || apiKey.trim() === '') {
-      throw new Error(`${provider.charAt(0).toUpperCase() + provider.slice(1)} API key is required. Please add your API key in Settings.`);
+      throw new Error(`${provider.charAt(0).toUpperCase() + provider.slice(1)} API key is required. Please click the 🔑 Configure API Keys button to add your API key.`);
     }
 
     // Validate API key format
@@ -550,7 +569,8 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
       await onGenerateQuestions(questionsToCreate);
       onClose();
     } catch (err) {
-      setError('Failed to create questions: ' + err.message);
+      console.error('❌ Question creation error:', err);
+      setError('Unable to save the generated questions. Please try again or check your connection.');
     }
   };
 
@@ -595,6 +615,34 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
               {error && (
                 <div className="error-message">
                   ❌ {error}
+                  {(error.toLowerCase().includes('authentication') || 
+                    error.toLowerCase().includes('401') || 
+                    error.toLowerCase().includes('403') ||
+                    error.toLowerCase().includes('invalid api key')) && (
+                    <div style={{ marginTop: '10px' }}>
+                      <button 
+                        onClick={() => {
+                          onClose();
+                          if (onOpenApiConfig) {
+                            setTimeout(() => {
+                              onOpenApiConfig();
+                            }, 100);
+                          }
+                        }}
+                        style={{
+                          backgroundColor: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        🔑 Configure API Keys
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -662,6 +710,34 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
               {error && (
                 <div className="error-message">
                   ❌ {error}
+                  {(error.toLowerCase().includes('authentication') || 
+                    error.toLowerCase().includes('401') || 
+                    error.toLowerCase().includes('403') ||
+                    error.toLowerCase().includes('invalid api key')) && (
+                    <div style={{ marginTop: '10px' }}>
+                      <button 
+                        onClick={() => {
+                          onClose();
+                          if (onOpenApiConfig) {
+                            setTimeout(() => {
+                              onOpenApiConfig();
+                            }, 100);
+                          }
+                        }}
+                        style={{
+                          backgroundColor: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '6px 12px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        🔑 Configure API Keys
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

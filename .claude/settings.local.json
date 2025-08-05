@@ -56,7 +56,8 @@
       "Bash(npm run start:*)",
       "Bash(timeout:*)",
       "Bash(npx babel:*)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(npm run lint)"
     ],
     "deny": []
   }

@@ -1014,7 +1014,8 @@ export const useFlashcards = (firebaseApp, userId) => {
    * @returns {Object} Object with level names as keys and card counts as values
    */
   const getLevelStats = useCallback((selectedCategory = 'All') => {
-    let filteredCards = flashcards;
+    // Start with only active cards
+    let filteredCards = flashcards.filter(card => card.active !== false);
 
     // Filter by category
     if (selectedCategory !== 'All') {
@@ -1023,7 +1024,10 @@ export const useFlashcards = (firebaseApp, userId) => {
 
     // Filter by sub-category
     if (selectedSubCategory !== 'All') {
-      filteredCards = filteredCards.filter(card => card.sub_category === selectedSubCategory);
+      filteredCards = filteredCards.filter(card => {
+        const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
+        return cardSubCategory === selectedSubCategory;
+      });
     }
 
     // If due today filter is enabled, only consider cards that are due
@@ -1036,6 +1040,11 @@ export const useFlashcards = (firebaseApp, userId) => {
       });
     }
 
+    // Filter by starred status
+    if (showStarredOnly) {
+      filteredCards = filteredCards.filter(card => card.starred === true);
+    }
+
     const levelStats = {};
 
     filteredCards.forEach(card => {
@@ -1046,7 +1055,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     });
 
     return levelStats;
-  }, [flashcards, selectedSubCategory, showDueTodayOnly, inferLevelFromFSRS]);
+  }, [flashcards, selectedSubCategory, showDueTodayOnly, showStarredOnly, inferLevelFromFSRS]);
 
   // Auto-manage sub-category filter when options change - simplified since category is managed in App.js
   useEffect(() => {
