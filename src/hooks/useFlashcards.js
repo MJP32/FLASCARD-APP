@@ -102,7 +102,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     // })));
     
     return { categoryCards: categoryCards.length, subCategoryCards: subCategoryCards.length, dueCards: dueCards.length };
-  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly]);
 
   // Wrapper for manual subcategory selection
   const setSelectedSubCategoryManual = useCallback((subCategory) => {
@@ -221,6 +221,23 @@ export const useFlashcards = (firebaseApp, userId) => {
   }, [db, userId]);
 
   /**
+   * Infer level from FSRS parameters
+   * @param {Object} card - Flashcard object
+   * @returns {string} Inferred level
+   */
+  const inferLevelFromFSRS = useCallback((card) => {
+    if (card.level) return card.level;
+    
+    const { difficulty = 5, easeFactor = 2.5, interval = 1 } = card;
+    
+    if (difficulty >= 8) return 'again';
+    if (difficulty >= 7) return 'hard';
+    if (difficulty <= 3 && easeFactor >= 2.8) return 'easy';
+    if (interval >= 4) return 'good';
+    return 'new';
+  }, []);
+
+  /**
    * Get subcategory with least due cards (for automatic progression)
    * Always returns the subcategory with the fewest due cards, excluding the current one
    * @param {string} currentCategory - Current category
@@ -237,8 +254,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     const subCategoryStats = {};
     
     // First, let's see all cards in this category
-    const cardsInCategory = flashcards.filter(card => card.category === currentCategory && card.active !== false);
-    //     console.log(`🔍 GET-NEXT-SUBCATEGORY: Found ${cardsInCategory.length} active cards in category '${currentCategory}'`);
+    //     console.log(`🔍 GET-NEXT-SUBCATEGORY: Found active cards in category '${currentCategory}'`);
     
     flashcards.forEach(card => {
       // Only consider cards from the specified category
@@ -270,8 +286,6 @@ export const useFlashcards = (firebaseApp, userId) => {
     //     console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategory stats in category:', subCategoryStats);
     
     // Show ALL subcategories, not just those with due cards
-    const allSubcategoriesWithCounts = Object.entries(subCategoryStats)
-      .sort(([, statsA], [, statsB]) => statsA.due - statsB.due);
     
     //     console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategories sorted by due count:', 
       // allSubcategoriesWithCounts.map(([subCat, stats]) => `${subCat}: ${stats.due} due, ${stats.total} total`));
@@ -728,25 +742,7 @@ export const useFlashcards = (firebaseApp, userId) => {
         });
       }
     }
-  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly, categorySortBy, lastManualSubCategoryChange]);
-
-
-  /**
-   * Infer level from FSRS parameters
-   * @param {Object} card - Flashcard object
-   * @returns {string} Inferred level
-   */
-  const inferLevelFromFSRS = useCallback((card) => {
-    if (card.level) return card.level;
-    
-    const { difficulty = 5, easeFactor = 2.5, interval = 1 } = card;
-    
-    if (difficulty >= 8) return 'again';
-    if (difficulty >= 7) return 'hard';
-    if (difficulty <= 3 && easeFactor >= 2.8) return 'easy';
-    if (interval >= 4) return 'good';
-    return 'new';
-  }, []);
+  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, categorySortBy, lastManualSubCategoryChange, currentCardIndex, filteredFlashcards, getNextSubCategoryWithLeastCards, inferLevelFromFSRS, lastCardCompletionTime]);
 
   /**
    * Get available categories from flashcards
@@ -820,7 +816,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       const countB = categoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, showDueTodayOnly]);
 
   /**
    * Get available sub-categories from flashcards (filtered by selected category and due date)
@@ -889,7 +885,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       const countB = subCategoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, showDueTodayOnly]);
 
   /**
    * Get ALL sub-category statistics without filtering (for initial stats)
@@ -1392,7 +1388,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       return null;
     }
     return filteredFlashcards[currentCardIndex];
-  }, [filteredFlashcards, currentCardIndex]);
+  }, [filteredFlashcards]);
 
   /**
    * Get cards due today (from start of today to end of today)

@@ -19,7 +19,7 @@ const RichTextContentEditable = forwardRef(({
     if (ref.current && !ref.current.innerHTML) {
       ref.current.innerHTML = value || '';
     }
-  }, []);
+  }, [ref, value]);
   
   // Handle external content changes (but not while user is typing)
   React.useEffect(() => {
@@ -27,7 +27,7 @@ const RichTextContentEditable = forwardRef(({
       ref.current.innerHTML = value || '';
       lastContent.current = value;
     }
-  }, [value]);
+  }, [value, ref]);
   
   const handleInput = (e) => {
     isUpdating.current = true;
@@ -113,20 +113,6 @@ const RichTextEditor = ({
     return { text: '', range: null };
   };
 
-  // Helper function to insert text in contentEditable
-  const insertInContentEditable = (text) => {
-    const selection = window.getSelection();
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      const textNode = document.createTextNode(text);
-      range.insertNode(textNode);
-      range.setStartAfter(textNode);
-      range.setEndAfter(textNode);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-  };
 
   // Apply formatting to selected text
   const applyFormatting = (formatType) => {
@@ -136,7 +122,6 @@ const RichTextEditor = ({
     if (enableRichText) {
       // Handle contentEditable formatting
       const selection = getContentEditableSelection();
-      const selectedText = selection.text;
       
       if (formatType === 'bold') {
         document.execCommand('bold');

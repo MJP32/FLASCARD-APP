@@ -43,90 +43,6 @@ const firebaseConfig = {
 /**
  * ContentEditable component that preserves cursor position
  */
-const ContentEditableNotes = ({ content, onChange, className, style }) => {
-  const contentRef = React.useRef(null);
-  const lastContent = React.useRef(content);
-  const isUpdating = React.useRef(false);
-  
-  // Only set initial content
-  React.useEffect(() => {
-    if (contentRef.current && !contentRef.current.innerHTML) {
-      contentRef.current.innerHTML = content;
-    }
-  }, []);
-  
-  // Handle external content changes (but not while user is typing)
-  React.useEffect(() => {
-    if (contentRef.current && content !== lastContent.current && !isUpdating.current) {
-      const selection = window.getSelection();
-      const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-      
-      // Save cursor position
-      let cursorPosition = 0;
-      if (range && contentRef.current.contains(range.startContainer)) {
-        const preCaretRange = range.cloneRange();
-        preCaretRange.selectNodeContents(contentRef.current);
-        preCaretRange.setEnd(range.startContainer, range.startOffset);
-        cursorPosition = preCaretRange.toString().length;
-      }
-      
-      // Update content
-      contentRef.current.innerHTML = content;
-      lastContent.current = content;
-      
-      // Restore cursor position
-      try {
-        const textNodes = [];
-        const walker = document.createTreeWalker(
-          contentRef.current,
-          NodeFilter.SHOW_TEXT,
-          null,
-          false
-        );
-        
-        let node;
-        while (node = walker.nextNode()) {
-          textNodes.push(node);
-        }
-        
-        let charCount = 0;
-        for (const textNode of textNodes) {
-          const nodeLength = textNode.textContent.length;
-          if (charCount + nodeLength >= cursorPosition) {
-            const newRange = document.createRange();
-            newRange.setStart(textNode, cursorPosition - charCount);
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-            break;
-          }
-          charCount += nodeLength;
-        }
-      } catch (e) {
-        console.log('Could not restore cursor position');
-      }
-    }
-  }, [content]);
-  
-  const handleInput = (e) => {
-    isUpdating.current = true;
-    const html = e.currentTarget.innerHTML;
-    lastContent.current = html;
-    onChange(html);
-    setTimeout(() => { isUpdating.current = false; }, 0);
-  };
-  
-  return (
-    <div
-      ref={contentRef}
-      contentEditable
-      className={className}
-      style={style}
-      onInput={handleInput}
-      suppressContentEditableWarning={true}
-    />
-  );
-};
 
 /**
  * Component that automatically navigates to the optimal category and subcategory
@@ -349,7 +265,6 @@ function App() {
   const [isCategoriesCollapsed, setIsCategoriesCollapsed] = useState(window.innerWidth <= 768);
   const [isSubCategoriesCollapsed, setIsSubCategoriesCollapsed] = useState(window.innerWidth <= 768);
   const [isLevelsCollapsed, setIsLevelsCollapsed] = useState(window.innerWidth <= 768);
-  const [isNotesCollapsed, setIsNotesCollapsed] = useState(window.innerWidth <= 768);
   const [isNotesHidden, setIsNotesHidden] = useState(false);
   const [isNotesPopouted, setIsNotesPopouted] = useState(false);
   const [notesWindowPosition, setNotesWindowPosition] = useState({ x: 100, y: 100 });
@@ -367,6 +282,14 @@ function App() {
   const [addToStudyNotes, setAddToStudyNotes] = useState(true);
   const [studyNotesText, setStudyNotesText] = useState('');
   const [explanationCount, setExplanationCount] = useState(0);
+  
+  // Explanation sections state
+  const [includeOverview, setIncludeOverview] = useState(true);
+  const [includeKeyConcepts, setIncludeKeyConcepts] = useState(true);
+  const [includeTechniques, setIncludeTechniques] = useState(true);
+  const [includeTools, setIncludeTools] = useState(true);
+  const [includeImportantPoints, setIncludeImportantPoints] = useState(true);
+  const [includeSummary, setIncludeSummary] = useState(true);
   
   // Note editing modal state
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -676,7 +599,7 @@ function App() {
   }, [isAuthReady, isAnonymous]);
 
   // Create default flashcards for new users
-  const createDefaultFlashcards = async (currentUserId) => {
+  const createDefaultFlashcards = useCallback(async (currentUserId) => {
     console.log('🔍 createDefaultFlashcards called with:', {
       currentUserId,
       hasAddFlashcard: !!addFlashcard,
@@ -749,7 +672,7 @@ function App() {
       console.error('❌ Error creating default flashcards:', error);
       // Don't show error to user - this is a nice-to-have feature
     }
-  };
+  }, [addFlashcard, flashcards.length]);
 
   // Create default flashcards for new users
   useEffect(() => {
@@ -1248,13 +1171,13 @@ function App() {
     // Removed direct DOM manipulation. Use React state and conditional rendering for fullscreen mode.
   };
 
-  const handleRestore = () => {
+  const handleRestore = useCallback(() => {
     // Reset all window states to default embedded view
     setIsMaximized(false);
     setIsPopouted(false);
     setWindowPosition({ x: 0, y: 0 });
     setWindowSize({ width: 1400, height: 900 });
-  };
+  }, []);
 
   const handlePopout = () => {
     setIsPopouted(true);
@@ -1279,7 +1202,6 @@ function App() {
   // Notes popout handlers
   const handleNotesPopout = () => {
     setIsNotesPopouted(true);
-    setIsNotesCollapsed(false); // Ensure notes are expanded when popped out
     // Center the notes window
     const newWidth = 600;
     const newHeight = 700;
@@ -1402,7 +1324,6 @@ function App() {
     // Create formatted content with color and timestamp
     // Check if content already contains HTML
     const isHTML = /<[^>]+>/.test(content);
-    const processedContent = isHTML ? content : content.replace(/\n/g, '<br/>');
     
     let formattedContent;
     
@@ -1465,6 +1386,13 @@ ${plainContent}
       return;
     }
 
+    // Check if at least one section is selected
+    if (!includeOverview && !includeKeyConcepts && !includeTechniques && 
+        !includeTools && !includeImportantPoints && !includeSummary) {
+      setExplainError('Please select at least one section to include in the explanation');
+      return;
+    }
+
     const apiKey = apiKeys[selectedProvider];
     if (!apiKey) {
       setExplainError(`No ${selectedProvider.toUpperCase()} API key configured. Please click the 🔑 API Key button to add your API key, or try a different AI provider if you have one configured.`);
@@ -1484,21 +1412,26 @@ ${currentCard && currentCard.sub_category ? `Sub-category: ${currentCard.sub_cat
 User Request: ${explainPrompt}
 
 Instructions:
-1. Provide a comprehensive explanation based on the user's request
-2. Include key concepts and definitions
-3. Explain why this knowledge is important
-4. Use clear, educational language
-5. Format your response as HTML using these tags: <p>, <strong>, <em>, <ul>, <li>, <ol>
-6. Include examples when appropriate
-7. Start directly with HTML content - no markdown, no code blocks, no backticks
+Provide a comprehensive explanation based on the user's request. Structure your response with the following sections (only include sections that are requested):
+
+${includeOverview ? '1. OVERVIEW: Provide a brief overview of the topic' : ''}
+${includeKeyConcepts ? '2. KEY CONCEPTS: List and explain the main concepts and definitions' : ''}
+${includeTechniques ? '3. TECHNIQUES: Describe relevant techniques, methods, or approaches' : ''}
+${includeTools ? '4. TOOLS: Mention any tools, frameworks, or technologies related to this topic' : ''}
+${includeImportantPoints ? '5. IMPORTANT POINTS: Highlight critical information or gotchas to remember' : ''}
+${includeSummary ? '6. SUMMARY: Provide a concise summary of the key takeaways' : ''}
+
+Format Guidelines:
+- Use clear, educational language
+- Format your response as HTML using these tags: <p>, <strong>, <em>, <ul>, <li>, <ol>, <h3>
+- Use <h3> tags for section headers
+- Include examples when appropriate
+- Start directly with HTML content - no markdown, no code blocks, no backticks
 
 EXAMPLE FORMAT:
-<p>This is a paragraph with <strong>important concepts</strong> and <em>emphasis</em>.</p>
-<ul>
-<li><strong>Concept 1:</strong> Explanation here</li>
-<li><strong>Concept 2:</strong> Another explanation</li>
-</ul>
-<p>Why this is important: explanation here.</p>
+${includeOverview ? '<h3>Overview</h3>\n<p>Brief overview here...</p>' : ''}
+${includeKeyConcepts ? '<h3>Key Concepts</h3>\n<ul>\n<li><strong>Concept 1:</strong> Explanation</li>\n<li><strong>Concept 2:</strong> Explanation</li>\n</ul>' : ''}
+${includeImportantPoints ? '<h3>Important Points</h3>\n<p>Critical information here...</p>' : ''}
 
 IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
@@ -1619,12 +1552,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               if (!line) return '<br/>';
               
               // Check if line is a list item
-              if (line.match(/^[\-\*•]\s+/)) {
-                return `<li style="margin: 0.4em 0; line-height: 1.5;">${line.replace(/^[\-\*•]\s+/, '')}</li>`;
+              if (line.match(/^[-*•]\s+/)) {
+                return `<li style="margin: 0.4em 0; line-height: 1.5;">${line.replace(/^[-*•]\s+/, '')}</li>`;
               }
               // Check if line is numbered list
-              else if (line.match(/^\d+[\.\)]\s+/)) {
-                return `<li style="margin: 0.4em 0; line-height: 1.5;">${line.replace(/^\d+[\.\)]\s+/, '')}</li>`;
+              else if (line.match(/^\d+[.)]\s+/)) {
+                return `<li style="margin: 0.4em 0; line-height: 1.5;">${line.replace(/^\d+[.)]\s+/, '')}</li>`;
               }
               // Regular paragraph
               else {
@@ -1655,8 +1588,19 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       console.log('Formatted Explanation:', formattedExplanation);
       console.log('Plain Text Explanation:', explanationText);
       
+      // Combine explanation with study notes if provided
+      let finalContent = formattedExplanation;
+      if (studyNotesText.trim() && addToStudyNotes) {
+        // Add study notes as a separate section
+        finalContent += `
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <h3 style="margin-bottom: 10px; color: #6b7280;">Additional Study Notes</h3>
+            <p>${studyNotesText.replace(/\n/g, '<br/>')}</p>
+          </div>`;
+      }
+      
       // Use the new helper function to add formatted content
-      const newNotes = addToNotes(formattedExplanation, 'explanation');
+      const newNotes = addToStudyNotes ? addToNotes(finalContent, 'explanation') : notes;
       
       // Debug logging to see what we're getting
       console.log('AI Response:', response);
@@ -2217,10 +2161,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     setExplainPrompt('');
   }, [currentCardIndex]);
 
-  // Handle notes text change
-  const handleNotesChange = (value) => {
-    setNotes(value);
-  };
 
   // Clear notes
   const handleClearNotes = () => {
@@ -2407,7 +2347,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         setSubCategoryCompletedCounts(storedSubCategoryCompleted ? JSON.parse(storedSubCategoryCompleted) : {});
       }
     }
-  }, [userId, cardsDueToday.length, categoryStats, getAllSubCategoryStats, subCategoryStats]);
+  }, [userId, cardsDueToday.length, categoryStats, getAllSubCategoryStats, subCategoryStats, flashcards]);
 
   // Fix completion count inconsistencies - DISABLED to prevent infinite loop
   useEffect(() => {
@@ -2531,8 +2471,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       console.log('⚠️ WARNING: Due cards exist but none are showing!');
       debugDueCards(flashcards, selectedCategory, selectedSubCategory);
     }
-  }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory, flashcards]);
-  // Added cardsDueToday and pastDueCards to dependency array
+  }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory, flashcards, cardsDueToday, pastDueCards]);
 
   // CATEGORY SYNC DEBUG: Track category changes to identify timing issues
   useEffect(() => {
@@ -4407,92 +4346,129 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             </div>
 
             <div className="explain-content" style={{ padding: '1.5rem' }}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label 
-                  htmlFor="explain-prompt" 
-                  style={{ 
-                    display: 'block', 
-                    marginBottom: '0.5rem', 
-                    fontWeight: '600',
-                    color: isDarkMode ? '#f1f5f9' : '#374151'
-                  }}
-                >
-                  What would you like me to explain?
-                </label>
-                <textarea
-                  id="explain-prompt"
-                  value={explainPrompt}
-                  onChange={(e) => setExplainPrompt(e.target.value)}
-                  placeholder={currentCard ? 
-                    `Explain "${currentCard.question?.replace(/<[^>]*>/g, '') || 'this question'}" including concepts and why it is important to know...` : 
-                    "Explain the current topic including concepts and why it is important to know..."}
-                  style={{
-                    width: '100%',
-                    minHeight: '100px',
-                    padding: '0.75rem',
-                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                    borderRadius: '0.5rem',
-                    backgroundColor: isDarkMode ? '#374151' : '#ffffff',
-                    color: isDarkMode ? '#f1f5f9' : '#374151',
+              {/* Grouped explanation prompt and add to question */}
+              <div style={{ 
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                borderRadius: '0.5rem'
+              }}>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label 
+                    htmlFor="explain-prompt" 
+                    style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontWeight: '600',
+                      color: isDarkMode ? '#f1f5f9' : '#374151'
+                    }}
+                  >
+                    What would you like me to explain?
+                  </label>
+                  <textarea
+                    id="explain-prompt"
+                    value={explainPrompt}
+                    onChange={(e) => setExplainPrompt(e.target.value)}
+                    placeholder={currentCard ? 
+                      `Explain "${currentCard.question?.replace(/<[^>]*>/g, '') || 'this question'}" including concepts and why it is important to know...` : 
+                      "Explain the current topic including concepts and why it is important to know..."}
+                    style={{
+                      width: '100%',
+                      minHeight: '100px',
+                      padding: '0.75rem',
+                      border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
+                      borderRadius: '0.5rem',
+                      backgroundColor: isDarkMode ? '#334155' : '#ffffff',
+                      color: isDarkMode ? '#f1f5f9' : '#374151',
+                      fontSize: '0.95rem',
+                      lineHeight: '1.5',
+                      resize: 'vertical',
+                      fontFamily: 'inherit'
+                    }}
+                    rows={4}
+                  />
+                </div>
+
+                {/* Checkbox to add explanation to question */}
+                <div>
+                  <label style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    cursor: 'pointer',
                     fontSize: '0.95rem',
-                    lineHeight: '1.5',
-                    resize: 'vertical',
-                    fontFamily: 'inherit'
-                  }}
-                  rows={4}
-                />
+                    color: isDarkMode ? '#f1f5f9' : '#374151'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={addExplanationToQuestion}
+                      onChange={(e) => setAddExplanationToQuestion(e.target.checked)}
+                      style={{
+                        width: '16px',
+                        height: '16px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    Add to question
+                  </label>
+                </div>
               </div>
 
-              {/* Checkbox to add explanation to question */}
-              <div style={{ marginBottom: '1rem' }}>
+              {/* Combined Section checkboxes and Study Notes */}
+              <div style={{ 
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                borderRadius: '0.5rem'
+              }}>
                 <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.5rem',
-                  cursor: 'pointer',
-                  fontSize: '0.95rem',
+                  display: 'block', 
+                  marginBottom: '0.75rem', 
+                  fontWeight: '600',
                   color: isDarkMode ? '#f1f5f9' : '#374151'
                 }}>
-                  <input
-                    type="checkbox"
-                    checked={addExplanationToQuestion}
-                    onChange={(e) => setAddExplanationToQuestion(e.target.checked)}
-                    style={{
-                      width: '16px',
-                      height: '16px',
-                      cursor: 'pointer'
-                    }}
-                  />
-                  Add to question
+                  Include sections:
                 </label>
-              </div>
-
-              {/* Checkbox to add explanation to study notes */}
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.5rem',
-                  cursor: 'pointer',
-                  fontSize: '0.95rem',
-                  color: isDarkMode ? '#f1f5f9' : '#374151'
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: '0.75rem',
+                  marginBottom: '1.5rem'
                 }}>
-                  <input
-                    type="checkbox"
-                    checked={addToStudyNotes}
-                    onChange={(e) => setAddToStudyNotes(e.target.checked)}
-                    style={{
-                      width: '16px',
-                      height: '16px',
-                      cursor: 'pointer'
-                    }}
-                  />
-                  Add to study Notes
-                </label>
-              </div>
+                  {[
+                    { label: 'Overview', checked: includeOverview, setter: setIncludeOverview },
+                    { label: 'Key Concepts', checked: includeKeyConcepts, setter: setIncludeKeyConcepts },
+                    { label: 'Techniques', checked: includeTechniques, setter: setIncludeTechniques },
+                    { label: 'Tools', checked: includeTools, setter: setIncludeTools },
+                    { label: 'Important Points', checked: includeImportantPoints, setter: setIncludeImportantPoints },
+                    { label: 'Summary', checked: includeSummary, setter: setIncludeSummary }
+                  ].map(({ label, checked, setter }) => (
+                    <label key={label} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      fontSize: '0.95rem',
+                      color: isDarkMode ? '#f1f5f9' : '#374151'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setter(e.target.checked)}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
 
-              {/* Study notes textarea - shown when checkbox is checked */}
-              {addToStudyNotes && (
+                {/* Study Notes within the same container */}
                 <div style={{ marginBottom: '1rem' }}>
                   <label 
                     htmlFor="study-notes-text" 
@@ -4516,7 +4492,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       padding: '0.75rem',
                       border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
                       borderRadius: '0.5rem',
-                      backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+                      backgroundColor: isDarkMode ? '#334155' : '#ffffff',
                       color: isDarkMode ? '#f1f5f9' : '#374151',
                       fontSize: '0.95rem',
                       lineHeight: '1.5',
@@ -4526,7 +4502,32 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     rows={3}
                   />
                 </div>
-              )}
+
+                {/* Checkbox to add explanation to study notes */}
+                <div>
+                  <label style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '0.5rem',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    color: isDarkMode ? '#f1f5f9' : '#374151'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={addToStudyNotes}
+                      onChange={(e) => setAddToStudyNotes(e.target.checked)}
+                      style={{
+                        width: '16px',
+                        height: '16px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    Add to study notes
+                  </label>
+                </div>
+              </div>
+
 
               {explainError && (
                 <div style={{

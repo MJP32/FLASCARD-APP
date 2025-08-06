@@ -315,7 +315,7 @@ const ImportExportModal = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [showPreview, previewCards, editingCardIndex]);
+  }, [showPreview, previewCards, editingCardIndex, handleDeleteCard, handleSaveEdit]);
 
   const clearMessages = () => {
     setImportMessage('');

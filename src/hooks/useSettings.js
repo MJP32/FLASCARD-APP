@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   getFirestore, 
   doc, 
@@ -39,6 +39,42 @@ export const useSettings = (firebaseApp, userId) => {
     // Apply theme immediately to prevent flash
     applyTheme(isDark);
   }, []);
+
+  /**
+   * Apply theme to document
+   * @param {boolean} isDark - Whether to apply dark theme
+   */
+  const applyTheme = (isDark) => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+      localStorage.setItem(STORAGE_KEYS.THEME, THEMES.DARK);
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+      localStorage.setItem(STORAGE_KEYS.THEME, THEMES.LIGHT);
+    }
+  };
+
+  /**
+   * Save user settings to Firestore
+   * @param {Object} settings - Settings object to save
+   * @returns {Promise<void>}
+   */
+  const saveUserSettings = useCallback(async (settings) => {
+    if (!db || !userId) return;
+
+    try {
+      const settingsRef = doc(db, 'userSettings', userId);
+      await setDoc(settingsRef, {
+        ...settings,
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error('Error saving user settings:', error);
+      throw new Error('Failed to save settings');
+    }
+  }, [db, userId]);
 
   // Load user settings from Firestore when user and db are ready
   useEffect(() => {
@@ -99,43 +135,7 @@ export const useSettings = (firebaseApp, userId) => {
     };
 
     loadUserSettings();
-  }, [db, userId]);
-
-  /**
-   * Apply theme to document
-   * @param {boolean} isDark - Whether to apply dark theme
-   */
-  const applyTheme = (isDark) => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      document.body.classList.add('dark');
-      localStorage.setItem(STORAGE_KEYS.THEME, THEMES.DARK);
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.body.classList.remove('dark');
-      localStorage.setItem(STORAGE_KEYS.THEME, THEMES.LIGHT);
-    }
-  };
-
-  /**
-   * Save user settings to Firestore
-   * @param {Object} settings - Settings object to save
-   * @returns {Promise<void>}
-   */
-  const saveUserSettings = async (settings) => {
-    if (!db || !userId) return;
-
-    try {
-      const settingsRef = doc(db, 'userSettings', userId);
-      await setDoc(settingsRef, {
-        ...settings,
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
-    } catch (error) {
-      console.error('Error saving user settings:', error);
-      throw new Error('Failed to save settings');
-    }
-  };
+  }, [db, userId, saveUserSettings]);
 
   /**
    * Toggle dark mode
