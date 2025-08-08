@@ -102,7 +102,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     // })));
     
     return { categoryCards: categoryCards.length, subCategoryCards: subCategoryCards.length, dueCards: dueCards.length };
-  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly]);
+  }, [flashcards, selectedSubCategory, showDueTodayOnly]);
 
   // Wrapper for manual subcategory selection
   const setSelectedSubCategoryManual = useCallback((subCategory) => {
@@ -742,7 +742,7 @@ export const useFlashcards = (firebaseApp, userId) => {
         });
       }
     }
-  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, categorySortBy, lastManualSubCategoryChange, currentCardIndex, filteredFlashcards, getNextSubCategoryWithLeastCards, inferLevelFromFSRS, lastCardCompletionTime]);
+  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly, categorySortBy, lastManualSubCategoryChange, currentCardIndex, filteredFlashcards, getNextSubCategoryWithLeastCards, inferLevelFromFSRS, lastCardCompletionTime]);
 
   /**
    * Get available categories from flashcards
@@ -1077,6 +1077,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       setSelectedSubCategory(nextSubCategory);
     }
     // Note: Don't include selectedSubCategory in dependencies to prevent overriding manual selections
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getSubCategories]);
 
   // Auto-manage level filter when options change
@@ -1184,7 +1185,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       throw new Error('Card ID is required');
     }
 
-    console.log('🔄 useFlashcards: Updating card', cardId, 'with updates:', updates);
+    // console.log('🔄 useFlashcards: Updating card', cardId, 'with updates:', updates);
     
     setIsLoading(true);
     setError('');
@@ -1202,13 +1203,25 @@ export const useFlashcards = (firebaseApp, userId) => {
         ...updates,
         lastModified: serverTimestamp()
       });
-      
-      console.log('✅ useFlashcards: Card updated successfully');
     } catch (error) {
       console.error('❌ useFlashcards: Error updating flashcard:', error);
+      console.error('Error code:', error.code);
+      console.error('Error type:', error.constructor.name);
       console.error('Card ID:', cardId);
       console.error('Updates:', updates);
-      const errorMessage = `Failed to update flashcard: ${error.message}`;
+      
+      // More specific error handling
+      let errorMessage;
+      if (error.code === 'permission-denied') {
+        errorMessage = `Permission denied: Check Firestore security rules. Error: ${error.message}`;
+      } else if (error.code === 'not-found') {
+        errorMessage = `Card not found: ${cardId}. Error: ${error.message}`;
+      } else if (error.code === 'unauthenticated') {
+        errorMessage = `User not authenticated. Error: ${error.message}`;
+      } else {
+        errorMessage = `Failed to update flashcard: ${error.message}`;
+      }
+      
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {
@@ -1377,7 +1390,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       prev <= 0 ? filteredFlashcards.length - 1 : prev - 1
     );
     setShowAnswer(false);
-  }, [filteredFlashcards, currentCardIndex, navigationHistory, historyPosition]);
+  }, [filteredFlashcards, navigationHistory, historyPosition]);
 
   /**
    * Get current card
@@ -1388,7 +1401,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       return null;
     }
     return filteredFlashcards[currentCardIndex];
-  }, [filteredFlashcards]);
+  }, [filteredFlashcards, currentCardIndex]);
 
   /**
    * Get cards due today (from start of today to end of today)

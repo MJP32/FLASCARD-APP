@@ -73,7 +73,8 @@ const RichTextEditor = ({
   style = {},
   minHeight = '150px',
   hideToolbar = false,
-  enableRichText = false
+  enableRichText = false,
+  onAddSections
 }) => {
   const textareaRef = useRef(null);
   const [currentFont, setCurrentFont] = useState('Arial');
@@ -100,18 +101,7 @@ const RichTextEditor = ({
     '#800080', '#008080', '#000080', '#ff9999', '#ffcc99'
   ];
 
-  // Helper function to get selected text for contentEditable
-  const getContentEditableSelection = () => {
-    const selection = window.getSelection();
-    if (selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      return {
-        text: range.toString(),
-        range: range
-      };
-    }
-    return { text: '', range: null };
-  };
+  // Helper function to get selected text for contentEditable (removed unused function)
 
 
   // Apply formatting to selected text
@@ -121,7 +111,6 @@ const RichTextEditor = ({
 
     if (enableRichText) {
       // Handle contentEditable formatting
-      const selection = getContentEditableSelection();
       
       if (formatType === 'bold') {
         document.execCommand('bold');
@@ -447,6 +436,16 @@ const RichTextEditor = ({
             >
               🗑️
             </button>
+            {onAddSections && (
+              <button
+                type="button"
+                className="toolbar-btn add-sections-btn"
+                onClick={onAddSections}
+                title="Add Sections"
+              >
+                📝 Add Sections
+              </button>
+            )}
           </div>
         </div>
       )}

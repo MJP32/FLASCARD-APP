@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { exportToCSV, exportToExcel } from '../services/exportService';
 import { parseCSV, parseExcel, readFileAsText, readFileAsArrayBuffer } from '../services/fileParser';
 import { SUPPORTED_FILE_TYPES, FILE_SIZE_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/constants';
@@ -180,7 +180,7 @@ const ImportExportModal = ({
     setEditingCard({ ...previewCards[index] });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = useCallback(() => {
     if (editingCardIndex !== null && editingCard) {
       const updatedCards = [...previewCards];
       updatedCards[editingCardIndex] = editingCard;
@@ -188,14 +188,14 @@ const ImportExportModal = ({
       setEditingCardIndex(null);
       setEditingCard(null);
     }
-  };
+  }, [editingCardIndex, editingCard, previewCards]);
 
   const handleCancelEdit = () => {
     setEditingCardIndex(null);
     setEditingCard(null);
   };
 
-  const handleDeleteCard = (index) => {
+  const handleDeleteCard = useCallback((index) => {
     if (window.confirm('Are you sure you want to delete this card?')) {
       const updatedCards = previewCards.filter((_, i) => i !== index);
       setPreviewCards(updatedCards);
@@ -209,7 +209,7 @@ const ImportExportModal = ({
         setEditingCardIndex(editingCardIndex - 1);
       }
     }
-  };
+  }, [previewCards, editingCardIndex]);
 
   const handleAddCard = () => {
     const newCard = {

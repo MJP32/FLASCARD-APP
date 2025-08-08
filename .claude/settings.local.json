@@ -58,7 +58,8 @@
       "Bash(npx babel:*)",
       "Bash(/dev/null)",
       "Bash(npm run lint)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(firebase deploy:*)"
     ],
     "deny": []
   }

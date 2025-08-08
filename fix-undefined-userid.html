@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fix Undefined UserId Issue</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #4CAF50;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .problem {
+            background: #ffebee;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #f44336;
+        }
+        .solution {
+            background: #e8f5e9;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .code-block {
+            background: #263238;
+            color: #aed581;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .results {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Found the Problem!</h1>
+        
+        <div class="problem">
+            <h3>🔍 The Issue:</h3>
+            <p>Your flashcards have <strong>undefined</strong> userId values</p>
+            <p>Your current user ID is: <strong>Wxww8kEiROTO6Jg8WfXQGpSAbMp1</strong></p>
+            <p>This mismatch is causing the permission errors!</p>
+        </div>
+
+        <div class="solution">
+            <h3>✅ The Solution:</h3>
+            <p>We need to update all cards to have your current userId</p>
+        </div>
+
+        <h2>Option 1: Update Firestore Rules (Quickest)</h2>
+        <p>Change your rules to ignore the userId field completely:</p>
+        <div class="code-block">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow any authenticated user to do anything
+    // Ignoring the userId field completely
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}</div>
+        <button onclick="copyRules()">📋 Copy Rules</button>
+
+        <h2>Option 2: Fix All Cards (Permanent Solution)</h2>
+        <p>Run this script to update all cards with your current userId:</p>
+        
+        <button onclick="fixAllCards()">🔧 Fix All Cards</button>
+        
+        <div id="results" class="results" style="display: none;"></div>
+    </div>
+
+    <script type="module">
+        window.copyRules = function() {
+            const rules = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow any authenticated user to do anything
+    // Ignoring the userId field completely
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}`;
+            navigator.clipboard.writeText(rules).then(() => {
+                alert('Rules copied! Now paste them in Firebase Console and click PUBLISH');
+            });
+        }
+
+        window.fixAllCards = async function() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.style.display = 'block';
+            resultsDiv.textContent = 'Starting fix process...\n';
+            
+            try {
+                // Import Firebase modules
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
+                const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+                const { getFirestore, collection, getDocs, doc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                
+                // Firebase config
+                const firebaseConfig = {
+                    apiKey: "AIzaSyC3R7pV3mXqg2-kY9xvH126BoF5KQDQDls",
+                    authDomain: "flashcard-app-3f2a3.firebaseapp.com",
+                    projectId: "flashcard-app-3f2a3",
+                    storageBucket: "flashcard-app-3f2a3.firebasestorage.app",
+                    messagingSenderId: "399745541062",
+                    appId: "1:399745541062:web:958a2cfbd7c6c9c78988c7"
+                };
+                
+                // Initialize Firebase
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+                
+                resultsDiv.textContent += 'Firebase initialized\n';
+                
+                // Get current user
+                const currentUser = auth.currentUser;
+                if (!currentUser) {
+                    resultsDiv.textContent += '❌ Error: Not logged in. Please log in to the app first.\n';
+                    return;
+                }
+                
+                const userId = currentUser.uid;
+                resultsDiv.textContent += `Current user ID: ${userId}\n\n`;
+                
+                // Get all flashcards
+                resultsDiv.textContent += 'Fetching all flashcards...\n';
+                const querySnapshot = await getDocs(collection(db, 'flashcards'));
+                
+                let total = 0;
+                let fixed = 0;
+                let alreadyCorrect = 0;
+                let errors = 0;
+                
+                resultsDiv.textContent += `Found ${querySnapshot.size} flashcards\n\n`;
+                
+                // Process each card
+                for (const docSnap of querySnapshot.docs) {
+                    total++;
+                    const data = docSnap.data();
+                    
+                    if (!data.userId || data.userId === 'undefined' || data.userId !== userId) {
+                        try {
+                            resultsDiv.textContent += `Fixing card ${docSnap.id}... `;
+                            await updateDoc(doc(db, 'flashcards', docSnap.id), {
+                                userId: userId
+                            });
+                            fixed++;
+                            resultsDiv.textContent += '✅\n';
+                        } catch (error) {
+                            errors++;
+                            resultsDiv.textContent += `❌ ${error.message}\n`;
+                        }
+                    } else {
+                        alreadyCorrect++;
+                    }
+                }
+                
+                resultsDiv.textContent += `\n=== SUMMARY ===\n`;
+                resultsDiv.textContent += `Total cards: ${total}\n`;
+                resultsDiv.textContent += `Fixed: ${fixed}\n`;
+                resultsDiv.textContent += `Already correct: ${alreadyCorrect}\n`;
+                resultsDiv.textContent += `Errors: ${errors}\n`;
+                
+                if (fixed > 0) {
+                    resultsDiv.textContent += `\n✅ Success! Refresh your app and try reviewing cards now.`;
+                }
+                
+            } catch (error) {
+                resultsDiv.textContent += `\n❌ Error: ${error.message}\n`;
+                resultsDiv.textContent += `\nIf this doesn't work, use Option 1 (update rules) instead.`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firestore Debug</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h2>Firestore Debug Test</h2>
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+        
+        function log(message, isError = false) {
+            const div = document.createElement('div');
+            div.className = 'result ' + (isError ? 'error' : 'success');
+            div.textContent = message;
+            results.appendChild(div);
+            console.log(message);
+        }
+        
+        async function testFirestore() {
+            log('🌐 TESTING FIRESTORE WITH RAW REST API');
+            
+            const projectId = 'flashcard-app-3f2a3';
+            
+            // Test 1: Read documents
+            log('1️⃣ Testing READ...');
+            try {
+                const readUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/flashcards?pageSize=1`;
+                const readResponse = await fetch(readUrl);
+                log(`Read response status: ${readResponse.status}`);
+                
+                if (readResponse.ok) {
+                    const data = await readResponse.json();
+                    log(`✅ READ works! Found ${data.documents?.length || 0} documents`);
+                } else {
+                    const errorText = await readResponse.text();
+                    log(`❌ READ failed: ${errorText}`, true);
+                }
+            } catch (e) {
+                log(`❌ READ error: ${e.message}`, true);
+            }
+            
+            // Test 2: Write document
+            log('2️⃣ Testing WRITE...');
+            try {
+                const writeUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/flashcards`;
+                
+                const testDoc = {
+                    fields: {
+                        question: { stringValue: 'DEBUG TEST - ' + new Date().toISOString() },
+                        answer: { stringValue: 'Test document from debug script' },
+                        userId: { stringValue: 'debug-test-user' },
+                        category: { stringValue: 'Debug' },
+                        active: { booleanValue: true },
+                        createdAt: { timestampValue: new Date().toISOString() }
+                    }
+                };
+                
+                const writeResponse = await fetch(writeUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testDoc)
+                });
+                
+                log(`Write response status: ${writeResponse.status}`);
+                
+                if (writeResponse.ok) {
+                    const result = await writeResponse.json();
+                    const docId = result.name.split('/').pop();
+                    log(`✅ WRITE works! Created document: ${docId}`);
+                    
+                    // Test 3: Update the document we just created
+                    log('3️⃣ Testing UPDATE...');
+                    try {
+                        const updateUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/flashcards/${docId}`;
+                        
+                        const updateDoc = {
+                            fields: {
+                                question: { stringValue: 'UPDATED - ' + new Date().toISOString() },
+                                answer: { stringValue: 'Updated test document' },
+                                userId: { stringValue: 'debug-test-user' },
+                                category: { stringValue: 'Debug' },
+                                active: { booleanValue: true },
+                                updated: { booleanValue: true }
+                            }
+                        };
+                        
+                        const updateResponse = await fetch(updateUrl, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(updateDoc)
+                        });
+                        
+                        log(`Update response status: ${updateResponse.status}`);
+                        
+                        if (updateResponse.ok) {
+                            log('✅ UPDATE works via REST API!');
+                            log('');
+                            log('🎉 CONCLUSION: Firestore rules are working correctly!');
+                            log('The problem is in the Firebase SDK or app code, NOT the rules.');
+                            log('');
+                            log('This means your "Permission denied" error is coming from');
+                            log('the JavaScript code, not from Firestore security rules.');
+                        } else {
+                            const updateError = await updateResponse.text();
+                            log(`❌ UPDATE failed: ${updateError}`, true);
+                        }
+                        
+                    } catch (updateErr) {
+                        log(`❌ UPDATE error: ${updateErr.message}`, true);
+                    }
+                    
+                } else {
+                    const writeError = await writeResponse.text();
+                    log(`❌ WRITE failed: ${writeError}`, true);
+                    
+                    if (writeResponse.status === 403) {
+                        log('🚨 This means the Firestore rules are still blocking operations!', true);
+                        log('The rules may not have deployed correctly.', true);
+                    }
+                }
+                
+            } catch (e) {
+                log(`❌ WRITE error: ${e.message}`, true);
+            }
+        }
+        
+        // Run the test automatically
+        testFirestore();
+    </script>
+</body>
+</html>

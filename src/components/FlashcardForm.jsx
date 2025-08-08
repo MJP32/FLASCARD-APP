@@ -66,7 +66,6 @@ const FlashcardForm = ({
   // Reset checkboxes to checked when modal opens
   useEffect(() => {
     if (showGenerateModal) {
-      console.log('🔍 Modal opened, setting checkboxes to true');
       setSelectedOptions({
         keyConcepts: true,
         example: true,
@@ -180,13 +179,6 @@ const FlashcardForm = ({
         sub_category: formData.sub_category.trim() || ''
       };
 
-      // Debug logging
-      console.log('FlashcardForm handleSubmit:', {
-        cardData,
-        editCardId: editCard?.id,
-        editCard,
-        isEditMode: !!editCard
-      });
 
       await onSubmit(cardData, editCard?.id);
       
@@ -329,23 +321,18 @@ const FlashcardForm = ({
   //   setEnhancementError('');
   // };
 
-  const generateExampleContent = async () => {
+  // Version that returns content for batch generation
+  const generateExampleContentForBatch = async () => {
     if (!formData.question.trim()) {
-      setEnhancementError('Question is required to generate custom content');
-      return;
+      throw new Error('Question is required to generate custom content');
     }
 
     const apiKey = apiKeys[selectedProvider];
     if (!apiKey) {
-      setEnhancementError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
-      return;
+      throw new Error(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
     }
 
-
-    setEnhancementError('');
-
-    try {
-      const prompt = `Based on this flashcard, determine if a code example or practical example would be appropriate:
+    const prompt = `Based on this flashcard, determine if a code example or practical example would be appropriate:
 
 Question: ${formData.question.replace(/<[^>]*>/g, '')}
 Answer: ${formData.answer.replace(/<[^>]*>/g, '')}
@@ -426,47 +413,25 @@ Format practical examples like this:
 
 If not applicable, return exactly: NOT_APPLICABLE`;
 
-      // Call the AI with the constructed prompt
-      const result = await callAI(prompt, selectedProvider, apiKey);
-      
-      // Check if result is valid
-      if (!result || typeof result !== 'string') {
-        throw new Error('AI response was empty or invalid');
-      }
-
-      // Safely clean the result
-      const safeResult = String(result || '').trim();
-      if (!safeResult) {
-        throw new Error('AI response was empty after processing');
-      }
-      
-      // Check if AI determined an example is not applicable
-      if (safeResult === 'NOT_APPLICABLE') {
-        // Show a user-friendly message instead of adding content
-        setEnhancementError('An example is not applicable for this type of content');
-      } else {
-        // Wrap the generated example in a collapsible section
-        const collapsibleContent = `
-<details class="generated-content-section">
-  <summary class="generated-content-header">💡 Example</summary>
-  <div class="generated-content-body">
-    ${safeResult}
-  </div>
-</details>`;
-
-        const currentAnswer = String(formData.answer || '').trim();
-        const newAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
-        handleFieldChange('answer', newAnswer);
-      }
-    } catch (error) {
-      // Log error for debugging and show user-friendly error message
-      console.error('Example generation error:', error);
-      setEnhancementError('Failed to generate example: ' + error.message);
-    } finally {
-      // Always reset loading state when operation completes
-
+    // Call the AI with the constructed prompt
+    const result = await callAI(prompt, selectedProvider, apiKey);
+    
+    // Check if result is valid
+    if (!result || typeof result !== 'string') {
+      throw new Error('AI response was empty or invalid');
     }
+
+    // Safely clean the result
+    const safeResult = String(result || '').trim();
+    if (!safeResult) {
+      throw new Error('AI response was empty after processing');
+    }
+    
+    return safeResult;
   };
+
+  // Version that updates form directly (for standalone button)
+
 
 
   const generateCustomQuestionContent = async (userQuestion) => {
@@ -552,7 +517,6 @@ Return only the formatted summary content:`;
    * Generates multiple AI responses based on selected options
    */
   const generateBatchContent = async () => {
-    console.log('🔍 generateBatchContent called with selectedOptions:', selectedOptions);
     
     // Validate that at least one option is selected
     const hasSelections = selectedOptions.keyConcepts || selectedOptions.example || selectedOptions.customQuestion || selectedOptions.customAi;
@@ -598,7 +562,6 @@ Return only the formatted summary content:`;
             currentAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
           }
         } catch (error) {
-          console.error('Key concepts generation failed:', error);
           hasErrors = true;
           errorMessages.push(`Key concepts: ${error.message}`);
         }
@@ -607,9 +570,12 @@ Return only the formatted summary content:`;
       // Generate Example if selected
       if (selectedOptions.example) {
         try {
-          const exampleContent = await generateExampleContent();
+          const exampleContent = await generateExampleContentForBatch();
           const safeExampleContent = String(exampleContent || '').trim();
-          if (safeExampleContent && safeExampleContent !== 'NOT_APPLICABLE') {
+          
+          if (safeExampleContent === 'NOT_APPLICABLE') {
+            // Silently skip if not applicable
+          } else if (safeExampleContent) {
             const collapsibleContent = `
 <details class="generated-content-section">
   <summary class="generated-content-header">💡 Example</summary>
@@ -620,7 +586,6 @@ Return only the formatted summary content:`;
             currentAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
           }
         } catch (error) {
-          console.error('Example generation failed:', error);
           hasErrors = true;
           errorMessages.push(`Example: ${error.message}`);
         }
@@ -643,7 +608,6 @@ Return only the formatted summary content:`;
             currentAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
           }
         } catch (error) {
-          console.error('Custom question generation failed:', error);
           hasErrors = true;
           errorMessages.push(`Custom question: ${error.message}`);
         }
@@ -665,7 +629,6 @@ Return only the formatted summary content:`;
             currentAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
           }
         } catch (error) {
-          console.error('Question summary generation failed:', error);
           hasErrors = true;
           errorMessages.push(`Question summary: ${error.message}`);
         }
@@ -674,7 +637,6 @@ Return only the formatted summary content:`;
 
 
       // Update the answer field with all generated content
-      console.log('🔍 Updating answer field with content length:', currentAnswer.length);
       handleFieldChange('answer', currentAnswer);
       
       // Show errors if any occurred, but still close modal if some content was generated
@@ -934,9 +896,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
   };
 
   const callAnthropic = async (prompt, apiKey) => {
-    console.log('🔵 Anthropic API Call (FlashcardForm) - Starting request');
-    console.log('🔵 API Key format:', apiKey ? `${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}` : 'No API key provided');
-    console.log('🔵 Prompt length:', prompt.length);
 
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -956,8 +915,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
         })
       });
 
-      console.log('🔵 Anthropic API Response Status:', response.status);
-      console.log('🔵 Anthropic API Response Headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
@@ -965,7 +922,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
         
         try {
           const errorData = await response.json();
-          console.log('🔴 Anthropic API Error Data:', errorData);
           
           if (errorData.error) {
             errorMessage = errorData.error.message || errorMessage;
@@ -987,18 +943,11 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
             throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}${errorDetails ? ` (Type: ${errorDetails})` : ''}`);
           }
         } catch (jsonError) {
-          console.log('🔴 Could not parse error response as JSON:', jsonError);
           throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}. Response could not be parsed.`);
         }
       }
 
       const data = await response.json();
-      console.log('🔵 Anthropic API Success - Response structure:', {
-        hasContent: !!data.content,
-        contentLength: data.content?.length || 0,
-        firstContentType: data.content?.[0]?.type,
-        hasText: !!data.content?.[0]?.text
-      });
 
       const content = data.content[0]?.text;
       
@@ -1008,7 +957,7 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
 
       return content;
     } catch (networkError) {
-      console.error('🔴 Anthropic API Network Error:', networkError);
+      console.error('Anthropic API Network Error:', networkError);
       if (networkError.message.includes('fetch')) {
         throw new Error('Network error: Could not connect to Anthropic API. Please check your internet connection and try again.');
       }
@@ -1220,7 +1169,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
                 type="button"
                 className="btn btn-primary generate-answer-btn"
                 onClick={() => {
-                  console.log('🔍 Opening modal, current selectedOptions:', selectedOptions);
                   setShowGenerateModal(true);
                 }}
                 disabled={isGeneratingAiResponse || isGeneratingBatch || isSubmitting || !formData.question.trim()}
@@ -1480,7 +1428,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
                     <input
                       type="checkbox"
                       checked={selectedOptions.keyConcepts}
-                      defaultChecked={true}
                       onChange={(e) => setSelectedOptions(prev => ({ ...prev, keyConcepts: e.target.checked }))}
                       disabled={isGeneratingBatch}
                       className="checkbox-input"
@@ -1496,8 +1443,9 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
                     <input
                       type="checkbox"
                       checked={selectedOptions.example}
-                      defaultChecked={true}
-                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, example: e.target.checked }))}
+                      onChange={(e) => {
+                        setSelectedOptions(prev => ({ ...prev, example: e.target.checked }));
+                      }}
                       disabled={isGeneratingBatch}
                       className="checkbox-input"
                     />
@@ -1550,7 +1498,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
                     <input
                       type="checkbox"
                       checked={selectedOptions.customAi}
-                      defaultChecked={true}
                       onChange={(e) => setSelectedOptions(prev => ({ ...prev, customAi: e.target.checked }))}
                       disabled={isGeneratingBatch}
                       className="checkbox-input"
@@ -1594,7 +1541,9 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={generateBatchContent}
+                onClick={() => {
+                  generateBatchContent();
+                }}
                 disabled={isGeneratingBatch || (!selectedOptions.keyConcepts && !selectedOptions.example && !selectedOptions.customQuestion && !selectedOptions.customAi)}
               >
                 {isGeneratingBatch ? (

@@ -19,15 +19,13 @@ import { useSettings } from './hooks/useSettings';
 
 // Utils and Constants
 import { SUCCESS_MESSAGES, DEFAULT_FSRS_PARAMS } from './utils/constants';
-import { debugDueCards } from './debug/utils/debugDueCards';
-import { addDebugAutoAdvanceToWindow } from './debug/utils/debugAutoAdvance';
-import { addDebugCountingToWindow } from './debug/utils/debugCounting';
-import { debugCategories } from './debug/utils/debugCategories';
-import { debugAmazonLP } from './debug/utils/debugAmazonLP';
 
 // Styles
 import './App.css';
 import './ai-explanation-dropdown.css';
+
+// Disable all console logging
+// Logging can be disabled via utils/disableLogging if needed for production
 
 // Firebase configuration
 const firebaseConfig = {
@@ -236,6 +234,16 @@ function App() {
   const [notesSaved, setNotesSaved] = useState(false);
   const [isNotesEditMode, setIsNotesEditMode] = useState(false);
 
+  // Add sections menu state
+  const [showAddSectionsMenu, setShowAddSectionsMenu] = useState(false);
+  const [notesIncludeOverview, setNotesIncludeOverview] = useState(true);
+  const [notesIncludeKeyConcepts, setNotesIncludeKeyConcepts] = useState(true);
+  const [notesIncludeTechniques, setNotesIncludeTechniques] = useState(true);
+  const [notesIncludeTools, setNotesIncludeTools] = useState(true);
+  const [notesIncludeImportantPoints, setNotesIncludeImportantPoints] = useState(true);
+  const [notesIncludeSummary, setNotesIncludeSummary] = useState(true);
+  const [notesStudyNotesText, setNotesStudyNotesText] = useState('');
+
   // Streak tracking state
   const [streakDays, setStreakDays] = useState(0);
   
@@ -268,7 +276,7 @@ function App() {
   const [isNotesHidden, setIsNotesHidden] = useState(false);
   const [isNotesPopouted, setIsNotesPopouted] = useState(false);
   const [notesWindowPosition, setNotesWindowPosition] = useState({ x: 100, y: 100 });
-  const [notesWindowSize, setNotesWindowSize] = useState({ width: 600, height: 700 });
+  const [notesWindowSize, setNotesWindowSize] = useState({ width: 800, height: 700 });
   
   // View mode state for cycling through different display options
   const [viewModeIndex, setViewModeIndex] = useState(0);
@@ -278,18 +286,15 @@ function App() {
   const [explainPrompt, setExplainPrompt] = useState('');
   const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false);
   const [explainError, setExplainError] = useState('');
-  const [addExplanationToQuestion, setAddExplanationToQuestion] = useState(true);
-  const [addToStudyNotes, setAddToStudyNotes] = useState(true);
-  const [studyNotesText, setStudyNotesText] = useState('');
   const [explanationCount, setExplanationCount] = useState(0);
   
   // Explanation sections state
-  const [includeOverview, setIncludeOverview] = useState(true);
-  const [includeKeyConcepts, setIncludeKeyConcepts] = useState(true);
-  const [includeTechniques, setIncludeTechniques] = useState(true);
-  const [includeTools, setIncludeTools] = useState(true);
-  const [includeImportantPoints, setIncludeImportantPoints] = useState(true);
-  const [includeSummary, setIncludeSummary] = useState(true);
+  const [includeOverview] = useState(true);
+  const [includeKeyConcepts] = useState(true);
+  const [includeTechniques] = useState(true);
+  const [includeTools] = useState(true);
+  const [includeImportantPoints] = useState(true);
+  const [includeSummary] = useState(true);
   
   // Note editing modal state
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -301,12 +306,20 @@ function App() {
   // Initialize Firebase
   useEffect(() => {
     try {
+      console.log('🔥 Initializing Firebase with config:', firebaseConfig);
       const app = initializeApp(firebaseConfig);
+      console.log('🔥 Firebase app initialized:', app);
       setFirebaseApp(app);
       setIsFirebaseInitialized(true);
+      console.log('🔥 Firebase state set successfully');
+      
+      // Make Firebase app available globally for debugging
+      window.firebaseApp = app;
+      
     } catch (error) {
-      console.error('Firebase initialization failed:', error);
+      console.error('❌ Firebase initialization failed:', error);
       setError('Failed to initialize application');
+      alert('Firebase initialization failed: ' + error.message);
     }
   }, []);
 
@@ -369,9 +382,7 @@ function App() {
     toggleStarCard,
     clearError: clearFlashcardsError,
     // Debug functions
-    manualTriggerAutoAdvance,
-    debugCurrentFilterState,
-    debugSubCategoryTracking
+    manualTriggerAutoAdvance
   } = useFlashcards(firebaseApp, userId);
 
   const {
@@ -494,7 +505,9 @@ function App() {
         const now = new Date();
         const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         categoryCards = categoryCards.filter(card => {
-          let dueDate = card.dueDate || new Date(0);
+          // Skip cards without valid due dates
+          if (!card.dueDate) return false;
+          let dueDate = card.dueDate;
           if (dueDate && typeof dueDate.toDate === 'function') {
             dueDate = dueDate.toDate();
           }
@@ -505,7 +518,9 @@ function App() {
         const now = new Date();
         const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         categoryCards = categoryCards.filter(card => {
-          let dueDate = card.dueDate || new Date(0);
+          // Skip cards without valid due dates
+          if (!card.dueDate) return false;
+          let dueDate = card.dueDate;
           if (dueDate && typeof dueDate.toDate === 'function') {
             dueDate = dueDate.toDate();
           }
@@ -530,7 +545,7 @@ function App() {
 
   // Initialize debug utilities (development only)
   useEffect(() => {
-    if (flashcards && userId && manualTriggerAutoAdvance && debugCurrentFilterState && debugSubCategoryTracking) {
+    if (flashcards && userId && manualTriggerAutoAdvance) {
       const flashcardHook = {
         flashcards,
         filteredFlashcards,
@@ -539,28 +554,11 @@ function App() {
         selectedLevel,
         showDueTodayOnly,
         manualTriggerAutoAdvance,
-        debugCurrentFilterState,
-        debugSubCategoryTracking,
         getSubCategories,
         getSubCategoryStats
       };
-      addDebugAutoAdvanceToWindow(flashcardHook);
-      
-      // Add counting debug utilities
-      addDebugCountingToWindow(flashcards, userId, categoryStats, getSubCategoryStats(), selectedCategory);
-      
-      // Add category debug utility to window (but don't call it automatically)
-      window.debugCategories = () => debugCategories(flashcards);
-      window.debugAmazonLP = () => debugAmazonLP(flashcards);
-      
-      // Log category debug info once when flashcards change
-      if (flashcards && flashcards.length > 0 && !window._hasLoggedCategories) {
-        // console.log('\n🔍 CATEGORY DEBUG - Check terminal for details\n');
-        debugCategories(flashcards);
-        window._hasLoggedCategories = true;
-      }
     }
-  }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, categoryStats, debugCurrentFilterState, debugSubCategoryTracking, getSubCategories, getSubCategoryStats, manualTriggerAutoAdvance]);
+  }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, categoryStats, getSubCategories, getSubCategoryStats, manualTriggerAutoAdvance]);
 
   // Sync login screen visibility with authentication state
   useEffect(() => {
@@ -672,7 +670,7 @@ function App() {
       console.error('❌ Error creating default flashcards:', error);
       // Don't show error to user - this is a nice-to-have feature
     }
-  }, [addFlashcard, flashcards.length]);
+  }, [addFlashcard, flashcards.length, clearMessage]);
 
   // Create default flashcards for new users
   useEffect(() => {
@@ -1171,6 +1169,28 @@ function App() {
     // Removed direct DOM manipulation. Use React state and conditional rendering for fullscreen mode.
   };
 
+  // Helper function to ensure window position stays within viewport bounds
+  const constrainWindowPosition = useCallback((x, y, width, height) => {
+    // Ensure we have valid viewport dimensions
+    const viewportWidth = Math.max(400, window.innerWidth || 1024);
+    const viewportHeight = Math.max(300, window.innerHeight || 768);
+    
+    // Calculate max positions (ensure window is not larger than viewport)
+    const maxX = Math.max(0, viewportWidth - Math.min(width, viewportWidth));
+    const maxY = Math.max(0, viewportHeight - Math.min(height, viewportHeight));
+    
+    // Constrain position
+    const constrainedX = Math.max(0, Math.min(x || 0, maxX));
+    const constrainedY = Math.max(0, Math.min(y || 0, maxY));
+    
+    // Debug logging removed to prevent console spam
+    
+    return {
+      x: constrainedX,
+      y: constrainedY
+    };
+  }, []);
+
   const handleRestore = useCallback(() => {
     // Reset all window states to default embedded view
     setIsMaximized(false);
@@ -1185,10 +1205,13 @@ function App() {
     // Center the window and make it larger - use 90% of screen size or minimum size
     const newWidth = Math.min(1800, Math.max(1400, window.innerWidth * 0.9));
     const newHeight = Math.min(1200, Math.max(900, window.innerHeight * 0.9));
-    setWindowPosition({ 
-      x: (window.innerWidth - newWidth) / 2, 
-      y: Math.max(20, (window.innerHeight - newHeight) / 2)
-    });
+    const centeredX = (window.innerWidth - newWidth) / 2;
+    const centeredY = Math.max(20, (window.innerHeight - newHeight) / 2);
+    
+    // Apply bounds checking to the centered position
+    const constrainedPosition = constrainWindowPosition(centeredX, centeredY, newWidth, newHeight);
+    
+    setWindowPosition(constrainedPosition);
     setWindowSize({ width: newWidth, height: newHeight });
   };
 
@@ -1203,7 +1226,7 @@ function App() {
   const handleNotesPopout = () => {
     setIsNotesPopouted(true);
     // Center the notes window
-    const newWidth = 600;
+    const newWidth = 800;
     const newHeight = 700;
     setNotesWindowPosition({ 
       x: (window.innerWidth - newWidth) / 2, 
@@ -1216,7 +1239,7 @@ function App() {
   const handleCloseNotesPopout = () => {
     setIsNotesPopouted(false);
     setNotesWindowPosition({ x: 100, y: 100 });
-    setNotesWindowSize({ width: 600, height: 700 });
+    setNotesWindowSize({ width: 800, height: 700 });
     // No direct DOM manipulation
   };
 
@@ -1445,23 +1468,16 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       // Clean up the response to ensure it's proper HTML
       let cleanResponse = response.trim();
       
-      console.log('Raw AI response:', response);
-      
       // Remove any markdown code block formatting if present
       cleanResponse = cleanResponse.replace(/```html\s*/g, '').replace(/```\s*$/g, '');
       cleanResponse = cleanResponse.replace(/```\s*/g, '').replace(/```\s*$/g, '');
       
-      console.log('After markdown cleanup:', cleanResponse);
-      
       // Extract content from full HTML document structure if present
       if (cleanResponse.includes('<!DOCTYPE') || cleanResponse.includes('<html>') || cleanResponse.includes('<body>')) {
-        console.log('Detected HTML document structure, cleaning...');
-        
         // Try to extract body content first
         const bodyMatch = cleanResponse.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
         if (bodyMatch) {
           cleanResponse = bodyMatch[1].trim();
-          console.log('Extracted from body tags:', cleanResponse);
         } else {
           // More aggressive fallback: remove all document structure
           cleanResponse = cleanResponse
@@ -1472,10 +1488,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             .replace(/<body[^>]*>\s*/gi, '')
             .replace(/<\/body>\s*/gi, '')
             .trim();
-          console.log('After aggressive cleanup:', cleanResponse);
         }
-      } else {
-        console.log('No HTML document structure detected');
       }
       
       // Ensure we have HTML tags, if not wrap in paragraph
@@ -1578,85 +1591,33 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       // Format the HTML for better display in notes
       const formattedExplanation = formatExplanationHTML(cleanResponse);
       
-      // Convert HTML to plain text for tooltip
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = cleanResponse;
-      const explanationText = tempDiv.textContent || tempDiv.innerText || cleanResponse;
+      // Convert HTML to plain text for tooltip (removed unused explanationText variable)
       
-      // Debug logging
-      console.log('Clean Response (HTML):', cleanResponse);
-      console.log('Formatted Explanation:', formattedExplanation);
-      console.log('Plain Text Explanation:', explanationText);
-      
-      // Combine explanation with study notes if provided
+      // Use the formatted explanation content
       let finalContent = formattedExplanation;
-      if (studyNotesText.trim() && addToStudyNotes) {
-        // Add study notes as a separate section
-        finalContent += `
-          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-            <h3 style="margin-bottom: 10px; color: #6b7280;">Additional Study Notes</h3>
-            <p>${studyNotesText.replace(/\n/g, '<br/>')}</p>
-          </div>`;
-      }
       
-      // Use the new helper function to add formatted content
-      const newNotes = addToStudyNotes ? addToNotes(finalContent, 'explanation') : notes;
-      
-      // Debug logging to see what we're getting
-      console.log('AI Response:', response);
-      console.log('Clean Response:', cleanResponse);
-      console.log('Final Notes Content:', newNotes);
-      
-      // Add explanation to question as dropdown if checkbox is checked
-      if (addExplanationToQuestion && currentCard) {
-        // Create a brief version of the explanation for the dropdown
-        
-        // Simple lightbulb icon with hover tooltip at the beginning of question
-        // Limit explanation text for tooltip and escape properly
-        const tooltipText = explanationText.length > 500 
-          ? explanationText.substring(0, 500) + '...' 
-          : explanationText;
-        
-        // Make sure tooltip text is clean plain text
-        const cleanTooltipText = tooltipText
-          .replace(/\n/g, ' ') // Convert newlines to spaces
-          .replace(/\r/g, '') // Remove carriage returns
-          .replace(/\s+/g, ' ') // Multiple spaces to single space
-          .trim();
-        
-        const escapedTooltip = cleanTooltipText
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-        
-        const explanationIcon = `<span class="ai-explanation-lightbulb" title="${escapedTooltip}">💡</span> `;
-        
-        // Debug logging for tooltip
-        console.log('Tooltip Text (Raw):', tooltipText);
-        console.log('Tooltip Text (Clean):', cleanTooltipText);
-        console.log('Tooltip Text (Escaped):', escapedTooltip);
+      // Add explanation to card's answer field instead of notes
+      if (currentCard) {
+        // Wrap the generated explanation in a collapsible section
+        const collapsibleContent = `
+<details class="generated-content-section">
+  <summary class="generated-content-header">💡 AI Explanation</summary>
+  <div class="generated-content-body">
+    ${finalContent}
+  </div>
+</details>`;
 
-        // Check if there's already a lightbulb in the question and replace it
-        let baseQuestion = currentCard.question || '';
-        
-        // Remove any existing lightbulb spans
-        // This regex matches the lightbulb span with any title attribute content
-        baseQuestion = baseQuestion.replace(/<span class="ai-explanation-lightbulb"[^>]*>💡<\/span>\s*/g, '');
-        
-        // Prepend the new lightbulb to the cleaned question
-        const updatedQuestion = `${explanationIcon}${baseQuestion}`;
-
-        console.log('Current question:', currentCard.question);
-        console.log('Base question (lightbulb removed):', baseQuestion);
-        console.log('Explanation icon HTML:', explanationIcon);
-        console.log('Updated question:', updatedQuestion);
+        // Add explanation to the existing answer
+        const currentAnswer = String(currentCard.answer || '').trim();
+        const updatedAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
 
         // Update the card using the hook function - this will handle state updates automatically
         if (currentCard.id) {
           try {
-            await updateFlashcard(currentCard.id, { question: updatedQuestion });
-            console.log('Question updated with explanation dropdown (replaced existing if present)');
+            await updateFlashcard(currentCard.id, { answer: updatedAnswer });
           } catch (error) {
-            console.error('Error updating card question:', error);
+            console.error('Error updating card answer:', error);
+            setExplainError('Failed to save explanation to card: ' + error.message);
           }
         }
       }
@@ -1681,9 +1642,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       }
       
       setExplainError(userMessage);
-      
-      // Also add a note to the notes section about the failure
-      addToNotes(`Could not generate explanation: ${userMessage}`, 'note');
     } finally {
       setIsGeneratingExplanation(false);
     }
@@ -1825,10 +1783,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
   const handleMouseMove = useCallback((e) => {
     if (isDragging && !isMaximized && isPopouted) {
-      setWindowPosition({
-        x: e.clientX - dragOffset.x,
-        y: e.clientY - dragOffset.y
-      });
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+      
+      // Keep window within viewport bounds using helper function
+      const constrainedPosition = constrainWindowPosition(newX, newY, windowSize.width, windowSize.height);
+      setWindowPosition(constrainedPosition);
     } else if (isResizing) {
       const deltaX = e.clientX - resizeStart.x;
       const deltaY = e.clientY - resizeStart.y;
@@ -1848,12 +1808,25 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         newY = windowPosition.y + (resizeStart.height - newHeight);
       }
 
-      setWindowSize({ width: newWidth, height: newHeight });
+      // Constrain window size to viewport bounds
+      const maxWidth = window.innerWidth - windowPosition.x;
+      const maxHeight = window.innerHeight - windowPosition.y;
+      const constrainedWidth = Math.min(newWidth, maxWidth);
+      const constrainedHeight = Math.min(newHeight, maxHeight);
+      
+      // For resizing from top or left edges, also constrain position
       if (resizeDirection.includes('w') || resizeDirection.includes('n')) {
-        setWindowPosition({ x: newX, y: newY });
+        const maxX = window.innerWidth - constrainedWidth;
+        const maxY = window.innerHeight - constrainedHeight;
+        const boundedX = Math.max(0, Math.min(newX, maxX));
+        const boundedY = Math.max(0, Math.min(newY, maxY));
+        
+        setWindowPosition({ x: boundedX, y: boundedY });
       }
+      
+      setWindowSize({ width: constrainedWidth, height: constrainedHeight });
     }
-  }, [isDragging, dragOffset, isMaximized, isPopouted, isResizing, resizeDirection, resizeStart, windowPosition]);
+  }, [isDragging, dragOffset, isMaximized, isPopouted, isResizing, resizeDirection, resizeStart, windowPosition, windowSize, constrainWindowPosition]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -1955,6 +1928,45 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       };
     }
   }, [isNotesDragging, isNotesResizing, handleNotesMouseMove, handleNotesMouseUp]);
+
+  // Ensure popout window stays within bounds when browser window is resized
+  useEffect(() => {
+    if (!isPopouted) return;
+
+    const handleWindowResize = () => {
+      const constrainedPosition = constrainWindowPosition(
+        windowPosition.x, 
+        windowPosition.y, 
+        windowSize.width, 
+        windowSize.height
+      );
+      
+      // Only update position if it needs to be constrained
+      if (constrainedPosition.x !== windowPosition.x || constrainedPosition.y !== windowPosition.y) {
+        setWindowPosition(constrainedPosition);
+      }
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [isPopouted, windowPosition, windowSize, constrainWindowPosition]);
+
+  // Force constraint check whenever window position or size changes
+  useEffect(() => {
+    if (!isPopouted) return;
+    
+    const constrainedPosition = constrainWindowPosition(
+      windowPosition.x, 
+      windowPosition.y, 
+      windowSize.width, 
+      windowSize.height
+    );
+    
+    // If position needs adjustment, apply it (prevent infinite loop by checking if change is significant)
+    if (Math.abs(constrainedPosition.x - windowPosition.x) > 1 || Math.abs(constrainedPosition.y - windowPosition.y) > 1) {
+      setWindowPosition(constrainedPosition);
+    }
+  }, [isPopouted, windowPosition, windowSize, constrainWindowPosition]);
 
   // ESC key handling is now integrated into main keyboard shortcuts handler
 
@@ -2206,6 +2218,224 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     setIsNotesEditMode(false);
     // Notes content is already preserved in the notes state
     // No need to restore from originalNotesBeforeEdit unless the user wants to cancel changes
+  };
+
+  // Show add sections menu
+  const handleAddSections = () => {
+    setShowAddSectionsMenu(true);
+  };
+
+  // Close add sections menu
+  const handleCloseAddSectionsMenu = () => {
+    setShowAddSectionsMenu(false);
+  };
+
+  // Add selected sections to notes with AI-generated content
+  const handleAddSelectedSections = async () => {
+    // Check if at least one section is selected
+    if (!notesIncludeOverview && !notesIncludeKeyConcepts && !notesIncludeTechniques && 
+        !notesIncludeTools && !notesIncludeImportantPoints && !notesIncludeSummary) {
+      alert('Please select at least one section to add to notes');
+      return;
+    }
+
+    // Check if API key is available
+    const apiKey = apiKeys[selectedProvider];
+    if (!apiKey) {
+      alert(`Please configure your ${selectedProvider.toUpperCase()} API key in settings to generate content`);
+      return;
+    }
+
+    // Show loading state
+    setIsGeneratingExplanation(true);
+
+    try {
+
+      let sectionsHtml = '';
+      
+      // Get current question context for generating relevant content
+      const questionText = currentCard?.question ? 
+        currentCard.question.replace(/<[^>]*>/g, '').trim() : 'this topic';
+      const answerText = currentCard?.answer ? 
+        currentCard.answer.replace(/<[^>]*>/g, '').trim() : '';
+      const category = currentCard?.category || 'General';
+      
+      // Add question reference at the top
+      sectionsHtml += `<div style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 2px solid #3b82f6; border-radius: 12px; padding: 16px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);">` +
+        `<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">` +
+        `<span style="font-size: 18px;">📝</span><strong style="color: #1e40af; font-size: 16px;">Study Notes for:</strong></div>` +
+        `<div style="background: white; padding: 12px; border-radius: 8px; border-left: 4px solid #3b82f6; font-style: italic; color: #374151; line-height: 1.5;">${questionText}</div></div>\n\n`;
+
+      // Generate AI content for each selected section
+      const sectionsToGenerate = [];
+      if (notesIncludeOverview) sectionsToGenerate.push('overview');
+      if (notesIncludeKeyConcepts) sectionsToGenerate.push('keyConcepts');
+      if (notesIncludeTechniques) sectionsToGenerate.push('techniques');
+      if (notesIncludeTools) sectionsToGenerate.push('tools');
+      if (notesIncludeImportantPoints) sectionsToGenerate.push('importantPoints');
+      if (notesIncludeSummary) sectionsToGenerate.push('summary');
+
+      // Create AI prompt for generating all selected sections
+      const contextPrompt = `Context Information:
+Question: ${questionText}
+${answerText ? `Answer: ${answerText}` : ''}
+Category: ${category}
+${currentCard?.sub_category ? `Sub-category: ${currentCard.sub_category}` : ''}
+
+Generate study note content for the following sections (only generate sections that are requested):
+${sectionsToGenerate.map(section => {
+  switch (section) {
+    case 'overview': return '1. OVERVIEW: Provide context about this question and 2-3 specific learning objectives';
+    case 'keyConcepts': return '2. KEY CONCEPTS: List and define 3-4 key concepts/terms relevant to this question';
+    case 'techniques': return '3. TECHNIQUES: Describe 2-3 specific methods or approaches for solving similar problems';
+    case 'tools': return '4. TOOLS: List relevant tools, frameworks, or resources (2-3 items)';
+    case 'importantPoints': return '5. IMPORTANT POINTS: Highlight 3-4 critical details, common mistakes, or tips to remember';
+    case 'summary': return '6. SUMMARY: Provide key takeaways and suggest next steps for learning';
+    default: return '';
+  }
+}).filter(Boolean).join('\n')}
+
+Format Guidelines:
+- Use clear, educational language appropriate for studying
+- Make content specific to the question context, not generic
+- Use HTML formatting: <p>, <strong>, <em>, <ul>, <li>
+- For lists, use proper HTML list structure
+- Keep each section concise but informative
+- Return ONLY HTML content, no markdown, no code blocks
+- Be specific and actionable rather than vague
+
+Return the content in this exact format for each requested section:
+<section id="overview">...content...</section>
+<section id="keyConcepts">...content...</section>
+<section id="techniques">...content...</section>
+<section id="tools">...content...</section>
+<section id="importantPoints">...content...</section>
+<section id="summary">...content...</section>`;
+
+      // Generate AI content
+      const aiResponse = await callAI(contextPrompt, selectedProvider, apiKey);
+      
+      if (!aiResponse || typeof aiResponse !== 'string') {
+        throw new Error('AI response was empty or invalid');
+      }
+
+      // Parse AI response and extract content for each section
+      const parseAISection = (sectionId, response) => {
+        const regex = new RegExp(`<section id="${sectionId}">(.*?)</section>`, 's');
+        const match = response.match(regex);
+        return match ? match[1].trim() : null;
+      };
+
+      // Generate sections with AI content
+      if (notesIncludeOverview) {
+        const overviewContent = parseAISection('overview', aiResponse);
+        if (overviewContent) {
+          sectionsHtml += '<div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 2px solid #22c55e; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 3px 10px rgba(34, 197, 94, 0.12);">\n';
+          sectionsHtml += '<h3 style="color: #15803d; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">📋</span>Overview</h3>\n';
+          sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #22c55e; color: #374151; line-height: 1.6;">\n';
+          sectionsHtml += overviewContent;
+          sectionsHtml += '</div>\n';
+          sectionsHtml += '</div>\n\n';
+        }
+      }
+
+      if (notesIncludeKeyConcepts) {
+        const keyConceptsContent = parseAISection('keyConcepts', aiResponse);
+        if (keyConceptsContent) {
+          sectionsHtml += '<div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #f59e0b; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 3px 10px rgba(245, 158, 11, 0.12);">\n';
+          sectionsHtml += '<h3 style="color: #d97706; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">🔑</span>Key Concepts</h3>\n';
+          sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #f59e0b; color: #374151; line-height: 1.6;">\n';
+          sectionsHtml += keyConceptsContent;
+          sectionsHtml += '</div>\n';
+          sectionsHtml += '</div>\n\n';
+        }
+      }
+
+      if (notesIncludeTechniques) {
+        const techniquesContent = parseAISection('techniques', aiResponse);
+        if (techniquesContent) {
+          sectionsHtml += '<div style="background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); border: 2px solid #8b5cf6; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 3px 10px rgba(139, 92, 246, 0.12);">\n';
+          sectionsHtml += '<h3 style="color: #7c3aed; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">⚙️</span>Techniques & Methods</h3>\n';
+          sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #8b5cf6; color: #374151; line-height: 1.6;">\n';
+          sectionsHtml += techniquesContent;
+          sectionsHtml += '</div>\n';
+          sectionsHtml += '</div>\n\n';
+        }
+      }
+
+      if (notesIncludeTools) {
+        const toolsContent = parseAISection('tools', aiResponse);
+        if (toolsContent) {
+          sectionsHtml += '<div style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 2px solid #10b981; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 3px 10px rgba(16, 185, 129, 0.12);">\n';
+          sectionsHtml += '<h3 style="color: #047857; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">🛠️</span>Tools & Resources</h3>\n';
+          sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #10b981; color: #374151; line-height: 1.6;">\n';
+          sectionsHtml += toolsContent;
+          sectionsHtml += '</div>\n';
+          sectionsHtml += '</div>\n\n';
+        }
+      }
+
+      if (notesIncludeImportantPoints) {
+        const importantPointsContent = parseAISection('importantPoints', aiResponse);
+        if (importantPointsContent) {
+          sectionsHtml += '<div style="background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%); border: 2px solid #ef4444; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 3px 10px rgba(239, 68, 68, 0.12);">\n';
+          sectionsHtml += '<h3 style="color: #dc2626; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">⚠️</span>Important Points</h3>\n';
+          sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #ef4444; color: #374151; line-height: 1.6;">\n';
+          sectionsHtml += importantPointsContent;
+          sectionsHtml += '</div>\n';
+          sectionsHtml += '</div>\n\n';
+        }
+      }
+
+      if (notesIncludeSummary) {
+        const summaryContent = parseAISection('summary', aiResponse);
+        if (summaryContent) {
+          sectionsHtml += '<div style="background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); border: 2px solid #64748b; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 3px 10px rgba(100, 116, 139, 0.12);">\n';
+          sectionsHtml += '<h3 style="color: #475569; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">📝</span>Summary</h3>\n';
+          sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #64748b; color: #374151; line-height: 1.6;">\n';
+          sectionsHtml += summaryContent;
+          sectionsHtml += '</div>\n';
+          sectionsHtml += '</div>\n\n';
+        }
+      }
+
+
+      // Add sections to existing notes (new content on top)
+      const updatedNotes = sectionsHtml + (notes ? '<br/><br/>' + notes : '');
+      setNotes(updatedNotes);
+      
+      // Enter edit mode if not already in it
+      if (!isNotesEditMode) {
+        setIsNotesEditMode(true);
+      }
+      
+      // Close the menu
+      setShowAddSectionsMenu(false);
+      
+    } catch (error) {
+      console.error('Error generating study notes:', error);
+      
+      // Provide user-friendly error messages based on error type
+      let userMessage = 'Unable to generate study notes. ';
+      
+      if (error.message.includes('401') || error.message.includes('403') || error.message.includes('Invalid API')) {
+        userMessage += 'Please check your API key configuration - it may be invalid or expired.';
+      } else if (error.message.includes('429') || error.message.includes('rate limit')) {
+        userMessage += 'API rate limit exceeded. Please wait a moment and try again.';
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        userMessage += 'Network connection issue. Please check your internet connection and try again.';
+      } else if (error.message.includes('quota') || error.message.includes('billing')) {
+        userMessage += 'API quota exceeded or billing issue. Please check your API account.';
+      } else {
+        userMessage += 'The AI service is currently unavailable. Please try again later or try a different AI provider.';
+      }
+      
+      setError(userMessage);
+      alert(userMessage); // Immediate user feedback
+    } finally {
+      // Always reset loading state regardless of success or failure
+      setIsGeneratingExplanation(false);
+    }
   };
 
   const handleCloseNoteModal = () => {
@@ -2469,74 +2699,10 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     // Run detailed debug when due cards are expected but not showing
     if (showDueTodayOnly && filteredFlashcards.length === 0 && allDueCards.length > 0) {
       console.log('⚠️ WARNING: Due cards exist but none are showing!');
-      debugDueCards(flashcards, selectedCategory, selectedSubCategory);
     }
   }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory, flashcards, cardsDueToday, pastDueCards]);
 
-  // CATEGORY SYNC DEBUG: Track category changes to identify timing issues
-  useEffect(() => {
-    if (flashcards.length > 0) {
-      const awsCards = flashcards.filter(card =>
-        (card.category || '').toLowerCase().includes('aws')
-      );
 
-      console.log('🔍 CATEGORY SYNC DEBUG:', {
-        flashcardsLength: flashcards.length,
-        categoriesLength: categories.length,
-        categories: categories,
-        awsCardsFound: awsCards.length,
-        awsInCategories: categories.includes('AWS'),
-        awsInCategoriesLower: categories.includes('aws'),
-        showDueTodayOnly,
-        showStarredOnly,
-        timestamp: new Date().toISOString()
-      });
-
-      // Specific AWS debugging
-      if (awsCards.length > 0) {
-        console.log('🔍 AWS CARDS DETAIL:', awsCards.map(card => ({
-          id: card.id,
-          category: card.category,
-          active: card.active,
-          question: card.question?.substring(0, 50)
-        })));
-      }
-    }
-  }, [flashcards, categories, showDueTodayOnly, showStarredOnly]);
-
-  // SUBCATEGORY SYNC DEBUG: Track subcategory filtering issues
-  useEffect(() => {
-    if (flashcards.length > 0) {
-      console.log('🔍 SUBCATEGORY SYNC DEBUG:', {
-        selectedCategory,
-        selectedSubCategory,
-        subCategoriesLength: subCategories.length,
-        subCategories: subCategories,
-        showDueTodayOnly,
-        showStarredOnly,
-        timestamp: new Date().toISOString()
-      });
-
-      // Show cards in selected category and their subcategories
-      if (selectedCategory !== 'All') {
-        const categoryCards = flashcards.filter(card =>
-          card.active !== false && card.category === selectedCategory
-        );
-
-        const categorySubCategories = [...new Set(
-          categoryCards.map(card => card.sub_category || 'Uncategorized')
-        )];
-
-        console.log('🔍 CATEGORY CARDS DETAIL:', {
-          selectedCategory,
-          cardsInCategory: categoryCards.length,
-          actualSubCategories: categorySubCategories,
-          filteredSubCategories: subCategories,
-          mismatch: categorySubCategories.length !== subCategories.length
-        });
-      }
-    }
-  }, [flashcards, selectedCategory, selectedSubCategory, subCategories, showDueTodayOnly, showStarredOnly]);
 
   // Auto-navigation to next category with due cards
   useEffect(() => {
@@ -2601,30 +2767,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       !categoryAutoNavigationDisabled
     );
 
-    // Add debugging to understand the state
-    if (selectedSubCategory !== 'All' && selectedCategory !== 'All') {
-      console.log('🔍 SUBCATEGORY DEBUG:', {
-        selectedCategory,
-        selectedSubCategory,
-        currentSubcategoryDueCards: currentSubcategoryDueCards.length,
-        filteredFlashcardsLength: filteredFlashcards.length,
-        allDueCardsLength: allDueCards.length,
-        shouldTriggerAutoAdvance,
-        showDueTodayOnly,
-        timeSinceManualCategoryChange,
-        timeSinceManualSubCategoryChange,
-        timeSinceLastCardCompletion
-      });
-    }
 
     if (shouldTriggerAutoAdvance) {
-      console.log('🔄 Subcategory auto-advance triggered:', {
-        selectedCategory,
-        selectedSubCategory,
-        currentSubcategoryDueCards: currentSubcategoryDueCards.length,
-        filteredFlashcardsLength: filteredFlashcards.length,
-        allDueCardsLength: allDueCards.length
-      });
       
       // Step 1: Check if there are other subcategories with due cards in the current category
       // This function returns the subcategory with the LEAST TOTAL CARDS (not just due cards)
@@ -2997,11 +3141,9 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                           console.log('🔢 PROGRESS BAR VALUES:');
                           console.log('  cardsCompletedToday:', cardsCompletedToday);
                           console.log('  showDueTodayOnly:', showDueTodayOnly);
-                          console.log('  initialDueCardsCount:', initialDueCardsCount);
+                          console.log('  allDueCards.length:', allDueCards.length);
                           console.log('  initialTotalCardsCount:', initialTotalCardsCount);
-                          console.log('  cardsDueToday.length:', cardsDueToday.length);
-                          console.log('  flashcards.length:', flashcards.length);
-                          console.log('  filteredFlashcards.length:', filteredFlashcards.length);
+                          console.log('  initialDueCardsCount:', initialDueCardsCount);
                           console.log('  DENOMINATOR USED:', denominator);
                           console.log('  DISPLAY:', `${cardsCompletedToday}/${denominator}`);
                           return null;
@@ -3421,7 +3563,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                               }
 
                               // Debug logging
-                              // console.log(`Individual category DEBUG - ${category}: ${actualCardsInCategory} cards`);
                               
                               // Skip categories with no actual cards
                               if (actualCardsInCategory === 0) {
@@ -3484,13 +3625,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                             All
                           </button>
                           {(() => {
-                            // Debug sub-categories
-                            console.log('🔍 App.js subCategories DEBUG:', {
-                              selectedCategory,
-                              subCategories: subCategories,
-                              subCategoriesLength: subCategories.length
-                            });
-                            
                             // Use filtered subcategories from getSubCategories()
                             return subCategories.map(subCategory => {
                               // Count actual cards in this subcategory from ALL flashcards (not filtered)
@@ -3751,6 +3885,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     {/* Exit Button for Maximized Mode */}
                     {isMaximized && (
                       <>
+                        
                         {/* EXIT BUTTON - DO NOT REMOVE */}
                         <button
                           onClick={handleRestore}
@@ -3785,37 +3920,48 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       onToggleStarCard={toggleStarCard}
                       onEditCard={handleEditCard}
                       onGenerateQuestions={() => setShowGenerateModal(true)}
+                      onExplain={handleOpenExplain}
+                      onFocusMode={isMaximized ? handleRestore : undefined}
                       windowControlButtons={
                         !showApiKeyModal && (isMaximized ? (
                           /* No buttons in maximized mode - exit button is fixed positioned */
                           null
                         ) : isPopouted ? (
-                          /* Popout mode - Close and Maximize buttons */
+                          /* Popout mode - Maximize and Close buttons */
                           <>
-                            <button
-                              onClick={handleRestorePosition}
-                              className="window-control-btn"
-                              title="Close popout and restore to normal view"
-                              style={{
-                                backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                                color: isDarkMode ? '#d1d5db' : '#374151',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '16px',
-                                padding: '4px 8px',
-                                marginLeft: '8px',
-                                transition: 'all 0.2s ease',
-                              }}
-                            >
-                              ⊡
-                            </button>
                             <button
                               onClick={handleMaximize}
                               className="flashcard-maximize-btn"
                               title="Maximize to fullscreen"
                             >
                               ⬛
+                            </button>
+                            <button
+                              onClick={handleRestorePosition}
+                              className="window-control-btn"
+                              title="Close popout and restore to normal view"
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                color: 'white',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '16px',
+                                padding: '4px 8px',
+                                marginLeft: '8px',
+                                transition: 'all 0.2s ease',
+                                fontWeight: 'bold',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.background = 'rgba(239, 68, 68, 0.4)';
+                                e.target.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.background = 'rgba(239, 68, 68, 0.2)';
+                                e.target.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                              }}
+                            >
+                              ✕
                             </button>
                           </>
                         ) : (
@@ -3869,30 +4015,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     <h4>📝 Notes</h4>
                     <div className="notes-header-controls">
                       <button
-                        className="explain-btn notes-explain-btn"
-                        onClick={handleOpenExplain}
-                        aria-label="Generate note"
-                        title="Generate AI note about the current question"
-                      >
-                        💡 Explain
-                      </button>
-                      <button
-                        className="explain-btn notes-edit-btn"
-                        onClick={() => handleEditCard(currentCard)}
-                        aria-label="Edit card"
-                        title="Edit this card"
-                      >
-                        ✏️ Edit Card
-                      </button>
-                      <button
-                        className="explain-btn notes-generate-btn"
-                        onClick={() => setShowGenerateModal(true)}
-                        aria-label="Generate questions"
-                        title="Generate similar questions"
-                      >
-                        🤖 Similar Questions
-                      </button>
-                      <button
                         className="popout-btn notes-popout-btn"
                         onClick={handleNotesPopout}
                         aria-label="Pop out notes"
@@ -3923,6 +4045,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                             className="notes-textarea-permanent"
                             minHeight="700px"
                             enableRichText={true}
+                            onAddSections={handleAddSections}
                           />
                         ) : (
                           <div
@@ -4069,185 +4192,110 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           
           {/* Notes popout window */}
           <div 
-            className="notes-popout-window"
+            className={`notes-popout-window notes-section-permanent ${isDarkMode ? 'dark' : ''}`}
             style={{
               position: 'fixed',
               left: `${notesWindowPosition.x}px`,
               top: `${notesWindowPosition.y}px`,
               width: `${notesWindowSize.width}px`,
               height: `${notesWindowSize.height}px`,
-              backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
-              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)',
-              borderRadius: '8px',
-              border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-              zIndex: 9991,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden'
+              zIndex: 9991
             }}
           >
-            {/* Drag handle */}
+            {/* Header with same styling as normal view */}
             <div 
-              className="notes-drag-handle"
+              className="notes-header notes-drag-handle"
               onMouseDown={handleNotesMouseDown}
               style={{
-                height: '40px',
-                background: isDarkMode ? '#334155' : '#f8fafc',
-                borderBottom: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
                 cursor: 'move',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0 1rem',
                 userSelect: 'none'
               }}
             >
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>
-                📝 Notes
-              </h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h4>📝 Notes</h4>
+              <div className="notes-header-controls">
                 <button
-                  className="explain-btn notes-explain-btn-popout"
-                  onClick={handleOpenExplain}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
-                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: '0.25rem',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    transition: 'all 0.2s ease'
-                  }}
-                  aria-label="Generate note"
-                  title="Generate AI note about the current question"
-                >
-                  💡 Explain
-                </button>
-                <button
-                  className="close-btn"
+                  className="notes-close-btn"
                   onClick={handleCloseNotesPopout}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '1.5rem',
-                    cursor: 'pointer',
-                    color: isDarkMode ? '#94a3b8' : '#64748b',
-                    padding: '0 0.5rem'
-                  }}
-                  aria-label="Close notes window"
+                  aria-label="Restore to main view"
+                  title="Move notes back to main view"
                 >
-                  ×
+                  ✕
                 </button>
               </div>
             </div>
             
-            {/* Notes content */}
-            <div style={{ flex: 1, padding: '1rem', overflow: 'auto' }}>
-              {isNotesEditMode ? (
-                // Use RichTextEditor with HTML content support
-                <RichTextEditor
-                  value={notes}
-                  onChange={setNotes}
-                  placeholder="Type your notes here... Use the toolbar above for formatting options."
-                  className="notes-textarea-popout"
-                  minHeight="100%"
-                  enableRichText={true}
-                />
-              ) : (
-                <div
-                  className="notes-html-content notes-textarea-popout"
-                  style={{ width: '100%', minHeight: '100%', background: isDarkMode ? '#1e293b' : 'white', borderRadius: '0.375rem', padding: '12px', fontSize: '14px', lineHeight: '1.5', fontFamily: 'inherit', border: `1px solid ${isDarkMode ? '#475569' : '#d1d5db'}`, overflowY: 'auto', color: isDarkMode ? '#f1f5f9' : '#374151' }}
-                  dangerouslySetInnerHTML={{ __html: notes }}
-                />
-              )}
+            {/* Notes content with same structure as normal view */}
+            <div className="notes-content">
+              <div className="notes-content-wrapper">
+                <div className="notes-editor-container">
+                  {isNotesEditMode ? (
+                    // Use RichTextEditor with HTML content support
+                    <RichTextEditor
+                      value={notes}
+                      onChange={setNotes}
+                      placeholder="Type your notes here... Use the toolbar above for formatting options."
+                      className="notes-textarea-permanent"
+                      minHeight="400px"
+                      enableRichText={true}
+                      onAddSections={handleAddSections}
+                    />
+                  ) : (
+                    <div
+                      className="notes-html-content notes-textarea-permanent"
+                      dangerouslySetInnerHTML={{ __html: notes }}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
             
-            {/* Notes actions */}
-            <div style={{
-              padding: '1rem',
-              borderTop: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-              display: 'flex',
-              gap: '0.5rem',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              {/* Quick add buttons */}
-              <div style={{ display: 'flex', gap: '0.25rem' }}>
+            {/* Footer with same buttons as normal view */}
+            <div className="notes-footer">
+              {/* Quick add buttons for different note types */}
+              <div style={{ display: 'flex', gap: '0.25rem', marginRight: '1rem' }}>
                 <button 
-                  onClick={() => {
-                    const noteContent = prompt('Enter your note:');
-                    if (noteContent?.trim()) {
-                      addToNotes(noteContent.trim(), 'note');
-                    }
-                  }}
-                  title="Add a quick note"
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: '0.25rem',
-                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                    background: isDarkMode ? '#475569' : '#f3f4f6',
-                    color: isDarkMode ? '#f1f5f9' : '#374151',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem'
-                  }}
+                  className="notes-footer-btn"
+                  onClick={handleOpenNoteModal}
+                  title="Add a note with text editing options"
+                  style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
                 >
-                  📝
+                  📝 Note
                 </button>
                 <button 
-                  onClick={() => {
-                    if (currentCard) {
-                      const questionText = currentCard.question?.replace(/<[^>]*>/g, '') || 'Current question';
-                      addToNotes(questionText, 'question');
-                    }
-                  }}
-                  title="Add current question to notes"
-                  disabled={!currentCard}
-                  style={{
+                  className="notes-footer-btn"
+                  onClick={handleEditNotes}
+                  title="Edit notes with formatting toolbar"
+                  style={{ 
+                    fontSize: '0.8rem', 
                     padding: '0.25rem 0.5rem',
-                    borderRadius: '0.25rem',
-                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                    background: isDarkMode ? '#475569' : '#f3f4f6',
-                    color: isDarkMode ? '#f1f5f9' : '#374151',
-                    cursor: currentCard ? 'pointer' : 'not-allowed',
-                    fontSize: '0.8rem',
-                    opacity: currentCard ? 1 : 0.5
+                    backgroundColor: isNotesEditMode ? '#3b82f6' : '',
+                    color: isNotesEditMode ? 'white' : ''
                   }}
                 >
-                  ❓
+                  ✏️ Edit
                 </button>
                 <button 
-                  onClick={() => {
-                    if (currentCard) {
-                      const answerText = currentCard.answer?.replace(/<[^>]*>/g, '') || 'Current answer';
-                      addToNotes(answerText, 'answer');
-                    }
-                  }}
-                  title="Add current answer to notes"
-                  disabled={!currentCard}
-                  style={{
+                  className="notes-footer-btn"
+                  onClick={handlePreviewNotes}
+                  title="Preview notes (read-only view)"
+                  style={{ 
+                    fontSize: '0.8rem', 
                     padding: '0.25rem 0.5rem',
-                    borderRadius: '0.25rem',
-                    border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                    background: isDarkMode ? '#475569' : '#f3f4f6',
-                    color: isDarkMode ? '#f1f5f9' : '#374151',
-                    cursor: currentCard ? 'pointer' : 'not-allowed',
-                    fontSize: '0.8rem',
-                    opacity: currentCard ? 1 : 0.5
+                    backgroundColor: !isNotesEditMode ? '#10b981' : '',
+                    color: !isNotesEditMode ? 'white' : ''
                   }}
                 >
-                  ✅
+                  👁️ Preview
                 </button>
               </div>
               
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button 
-                  className="notes-action-btn"
+              <button 
+                className="notes-footer-btn copy-btn"
                 onClick={() => {
-                  // Copy notes content to clipboard
+                  // Copy notes content to clipboard (convert HTML to plain text if needed)
                   const tempDiv = document.createElement('div');
                   tempDiv.innerHTML = notes;
-                  const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                  const textContent = tempDiv.textContent || tempDiv.innerText || notes;
                   navigator.clipboard.writeText(textContent).then(() => {
                     setNotesCopied(true);
                     setTimeout(() => setNotesCopied(false), 2000);
@@ -4256,19 +4304,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   });
                 }}
                 disabled={notes.length === 0}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.375rem',
-                  border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                  background: isDarkMode ? '#475569' : '#f3f4f6',
-                  color: isDarkMode ? '#f1f5f9' : '#374151',
-                  cursor: 'pointer'
-                }}
+                title="Copy notes to clipboard"
               >
                 {notesCopied ? '✅ Copied!' : '📋 Copy'}
               </button>
               <button 
-                className="notes-action-btn"
+                className="notes-footer-btn save-btn"
                 onClick={() => {
                   // Save notes to local storage or trigger save
                   if (userId) {
@@ -4277,34 +4318,19 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     setTimeout(() => setNotesSaved(false), 2000);
                   }
                 }}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.375rem',
-                  border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                  background: isDarkMode ? '#475569' : '#f3f4f6',
-                  color: isDarkMode ? '#f1f5f9' : '#374151',
-                  cursor: 'pointer'
-                }}
+                disabled={notes.length === 0}
+                title="Save notes to local storage"
               >
                 {notesSaved ? '✅ Saved!' : '💾 Save'}
               </button>
               <button 
-                className="notes-action-btn"
+                className="notes-footer-btn clear-btn"
                 onClick={() => {
                   if (window.confirm('Are you sure you want to clear all notes? This action cannot be undone.')) {
                     handleClearNotes();
                   }
                 }}
                 disabled={notes.length === 0}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.375rem',
-                  border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                  background: notes.length === 0 ? (isDarkMode ? '#374151' : '#f9fafb') : (isDarkMode ? '#dc2626' : '#fee2e2'),
-                  color: notes.length === 0 ? (isDarkMode ? '#6b7280' : '#9ca3af') : (isDarkMode ? '#fecaca' : '#dc2626'),
-                  cursor: notes.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: notes.length === 0 ? 0.5 : 1
-                }}
                 title="Clear all notes"
               >
                 🗑️ Clear
@@ -4321,9 +4347,29 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             <div className="resize-handle resize-w" onMouseDown={(e) => handleNotesResizeStart(e, 'w')} />
             <div className="resize-handle resize-nw" onMouseDown={(e) => handleNotesResizeStart(e, 'nw')} />
           </div>
-          </div>
         </>
       )}
+
+      {/* Footer */}
+      <footer className="app-footer">
+        <div className="footer-stats">
+          <span>Total Cards: {flashcards.length}</span>
+          <span>Filtered: {filteredFlashcards.length}</span>
+          <span>Categories: {categories.length}</span>
+          <span style={{ color: pastDueCards.length > 0 ? '#ff6b6b' : 'inherit' }}>
+            Past Due: {pastDueCards.length}
+          </span>
+          <span style={{ color: cardsDueToday.length > 0 ? '#feca57' : 'inherit' }}>
+            Due Today: {cardsDueToday.length}
+          </span>
+        </div>
+        <div className="footer-shortcuts">
+          <small>
+            Shortcuts: <kbd>Space</kbd> Show Answer | <kbd>←/→</kbd> Navigate | 
+            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export | <kbd>M</kbd> Manage
+          </small>
+        </div>
+      </footer>
 
       {/* Explain Modal */}
       {showExplainModal && (
@@ -4390,143 +4436,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   />
                 </div>
 
-                {/* Checkbox to add explanation to question */}
-                <div>
-                  <label style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '0.5rem',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    color: isDarkMode ? '#f1f5f9' : '#374151'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={addExplanationToQuestion}
-                      onChange={(e) => setAddExplanationToQuestion(e.target.checked)}
-                      style={{
-                        width: '16px',
-                        height: '16px',
-                        cursor: 'pointer'
-                      }}
-                    />
-                    Add to question
-                  </label>
-                </div>
               </div>
 
-              {/* Combined Section checkboxes and Study Notes */}
-              <div style={{ 
-                marginBottom: '1.5rem',
-                padding: '1rem',
-                backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
-                border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
-                borderRadius: '0.5rem'
-              }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '0.75rem', 
-                  fontWeight: '600',
-                  color: isDarkMode ? '#f1f5f9' : '#374151'
-                }}>
-                  Include sections:
-                </label>
-                <div style={{ 
-                  display: 'grid', 
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: '0.75rem',
-                  marginBottom: '1.5rem'
-                }}>
-                  {[
-                    { label: 'Overview', checked: includeOverview, setter: setIncludeOverview },
-                    { label: 'Key Concepts', checked: includeKeyConcepts, setter: setIncludeKeyConcepts },
-                    { label: 'Techniques', checked: includeTechniques, setter: setIncludeTechniques },
-                    { label: 'Tools', checked: includeTools, setter: setIncludeTools },
-                    { label: 'Important Points', checked: includeImportantPoints, setter: setIncludeImportantPoints },
-                    { label: 'Summary', checked: includeSummary, setter: setIncludeSummary }
-                  ].map(({ label, checked, setter }) => (
-                    <label key={label} style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '0.5rem',
-                      cursor: 'pointer',
-                      fontSize: '0.95rem',
-                      color: isDarkMode ? '#f1f5f9' : '#374151'
-                    }}>
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => setter(e.target.checked)}
-                        style={{
-                          width: '16px',
-                          height: '16px',
-                          cursor: 'pointer'
-                        }}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-
-                {/* Study Notes within the same container */}
-                <div style={{ marginBottom: '1rem' }}>
-                  <label 
-                    htmlFor="study-notes-text" 
-                    style={{ 
-                      display: 'block', 
-                      marginBottom: '0.5rem', 
-                      fontWeight: '600',
-                      color: isDarkMode ? '#f1f5f9' : '#374151'
-                    }}
-                  >
-                    Study Notes
-                  </label>
-                  <textarea
-                    id="study-notes-text"
-                    value={studyNotesText}
-                    onChange={(e) => setStudyNotesText(e.target.value)}
-                    placeholder="Enter additional study notes that will be added to the explanation..."
-                    style={{
-                      width: '100%',
-                      minHeight: '80px',
-                      padding: '0.75rem',
-                      border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                      borderRadius: '0.5rem',
-                      backgroundColor: isDarkMode ? '#334155' : '#ffffff',
-                      color: isDarkMode ? '#f1f5f9' : '#374151',
-                      fontSize: '0.95rem',
-                      lineHeight: '1.5',
-                      resize: 'vertical',
-                      fontFamily: 'inherit'
-                    }}
-                    rows={3}
-                  />
-                </div>
-
-                {/* Checkbox to add explanation to study notes */}
-                <div>
-                  <label style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '0.5rem',
-                    cursor: 'pointer',
-                    fontSize: '0.95rem',
-                    color: isDarkMode ? '#f1f5f9' : '#374151'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={addToStudyNotes}
-                      onChange={(e) => setAddToStudyNotes(e.target.checked)}
-                      style={{
-                        width: '16px',
-                        height: '16px',
-                        cursor: 'pointer'
-                      }}
-                    />
-                    Add to study notes
-                  </label>
-                </div>
-              </div>
 
 
               {explainError && (
@@ -5845,12 +5756,185 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         </div>
       )}
 
+      {/* Add Sections Modal */}
+      {showAddSectionsMenu && (
+        <div className="modal-overlay">
+          <div className="modal-content explain-modal" style={{ 
+            backgroundColor: isDarkMode ? '#1e293b' : 'white', 
+            color: isDarkMode ? '#f1f5f9' : '#1f2937',
+            maxWidth: '500px',
+            width: '90%'
+          }}>
+            <div className="modal-header">
+              <h3 style={{ 
+                margin: 0, 
+                fontSize: '1.25rem',
+                color: isDarkMode ? '#f1f5f9' : '#1f2937'
+              }}>
+                📑 Add Sections to Notes
+              </h3>
+              <button 
+                className="modal-close-btn"
+                onClick={handleCloseAddSectionsMenu}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modal-body">
+              {/* Current Question Display */}
+              {currentCard && (
+                <div style={{
+                  marginBottom: '1.5rem',
+                  padding: '1rem',
+                  backgroundColor: isDarkMode ? '#1e293b' : '#f0f9ff',
+                  borderRadius: '8px',
+                  border: `2px solid ${isDarkMode ? '#3b82f6' : '#3b82f6'}`,
+                  borderLeft: `6px solid ${isDarkMode ? '#3b82f6' : '#3b82f6'}`
+                }}>
+                  <h4 style={{
+                    margin: '0 0 0.75rem 0',
+                    fontSize: '0.9rem',
+                    fontWeight: '600',
+                    color: isDarkMode ? '#60a5fa' : '#1d4ed8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    ❓ Current Question
+                  </h4>
+                  <div 
+                    style={{
+                      fontSize: '0.875rem',
+                      color: isDarkMode ? '#e2e8f0' : '#374151',
+                      lineHeight: '1.5'
+                    }}
+                    dangerouslySetInnerHTML={{ 
+                      __html: currentCard.question || 'No question available' 
+                    }}
+                  />
+                </div>
+              )}
+              
+              {/* Section checkboxes */}
+              <div style={{ 
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                backgroundColor: isDarkMode ? '#374151' : '#f9fafb',
+                borderRadius: '8px',
+                border: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}`
+              }}>
+                <h4 style={{
+                  margin: '0 0 1rem 0',
+                  fontSize: '1rem',
+                  color: isDarkMode ? '#f1f5f9' : '#374151'
+                }}>
+                  Include sections:
+                </h4>
+                
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '0.75rem',
+                  marginBottom: '1.5rem'
+                }}>
+                  {[
+                    { label: 'Overview', checked: notesIncludeOverview, setter: setNotesIncludeOverview },
+                    { label: 'Key Concepts', checked: notesIncludeKeyConcepts, setter: setNotesIncludeKeyConcepts },
+                    { label: 'Techniques', checked: notesIncludeTechniques, setter: setNotesIncludeTechniques },
+                    { label: 'Tools', checked: notesIncludeTools, setter: setNotesIncludeTools },
+                    { label: 'Important Points', checked: notesIncludeImportantPoints, setter: setNotesIncludeImportantPoints },
+                    { label: 'Summary', checked: notesIncludeSummary, setter: setNotesIncludeSummary }
+                  ].map(({ label, checked, setter }) => (
+                    <label key={label} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      color: isDarkMode ? '#f1f5f9' : '#374151'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setter(e.target.checked)}
+                        style={{ 
+                          width: '16px', 
+                          height: '16px',
+                          accentColor: '#3b82f6'
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+
+                {/* Study Notes within the same container */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <label 
+                    htmlFor="notes-study-notes-text" 
+                    style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      color: isDarkMode ? '#f1f5f9' : '#374151'
+                    }}
+                  >
+                    Study Notes
+                  </label>
+                  <textarea
+                    id="notes-study-notes-text"
+                    value={notesStudyNotesText}
+                    onChange={(e) => setNotesStudyNotesText(e.target.value)}
+                    placeholder="Enter additional study notes that will be added to the sections..."
+                    style={{
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '0.75rem',
+                      borderRadius: '6px',
+                      border: `1px solid ${isDarkMode ? '#4b5563' : '#d1d5db'}`,
+                      backgroundColor: isDarkMode ? '#1f2937' : 'white',
+                      color: isDarkMode ? '#f1f5f9' : '#374151',
+                      fontSize: '0.875rem',
+                      resize: 'vertical',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary"
+                onClick={handleCloseAddSectionsMenu}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleAddSelectedSections}
+                style={{
+                  backgroundColor: '#8b5cf6',
+                  borderColor: '#8b5cf6'
+                }}
+              >
+                Add to Study Notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Loading Overlay */}
       {(authLoading || flashcardsLoading || settingsLoading) && (
         <div className="loading-overlay">
           <div className="loading-spinner"></div>
         </div>
       )}
+
     </div>
   );
 }

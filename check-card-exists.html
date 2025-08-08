@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Check Card Existence</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2196F3;
+            border-bottom: 3px solid #2196F3;
+            padding-bottom: 10px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #ffc107;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        .results {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .code {
+            background: #263238;
+            color: #aed581;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Card Not Found Issue</h1>
+        
+        <div class="info">
+            <h3>Progress So Far:</h3>
+            <p>✅ Firestore permissions are now working!</p>
+            <p>❌ But card <span class="code">WL2tVUL6jMOxM6XQy9xN</span> doesn't exist in Firestore</p>
+        </div>
+
+        <div class="warning">
+            <h3>Possible Causes:</h3>
+            <ul>
+                <li>The app is showing cached cards that were deleted from Firestore</li>
+                <li>Cards are stored locally but never synced to Firestore</li>
+                <li>There's a mismatch between local and cloud data</li>
+            </ul>
+        </div>
+
+        <h2>Let's Check What's in Firestore:</h2>
+        
+        <button onclick="checkFirestoreCards()">🔍 Check Firestore Cards</button>
+        <button onclick="syncLocalToFirestore()">🔄 Sync Local Cards to Firestore</button>
+        
+        <div id="results" class="results" style="display: none;"></div>
+
+        <div class="info" style="margin-top: 30px;">
+            <h3>Quick Fix Options:</h3>
+            <ol>
+                <li><strong>Refresh the app</strong> - This might clear cached cards</li>
+                <li><strong>Log out and log back in</strong> - This forces a fresh data load</li>
+                <li><strong>Use the sync button above</strong> - This will push any local cards to Firestore</li>
+            </ol>
+        </div>
+    </div>
+
+    <script type="module">
+        const resultsDiv = document.getElementById('results');
+        
+        window.checkFirestoreCards = async function() {
+            resultsDiv.style.display = 'block';
+            resultsDiv.textContent = 'Checking Firestore cards...\n\n';
+            
+            try {
+                // Import Firebase modules
+                const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js');
+                const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+                const { getFirestore, collection, getDocs, doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
+                
+                // Firebase config
+                const firebaseConfig = {
+                    apiKey: "AIzaSyC3R7pV3mXqg2-kY9xvH126BoF5KQDQDls",
+                    authDomain: "flashcard-app-3f2a3.firebaseapp.com",
+                    projectId: "flashcard-app-3f2a3",
+                    storageBucket: "flashcard-app-3f2a3.firebasestorage.app",
+                    messagingSenderId: "399745541062",
+                    appId: "1:399745541062:web:958a2cfbd7c6c9c78988c7"
+                };
+                
+                // Initialize Firebase
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+                
+                // Check specific card
+                resultsDiv.textContent += `Looking for card WL2tVUL6jMOxM6XQy9xN...\n`;
+                const cardDoc = await getDoc(doc(db, 'flashcards', 'WL2tVUL6jMOxM6XQy9xN'));
+                
+                if (cardDoc.exists()) {
+                    resultsDiv.textContent += `✅ Card found in Firestore!\n`;
+                    resultsDiv.textContent += `Data: ${JSON.stringify(cardDoc.data(), null, 2)}\n\n`;
+                } else {
+                    resultsDiv.textContent += `❌ Card NOT found in Firestore\n\n`;
+                }
+                
+                // List all cards
+                resultsDiv.textContent += `Fetching all flashcards from Firestore...\n`;
+                const querySnapshot = await getDocs(collection(db, 'flashcards'));
+                
+                resultsDiv.textContent += `\nFound ${querySnapshot.size} total cards in Firestore:\n\n`;
+                
+                let count = 0;
+                querySnapshot.forEach((doc) => {
+                    count++;
+                    const data = doc.data();
+                    resultsDiv.textContent += `${count}. ID: ${doc.id}\n`;
+                    resultsDiv.textContent += `   Question: ${data.question?.substring(0, 50)}...\n`;
+                    resultsDiv.textContent += `   Category: ${data.category || 'None'}\n`;
+                    resultsDiv.textContent += `   UserId: ${data.userId || 'undefined'}\n\n`;
+                    
+                    if (count >= 10) {
+                        resultsDiv.textContent += `... and ${querySnapshot.size - 10} more cards\n`;
+                        return;
+                    }
+                });
+                
+                if (querySnapshot.size === 0) {
+                    resultsDiv.textContent += `\n⚠️ No flashcards found in Firestore!\n`;
+                    resultsDiv.textContent += `This explains why cards can't be found.\n`;
+                    resultsDiv.textContent += `You may need to:\n`;
+                    resultsDiv.textContent += `1. Import cards from a backup\n`;
+                    resultsDiv.textContent += `2. Create new cards\n`;
+                    resultsDiv.textContent += `3. Check if you're in the right Firebase project\n`;
+                }
+                
+            } catch (error) {
+                resultsDiv.textContent += `\n❌ Error: ${error.message}\n`;
+            }
+        }
+        
+        window.syncLocalToFirestore = async function() {
+            resultsDiv.style.display = 'block';
+            resultsDiv.textContent = 'This feature requires access to the app\'s local data.\n\n';
+            resultsDiv.textContent += 'To sync local cards:\n';
+            resultsDiv.textContent += '1. Open your flashcard app\n';
+            resultsDiv.textContent += '2. Open browser console (F12)\n';
+            resultsDiv.textContent += '3. Run this code:\n\n';
+            resultsDiv.textContent += `// Get all local cards and push to Firestore
+const cards = window.flashcardHook?.flashcards || [];
+console.log(\`Found \${cards.length} local cards\`);
+
+for (const card of cards) {
+  try {
+    await window.flashcardHook.addFlashcard({
+      question: card.question,
+      answer: card.answer,
+      category: card.category,
+      sub_category: card.sub_category,
+      active: true
+    });
+    console.log(\`Synced card: \${card.question?.substring(0, 30)}...\`);
+  } catch (error) {
+    console.error(\`Failed to sync card: \${error.message}\`);
+  }
+}`;
+        }
+    </script>
+</body>
+</html>
