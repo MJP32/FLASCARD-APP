@@ -26,7 +26,8 @@ const SettingsModal = ({
   showIntervalSettings,
   onToggleIntervalSettings,
   userDisplayName,
-  flashcards = []
+  flashcards = [],
+  onStartTour
 }) => {
   const [localFsrsParams, setLocalFsrsParams] = useState(fsrsParams);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -40,6 +41,7 @@ const SettingsModal = ({
   const [showInviteSection, setShowInviteSection] = useState(false);
   const [showStudyGuideSection, setShowStudyGuideSection] = useState(false);
   const [showAppearanceSection, setShowAppearanceSection] = useState(false);
+  const [showHelpSection, setShowHelpSection] = useState(false);
 
 
   // Update local params when props change
@@ -840,6 +842,51 @@ Option 2: Without headers (uses default column order)
                         🤖 Reddit
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Help & Support Section */}
+          <section className="settings-section">
+            <div className="section-header-with-checkbox">
+              <div className="checkbox-container">
+                <input
+                  type="checkbox"
+                  id="show-help-section"
+                  checked={showHelpSection}
+                  onChange={(e) => setShowHelpSection(e.target.checked)}
+                />
+                <label htmlFor="show-help-section" className="checkbox-label">❓ Help & Support</label>
+              </div>
+              <button 
+                className="btn btn-info btn-small"
+                onClick={() => setShowHelpSection(!showHelpSection)}
+              >
+                {showHelpSection ? '❓ Hide' : '❓'} Help & Support
+              </button>
+            </div>
+            
+            <p className="section-description">
+              Get help with the app, take the guided tour, and learn about features.
+            </p>
+            
+            {showHelpSection && (
+              <div className="settings-group">
+                <div className="setting-item">
+                  <div className="setting-info">
+                    <h4>🎯 Take the Tour</h4>
+                    <p>New to the app? Take the guided tour to learn about all the AI features and how to get started!</p>
+                  </div>
+                  <div className="setting-control">
+                    <button 
+                      className="btn btn-primary"
+                      onClick={onStartTour}
+                      style={{ minWidth: '120px' }}
+                    >
+                      🚀 Start Tour
+                    </button>
                   </div>
                 </div>
               </div>

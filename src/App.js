@@ -11,6 +11,7 @@ import GenerateQuestionsModal from './components/GenerateQuestionsModal';
 import ManageCardsModal from './components/ManageCardsModal';
 import Calendar from './Calendar';
 import RichTextEditor from './RichTextEditor';
+import Tour from './components/Tour';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -202,22 +203,59 @@ function App() {
   // Message states
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-
-  // AI Generation states
-  const [apiKeys, setApiKeys] = useState({
-    openai: localStorage.getItem('openai_api_key') || '',
-    anthropic: localStorage.getItem('anthropic_api_key') || '',
-    gemini: localStorage.getItem('gemini_api_key') || ''
-  });
-  const [selectedProvider, setSelectedProvider] = useState(localStorage.getItem('selected_ai_provider') || 'openai');
+  
+  // Tour state
+  const [showTour, setShowTour] = useState(false);
+  const [tourCompletedThisSession, setTourCompletedThisSession] = useState(false);
 
   // Local API key state for the dropdown
   const [localApiKeys, setLocalApiKeys] = useState({
-    openai: apiKeys.openai || '',
-    anthropic: apiKeys.anthropic || '',
-    gemini: apiKeys.gemini || ''
+    openai: '',
+    anthropic: '',
+    gemini: '',
+    gpt5nano: '',
+    mistral: '',
+    groq: ''
   });
-  const [localSelectedProvider, setLocalSelectedProvider] = useState(selectedProvider);
+  const [localSelectedProvider, setLocalSelectedProvider] = useState('openai');
+  const [localSelectedModel, setLocalSelectedModel] = useState('gpt-3.5-turbo');
+
+  // Available models for each provider
+  const providerModels = {
+    openai: [
+      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cost-effective' },
+      { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model' },
+      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Latest GPT-4 with better speed' },
+      { id: 'gpt-4o', name: 'GPT-4o', description: 'Omni model with multimodal capabilities' },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Smaller, faster GPT-4o variant' }
+    ],
+    anthropic: [
+      { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fast and efficient' },
+      { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: 'Balanced performance' },
+      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most capable Claude model' },
+      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Latest improved model' }
+    ],
+    gemini: [
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and efficient' },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable Gemini model' },
+      { id: 'gemini-pro', name: 'Gemini Pro', description: 'Legacy pro model' }
+    ],
+    gpt5nano: [
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Fast and cost-effective OpenAI model' }
+    ],
+    mistral: [
+      { id: 'mistral-tiny', name: 'Mistral Tiny', description: 'Small and fast' },
+      { id: 'mistral-small', name: 'Mistral Small', description: 'Balanced performance' },
+      { id: 'mistral-medium', name: 'Mistral Medium', description: 'High capability' },
+      { id: 'mistral-large-latest', name: 'Mistral Large', description: 'Most capable model' }
+    ],
+    groq: [
+      { id: 'llama3-8b-8192', name: 'Llama 3 8B', description: 'Meta Llama 3 8B' },
+      { id: 'llama3-70b-8192', name: 'Llama 3 70B', description: 'Meta Llama 3 70B' },
+      { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', description: 'Mistral Mixtral 8x7B' },
+      { id: 'gemma-7b-it', name: 'Gemma 7B', description: 'Google Gemma 7B' }
+    ]
+  };
 
   // Session-wide notes states
   const [notes, setNotes] = useState(() => {
@@ -238,6 +276,7 @@ function App() {
   const [showAddSectionsMenu, setShowAddSectionsMenu] = useState(false);
   const [notesIncludeOverview, setNotesIncludeOverview] = useState(true);
   const [notesIncludeKeyConcepts, setNotesIncludeKeyConcepts] = useState(true);
+  const [notesIncludeExample, setNotesIncludeExample] = useState(true);
   const [notesIncludeTechniques, setNotesIncludeTechniques] = useState(true);
   const [notesIncludeTools, setNotesIncludeTools] = useState(true);
   const [notesIncludeImportantPoints, setNotesIncludeImportantPoints] = useState(true);
@@ -249,6 +288,7 @@ function App() {
   
   // Track if we've checked for default cards creation
   const [hasCheckedForDefaults, setHasCheckedForDefaults] = useState(false);
+  
   
   // Track if anonymous warning has been dismissed
   const [isAnonymousWarningDismissed, setIsAnonymousWarningDismissed] = useState(false);
@@ -291,6 +331,7 @@ function App() {
   // Explanation sections state
   const [includeOverview] = useState(true);
   const [includeKeyConcepts] = useState(true);
+  const [includeExample] = useState(true);
   const [includeTechniques] = useState(true);
   const [includeTools] = useState(true);
   const [includeImportantPoints] = useState(true);
@@ -389,12 +430,18 @@ function App() {
     isDarkMode,
     fsrsParams,
     showIntervalSettings,
+    apiKeys,
+    selectedProvider,
+    hasSeenTour,
     settingsLoaded,
     isLoading: settingsLoading,
     error: settingsError,
     toggleDarkMode,
     updateFsrsParams,
     toggleIntervalSettings,
+    updateApiKeys,
+    updateSelectedProvider,
+    markTourAsSeen,
     clearError: clearSettingsError
   } = useSettings(firebaseApp, userId);
 
@@ -410,27 +457,33 @@ function App() {
     setLocalSelectedProvider(provider);
   }, []);
   
-  const handleApiKeysUpdate = useCallback((keys) => {
-    setApiKeys(keys);
-    // Save to localStorage
-    Object.entries(keys).forEach(([provider, key]) => {
-      if (key) {
-        localStorage.setItem(`${provider}_api_key`, key);
-      } else {
-        localStorage.removeItem(`${provider}_api_key`);
-      }
-    });
-  }, []);
-  
-  const handleSaveApiKeys = useCallback(() => {
-    // Update the main API keys state
-    handleApiKeysUpdate(localApiKeys);
-    // Update the selected provider
-    setSelectedProvider(localSelectedProvider);
-    // Close the dropdown
-    setShowApiKeyModal(false);
-    setMessage('API keys saved successfully!');
-  }, [localApiKeys, localSelectedProvider, handleApiKeysUpdate, setSelectedProvider, setMessage]);
+  const handleSaveApiKeys = useCallback(async () => {
+    try {
+      // Update the API keys in settings
+      await updateApiKeys(localApiKeys);
+      // Update the selected provider in settings
+      await updateSelectedProvider(localSelectedProvider);
+      // Close the dropdown
+      setShowApiKeyModal(false);
+      setMessage('API keys saved successfully!');
+    } catch (error) {
+      setError('Failed to save API keys');
+    }
+  }, [localApiKeys, localSelectedProvider, updateApiKeys, updateSelectedProvider, setMessage]);
+
+  const handleTourComplete = useCallback(() => {
+    setShowTour(false);
+    setTourCompletedThisSession(true);
+
+    // Only mark tour as seen for authenticated users
+    // Anonymous users should see the tour every time
+    if (!isAnonymous) {
+      console.log('🎯 Marking tour as seen for authenticated user');
+      markTourAsSeen();
+    } else {
+      console.log('🎯 Tour completed for anonymous user - not saving state');
+    }
+  }, [markTourAsSeen, isAnonymous]);
 
   // Get computed values (must be before any useEffect that uses them)
   const categoryStats = getCategoryStats();
@@ -555,10 +608,13 @@ function App() {
         showDueTodayOnly,
         manualTriggerAutoAdvance,
         getSubCategories,
-        getSubCategoryStats
+        getSubCategoryStats,
+        addFlashcard,
+        currentCard
       };
+      window.flashcardHook = flashcardHook;
     }
-  }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, categoryStats, getSubCategories, getSubCategoryStats, manualTriggerAutoAdvance]);
+  }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly, categoryStats, getSubCategories, getSubCategoryStats, manualTriggerAutoAdvance, addFlashcard, currentCard]);
 
   // Sync login screen visibility with authentication state
   useEffect(() => {
@@ -583,18 +639,185 @@ function App() {
     }
   }, [isAuthReady, userId]);
 
+
+
+  // Start tour by default for new users (both anonymous and authenticated)
+  useEffect(() => {
+    // For anonymous users, always start tour regardless of hasSeenTour (unless completed this session)
+    // For authenticated users, only start if they haven't seen it
+    const shouldStartTour = settingsLoaded && isAuthReady && !tourCompletedThisSession && (isAnonymous || !hasSeenTour) && !showTour;
+    
+    if (shouldStartTour) {
+      console.log('🎯 Auto-starting tour:', {
+        userType: userId ? 'authenticated' : 'anonymous',
+        isAnonymous,
+        flashcardsLength: flashcards.length,
+        hasSeenTour,
+        reason: isAnonymous ? 'anonymous user (always gets tour)' : 'new user (hasSeenTour=false)'
+      });
+
+
+      // Start tour after ensuring demo card is available
+      const tourTimer = setTimeout(() => {
+        console.log('🎯 STARTING TOUR NOW:', {
+          userType: isAnonymous ? 'anonymous' : 'authenticated',
+          hasSeenTour,
+          flashcardsLength: flashcards.length,
+          hasDemo: flashcards.some(card => card.question === 'What is 2 + 2?')
+        });
+        setShowTour(true);
+      }, 500); // Short delay to ensure UI is ready
+
+      return () => clearTimeout(tourTimer);
+    }
+  }, [settingsLoaded, hasSeenTour, isAuthReady, userId, isAnonymous, flashcards.length, showTour, tourCompletedThisSession, flashcards]);
+
+  // Start tour when flashcards are loaded (after demo card creation)
+  useEffect(() => {
+    const shouldStartTour = settingsLoaded && isAuthReady && !tourCompletedThisSession && (isAnonymous || !hasSeenTour);
+
+    // Start tour when we have flashcards, should show tour, but tour isn't already showing
+    if (shouldStartTour && flashcards.length > 0 && !showTour) {
+      // Check if we have the demo card
+      const hasDemo = flashcards.some(card => card.question === 'What is 2 + 2?');
+
+      console.log('🎯 Flashcards loaded, checking if we should start tour:', {
+        userType: isAnonymous ? 'anonymous' : 'authenticated',
+        flashcardsLength: flashcards.length,
+        hasDemo,
+        showTour,
+        shouldStartTour
+      });
+
+      // Start tour with a delay to ensure UI is ready and flashcard is rendered
+      const tourTimer = setTimeout(() => {
+        console.log('🎯 STARTING TOUR - flashcards are ready!', {
+          flashcardsLength: flashcards.length,
+          hasDemo: flashcards.some(card => card.question === 'What is 2 + 2?'),
+          flashcardContainer: !!document.querySelector('.flashcard-container'),
+          flashcardContent: !!document.querySelector('.flashcard-content')
+        });
+        setShowTour(true);
+      }, 800); // Longer delay to ensure flashcard component is rendered
+
+      return () => clearTimeout(tourTimer);
+    }
+  }, [settingsLoaded, hasSeenTour, isAuthReady, isAnonymous, flashcards.length, showTour, tourCompletedThisSession, flashcards]);
+
+  // Fallback: Retry tour start if flashcard elements aren't ready
+  useEffect(() => {
+    if (showTour && flashcards.length > 0) {
+      // Check if flashcard elements are available
+      const hasFlashcardElements = document.querySelector('.flashcard-container') ||
+                                   document.querySelector('.flashcard-content');
+
+      if (!hasFlashcardElements) {
+        console.log('🔄 Tour started but flashcard elements not found, retrying in 1 second...');
+
+        const retryTimer = setTimeout(() => {
+          const stillNoElements = !document.querySelector('.flashcard-container') &&
+                                  !document.querySelector('.flashcard-content');
+
+          if (stillNoElements) {
+            console.log('🔄 Flashcard elements still not found, restarting tour...');
+            setShowTour(false);
+            setTimeout(() => setShowTour(true), 100);
+          } else {
+            console.log('✅ Flashcard elements found on retry');
+          }
+        }, 1000);
+
+        return () => clearTimeout(retryTimer);
+      }
+    }
+  }, [showTour, flashcards.length]);
+
   // Clear API keys from state for anonymous users (but keep them in localStorage)
   useEffect(() => {
-    if (isAuthReady && isAnonymous) {
-      // Clear API keys from state for anonymous users
-      setApiKeys({
-        openai: '',
-        anthropic: '',
-        gemini: ''
-      });
-      console.log('Cleared API keys from state for anonymous user');
+    if (isAuthReady && isAnonymous && settingsLoaded) {
+      // Only clear API keys if we have existing keys to avoid unnecessary calls
+      if (apiKeys.openai || apiKeys.anthropic || apiKeys.gemini || apiKeys.gpt5nano || apiKeys.mistral || apiKeys.groq) {
+        console.log('Clearing API keys from state for anonymous user');
+        updateApiKeys({
+          openai: '',
+          anthropic: '',
+          gemini: '',
+          gpt5nano: '',
+          mistral: '',
+          groq: ''
+        }).catch(error => {
+          console.warn('Failed to clear API keys for anonymous user:', error);
+          // This is not critical, so we don't need to show error to user
+        });
+      }
     }
-  }, [isAuthReady, isAnonymous]);
+  }, [isAuthReady, isAnonymous, settingsLoaded, apiKeys, updateApiKeys]);
+
+  // Create demo card immediately for anonymous users
+  useEffect(() => {
+    if (isAnonymous && !showLoginScreen) {
+      console.log('🎯 Demo card check for anonymous user');
+      
+      // Check if demo card already exists in localStorage
+      try {
+        const existingCards = JSON.parse(localStorage.getItem('anonymous_flashcards') || '[]');
+        const hasDemoCard = existingCards.some(card => card.question === 'What is 2 + 2?');
+        
+        if (!hasDemoCard) {
+          console.log('💾 Creating demo card for anonymous user via localStorage');
+          const demoCard = {
+            id: 'demo-' + Date.now(),
+            question: 'What is 2 + 2?',
+            answer: '4',
+            category: 'Math',
+            subCategory: 'Addition',
+            sub_category: 'Addition',
+            active: true,
+            createdAt: new Date(),
+            lastReviewedAt: null,
+            nextReviewAt: new Date(),
+            dueDate: new Date(),
+            difficulty: 5,
+            easeFactor: 2.5,
+            interval: 1,
+            reviewCount: 0,
+            level: 'new',
+            isDemo: true,
+            tags: ['demo', 'sample']
+          };
+
+          // Add to localStorage directly since addFlashcard doesn't work for anonymous users
+          existingCards.push(demoCard);
+          localStorage.setItem('anonymous_flashcards', JSON.stringify(existingCards));
+          console.log('✅ Demo card saved to localStorage');
+
+          // Trigger the anonymous card event to update the flashcards state immediately
+          window.dispatchEvent(new CustomEvent('anonymous-card-added'));
+          console.log('🔄 Triggered anonymous-card-added event');
+        } else {
+          console.log('📋 Demo card already exists in localStorage');
+        }
+      } catch (error) {
+        console.error('❌ Error with demo card:', error);
+      }
+    }
+  }, [isAnonymous, showLoginScreen]);
+
+  // Force light mode on login or anonymous views
+  useEffect(() => {
+    if (showLoginScreen || isAnonymous) {
+      try {
+        document.documentElement.classList.remove('dark');
+        document.body.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      } catch (_) {
+        // ignore
+      }
+    }
+  }, [showLoginScreen, isAnonymous]);
+
+
+
 
   // Create default flashcards for new users
   const createDefaultFlashcards = useCallback(async (currentUserId) => {
@@ -635,20 +858,13 @@ function App() {
 
     const defaultCards = [
       {
-        question: "What is 2+2?",
+        question: "What is 2 + 2?",
         answer: "4",
         category: "Math",
-        sub_category: "Arithmetic", 
+        sub_category: "Addition",
         level: "new",
-        additional_info: "Basic addition"
-      },
-      {
-        question: "Capital of France?",
-        answer: "Paris",
-        category: "Geography",
-        sub_category: "Europe",
-        level: "easy", 
-        additional_info: "Located in Western Europe"
+        additional_info: "Basic addition",
+        tags: ['demo', 'sample']
       }
     ];
 
@@ -663,7 +879,7 @@ function App() {
       localStorage.setItem(defaultsKey, 'true');
       
       console.log(`✅ Successfully created ${createdCount} default flashcards`);
-      setMessage(`Welcome! We've added ${createdCount} sample cards to get you started.`);
+      setMessage(`Welcome! We've added a demo card to get you started.`);
       clearMessage();
       
     } catch (error) {
@@ -674,31 +890,23 @@ function App() {
 
   // Create default flashcards for new users
   useEffect(() => {
-    // console.log('🔍 Default cards useEffect triggered:', {
-    //   isAuthReady,
-    //   userId,
-    //   hasAddFlashcard: !!addFlashcard,
-    //   flashcardsLength: flashcards.length,
-    //   hasCheckedForDefaults
-    // });
-    
-    // Only run when user is authenticated, we have the addFlashcard function, and we haven't checked yet
-    if (isAuthReady && userId && addFlashcard && !hasCheckedForDefaults) {
-      // console.log('🔍 Conditions met, setting timer for default card creation');
+    // Only run when user is authenticated, flashcards are loaded, we have the addFlashcard function, and we haven't checked yet
+    if (isAuthReady && userId && addFlashcard && !flashcardsLoading && !hasCheckedForDefaults) {
+      console.log('🔍 Default cards useEffect triggered:', {
+        isAuthReady,
+        userId: !!userId,
+        hasAddFlashcard: !!addFlashcard,
+        flashcardsLoading,
+        flashcardsLength: flashcards.length,
+        hasCheckedForDefaults
+      });
+
       setHasCheckedForDefaults(true); // Mark that we've checked to prevent multiple runs
-      
-      // Small delay to ensure Firestore listener has had time to populate flashcards
-      const timer = setTimeout(() => {
-        // console.log('🔍 Timer fired, calling createDefaultFlashcards');
-        createDefaultFlashcards(userId);
-      }, 2000); // Increased to 2 seconds
-      
-      return () => {
-        // console.log('🔍 Cleaning up timer');
-        clearTimeout(timer);
-      };
+
+      // Check immediately since flashcards are already loaded
+      createDefaultFlashcards(userId);
     }
-  }, [isAuthReady, userId, addFlashcard, flashcards.length, hasCheckedForDefaults, createDefaultFlashcards]);
+  }, [isAuthReady, userId, addFlashcard, flashcardsLoading, flashcards.length, hasCheckedForDefaults, createDefaultFlashcards]);
 
   // Handle authentication
   const handleLogin = async (loginType, emailVal = '', passwordVal = '') => {
@@ -1439,10 +1647,11 @@ Provide a comprehensive explanation based on the user's request. Structure your 
 
 ${includeOverview ? '1. OVERVIEW: Provide a brief overview of the topic' : ''}
 ${includeKeyConcepts ? '2. KEY CONCEPTS: List and explain the main concepts and definitions' : ''}
-${includeTechniques ? '3. TECHNIQUES: Describe relevant techniques, methods, or approaches' : ''}
-${includeTools ? '4. TOOLS: Mention any tools, frameworks, or technologies related to this topic' : ''}
-${includeImportantPoints ? '5. IMPORTANT POINTS: Highlight critical information or gotchas to remember' : ''}
-${includeSummary ? '6. SUMMARY: Provide a concise summary of the key takeaways' : ''}
+${includeExample ? '3. EXAMPLE: Provide a concrete, practical example demonstrating the concept' : ''}
+${includeTechniques ? '4. TECHNIQUES: Describe relevant techniques, methods, or approaches' : ''}
+${includeTools ? '5. TOOLS: Mention any tools, frameworks, or technologies related to this topic' : ''}
+${includeImportantPoints ? '6. IMPORTANT POINTS: Highlight critical information or gotchas to remember' : ''}
+${includeSummary ? '7. SUMMARY: Provide a concise summary of the key takeaways' : ''}
 
 Format Guidelines:
 - Use clear, educational language
@@ -1454,6 +1663,7 @@ Format Guidelines:
 EXAMPLE FORMAT:
 ${includeOverview ? '<h3>Overview</h3>\n<p>Brief overview here...</p>' : ''}
 ${includeKeyConcepts ? '<h3>Key Concepts</h3>\n<ul>\n<li><strong>Concept 1:</strong> Explanation</li>\n<li><strong>Concept 2:</strong> Explanation</li>\n</ul>' : ''}
+${includeExample ? '<h3>Example</h3>\n<p>Concrete example demonstrating the concept...</p>' : ''}
 ${includeImportantPoints ? '<h3>Important Points</h3>\n<p>Critical information here...</p>' : ''}
 
 IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
@@ -1627,18 +1837,18 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       console.error('Explanation generation error:', error);
       
       // Provide user-friendly error messages based on error type
-      let userMessage = 'Unable to generate explanation. ';
+      let userMessage = 'Unable to generate explanation.\n\n';
       
       if (error.message.includes('401') || error.message.includes('403') || error.message.includes('Invalid API')) {
-        userMessage += 'Please check your API key configuration - it may be invalid or expired.';
+        userMessage += '❌ API Key Issue: Invalid or expired API key.\n✅ Solution: Click 🔑 API Key button to verify your key.';
       } else if (error.message.includes('429') || error.message.includes('rate limit')) {
-        userMessage += 'API rate limit exceeded. Please wait a moment and try again.';
+        userMessage += '⏱️ Rate Limit: Too many requests.\n✅ Solution: Wait 30 seconds and try again.';
       } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        userMessage += 'Network connection issue. Please check your internet connection and try again.';
+        userMessage += '🌐 Network Error: Connection failed.\n✅ Solution: Check internet connection and retry.';
       } else if (error.message.includes('quota') || error.message.includes('billing')) {
-        userMessage += 'API quota exceeded or billing issue. Please check your API account.';
+        userMessage += '💳 Billing Issue: API quota exceeded.\n✅ Solution: Check billing at your AI provider account.';
       } else {
-        userMessage += 'The AI service is currently unavailable. Please try again later or try a different AI provider.';
+        userMessage += `🔧 Error: ${error.message}\n✅ Debug: Provider=${selectedProvider.toUpperCase()}, HasKey=${!!apiKey}\n✅ Try: Switch AI provider or check API key.`;
       }
       
       setExplainError(userMessage);
@@ -1647,21 +1857,125 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     }
   };
 
+  // GPT-4o Mini (formerly labeled as GPT-5 Nano for UI purposes)
+  const callGPT5Nano = async (prompt, apiKey) => {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections. Use paragraphs, lists, and emphasis for clarity.' },
+          { role: 'user', content: prompt }
+        ],
+        max_completion_tokens: 1000
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`GPT-4o Mini API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No content received from GPT-4o Mini API');
+    }
+    return content;
+  };
+
+  const callMistral = async (prompt, apiKey, model = 'mistral-small') => {
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: 'You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections. Use paragraphs, lists, and emphasis for clarity.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 1000
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`Mistral API error: ${error.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No content received from Mistral API');
+    }
+    return content;
+  };
+
+  const callGroq = async (prompt, apiKey, model = 'llama3-8b-8192') => {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: 'You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections. Use paragraphs, lists, and emphasis for clarity.' },
+          { role: 'user', content: prompt }
+        ],
+        max_completion_tokens: 1000
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`Groq API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('No content received from Groq API');
+    }
+    return content;
+  };
+
   // AI calling function for explanations
-  const callAI = async (prompt, provider, apiKey) => {
+  const callAI = async (prompt, provider, apiKey, model = null) => {
     switch (provider) {
       case 'openai':
-        return await callOpenAI(prompt, apiKey);
+        return await callOpenAI(prompt, apiKey, model || 'gpt-3.5-turbo');
       case 'anthropic':
-        return await callAnthropic(prompt, apiKey);
+        return await callAnthropic(prompt, apiKey, model || 'claude-3-sonnet-20240229');
       case 'gemini':
-        return await callGemini(prompt, apiKey);
+        return await callGemini(prompt, apiKey, model || 'gemini-1.5-flash');
+      case 'gpt5nano':
+        return await callGPT5Nano(prompt, apiKey);
+      case 'mistral':
+        return await callMistral(prompt, apiKey, model || 'mistral-small');
+      case 'groq':
+        return await callGroq(prompt, apiKey, model || 'llama3-8b-8192');
       default:
         throw new Error('Unsupported AI provider');
     }
   };
 
-  const callOpenAI = async (prompt, apiKey) => {
+  const callOpenAI = async (prompt, apiKey, model = 'gpt-3.5-turbo') => {
+    console.log('🔵 OpenAI API Call:', {
+      model,
+      hasApiKey: !!apiKey,
+      apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'No key',
+      promptLength: prompt.length
+    });
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -1669,30 +1983,48 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: model,
         messages: [
           { role: 'system', content: 'You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections like "Overview", "Key Concepts", "Examples", "Important Points", etc. Use paragraphs, lists, and emphasis for clarity.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.7,
-        max_tokens: 1000
+        max_completion_tokens: 1000
       })
+    });
+
+    console.log('🔵 OpenAI Response Status:', {
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText
     });
 
     if (!response.ok) {
       const error = await response.json();
+      console.error('🔴 OpenAI API Error:', {
+        status: response.status,
+        error: error,
+        errorMessage: error.error?.message
+      });
       throw new Error(`OpenAI API error: ${error.error?.message || 'Unknown error'}`);
     }
 
     const data = await response.json();
+    console.log('🔵 OpenAI Response Data:', {
+      hasData: !!data,
+      hasChoices: !!data.choices,
+      choicesLength: data.choices?.length,
+      hasContent: !!data.choices?.[0]?.message?.content
+    });
+    
     const content = data.choices[0]?.message?.content;
     if (!content) {
+      console.error('🔴 OpenAI No Content:', { data });
       throw new Error('No content received from OpenAI API');
     }
     return content;
   };
 
-  const callAnthropic = async (prompt, apiKey) => {
+  const callAnthropic = async (prompt, apiKey, model = 'claude-3-sonnet-20240229') => {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -1701,9 +2033,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
+        model: model,
         max_tokens: 1000,
-        temperature: 0.7,
         messages: [
           { role: 'user', content: `You are an educational expert who provides clear, comprehensive explanations. Structure your response with HTML headers (h1, h2, h3) to organize different sections like "Overview", "Key Concepts", "Examples", "Important Points", etc. Use paragraphs, lists, and emphasis for clarity.\n\n${prompt}` }
         ]
@@ -1723,8 +2054,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     return content;
   };
 
-  const callGemini = async (prompt, apiKey) => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+  const callGemini = async (prompt, apiKey, model = 'gemini-1.5-flash') => {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1736,7 +2067,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           }
         ],
         generationConfig: {
-          temperature: 0.7,
           maxOutputTokens: 1000
         }
       })
@@ -1754,6 +2084,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     }
     return content;
   };
+
 
   const handleRestorePosition = () => {
     // This function should restore to default embedded view, same as handleRestore
@@ -2233,7 +2564,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
   // Add selected sections to notes with AI-generated content
   const handleAddSelectedSections = async () => {
     // Check if at least one section is selected
-    if (!notesIncludeOverview && !notesIncludeKeyConcepts && !notesIncludeTechniques && 
+    if (!notesIncludeOverview && !notesIncludeKeyConcepts && !notesIncludeExample && !notesIncludeTechniques && 
         !notesIncludeTools && !notesIncludeImportantPoints && !notesIncludeSummary) {
       alert('Please select at least one section to add to notes');
       return;
@@ -2270,6 +2601,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       const sectionsToGenerate = [];
       if (notesIncludeOverview) sectionsToGenerate.push('overview');
       if (notesIncludeKeyConcepts) sectionsToGenerate.push('keyConcepts');
+      if (notesIncludeExample) sectionsToGenerate.push('example');
       if (notesIncludeTechniques) sectionsToGenerate.push('techniques');
       if (notesIncludeTools) sectionsToGenerate.push('tools');
       if (notesIncludeImportantPoints) sectionsToGenerate.push('importantPoints');
@@ -2287,10 +2619,11 @@ ${sectionsToGenerate.map(section => {
   switch (section) {
     case 'overview': return '1. OVERVIEW: Provide context about this question and 2-3 specific learning objectives';
     case 'keyConcepts': return '2. KEY CONCEPTS: List and define 3-4 key concepts/terms relevant to this question';
-    case 'techniques': return '3. TECHNIQUES: Describe 2-3 specific methods or approaches for solving similar problems';
-    case 'tools': return '4. TOOLS: List relevant tools, frameworks, or resources (2-3 items)';
-    case 'importantPoints': return '5. IMPORTANT POINTS: Highlight 3-4 critical details, common mistakes, or tips to remember';
-    case 'summary': return '6. SUMMARY: Provide key takeaways and suggest next steps for learning';
+    case 'example': return '3. EXAMPLE: Provide a concrete, practical example that demonstrates the concept in action';
+    case 'techniques': return '4. TECHNIQUES: Describe 2-3 specific methods or approaches for solving similar problems';
+    case 'tools': return '5. TOOLS: List relevant tools, frameworks, or resources (2-3 items)';
+    case 'importantPoints': return '6. IMPORTANT POINTS: Highlight 3-4 critical details, common mistakes, or tips to remember';
+    case 'summary': return '7. SUMMARY: Provide key takeaways and suggest next steps for learning';
     default: return '';
   }
 }).filter(Boolean).join('\n')}
@@ -2307,13 +2640,28 @@ Format Guidelines:
 Return the content in this exact format for each requested section:
 <section id="overview">...content...</section>
 <section id="keyConcepts">...content...</section>
+<section id="example">...content...</section>
 <section id="techniques">...content...</section>
 <section id="tools">...content...</section>
 <section id="importantPoints">...content...</section>
 <section id="summary">...content...</section>`;
 
-      // Generate AI content
+      // Generate AI content with debugging
+      console.log('🤖 AI Call Debug Info:', {
+        provider: selectedProvider,
+        hasApiKey: !!apiKey,
+        apiKeyLength: apiKey ? apiKey.length : 0,
+        promptLength: contextPrompt.length
+      });
+      
       const aiResponse = await callAI(contextPrompt, selectedProvider, apiKey);
+      
+      console.log('🤖 AI Response Debug:', {
+        hasResponse: !!aiResponse,
+        responseType: typeof aiResponse,
+        responseLength: aiResponse ? aiResponse.length : 0,
+        responsePreview: aiResponse ? aiResponse.substring(0, 200) + '...' : 'No response'
+      });
       
       if (!aiResponse || typeof aiResponse !== 'string') {
         throw new Error('AI response was empty or invalid');
@@ -2346,6 +2694,18 @@ Return the content in this exact format for each requested section:
           sectionsHtml += '<h3 style="color: #d97706; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">🔑</span>Key Concepts</h3>\n';
           sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #f59e0b; color: #374151; line-height: 1.6;">\n';
           sectionsHtml += keyConceptsContent;
+          sectionsHtml += '</div>\n';
+          sectionsHtml += '</div>\n\n';
+        }
+      }
+
+      if (notesIncludeExample) {
+        const exampleContent = parseAISection('example', aiResponse);
+        if (exampleContent) {
+          sectionsHtml += '<div style="background: linear-gradient(135deg, #f0f9ff 0%, #dbeafe 100%); border: 2px solid #3b82f6; border-radius: 12px; padding: 18px; margin-bottom: 20px; box-shadow: 0 3px 10px rgba(59, 130, 246, 0.12);">\n';
+          sectionsHtml += '<h3 style="color: #1d4ed8; margin: 0 0 16px 0; display: flex; align-items: center; gap: 8px; font-size: 18px;"><span style="font-size: 20px;">💡</span>Example</h3>\n';
+          sectionsHtml += '<div style="background: white; border-radius: 8px; padding: 14px; border-left: 4px solid #3b82f6; color: #374151; line-height: 1.6;">\n';
+          sectionsHtml += exampleContent;
           sectionsHtml += '</div>\n';
           sectionsHtml += '</div>\n\n';
         }
@@ -2415,23 +2775,30 @@ Return the content in this exact format for each requested section:
     } catch (error) {
       console.error('Error generating study notes:', error);
       
-      // Provide user-friendly error messages based on error type
-      let userMessage = 'Unable to generate study notes. ';
+      // Provide detailed error messages with troubleshooting info
+      let userMessage = 'Unable to generate study notes.\n\n';
+      let troubleshooting = '';
       
       if (error.message.includes('401') || error.message.includes('403') || error.message.includes('Invalid API')) {
-        userMessage += 'Please check your API key configuration - it may be invalid or expired.';
+        userMessage += '❌ API Key Issue: Invalid or expired API key.\n';
+        troubleshooting = '✅ Solution: Click the 🔑 API Key button and verify your API key is correct.';
       } else if (error.message.includes('429') || error.message.includes('rate limit')) {
-        userMessage += 'API rate limit exceeded. Please wait a moment and try again.';
+        userMessage += '⏱️ Rate Limit: Too many requests.\n';
+        troubleshooting = '✅ Solution: Wait 30 seconds and try again, or upgrade your API plan.';
       } else if (error.message.includes('network') || error.message.includes('fetch')) {
-        userMessage += 'Network connection issue. Please check your internet connection and try again.';
+        userMessage += '🌐 Network Error: Connection failed.\n';
+        troubleshooting = '✅ Solution: Check your internet connection and try again.';
       } else if (error.message.includes('quota') || error.message.includes('billing')) {
-        userMessage += 'API quota exceeded or billing issue. Please check your API account.';
+        userMessage += '💳 Billing Issue: API quota exceeded.\n';
+        troubleshooting = '✅ Solution: Check your billing settings at your AI provider account.';
       } else {
-        userMessage += 'The AI service is currently unavailable. Please try again later or try a different AI provider.';
+        userMessage += `🔧 Technical Error: ${error.message}\n`;
+        troubleshooting = `✅ Debug Info:\n- Provider: ${selectedProvider.toUpperCase()}\n- Has API Key: ${!!apiKey}\n- Error Type: ${error.name || 'Unknown'}\n\n✅ Try: Switch to a different AI provider or check API key.`;
       }
       
-      setError(userMessage);
-      alert(userMessage); // Immediate user feedback
+      const fullMessage = userMessage + '\n' + troubleshooting;
+      setError(fullMessage);
+      alert(fullMessage);
     } finally {
       // Always reset loading state regardless of success or failure
       setIsGeneratingExplanation(false);
@@ -2876,7 +3243,7 @@ Return the content in this exact format for each requested section:
         setEmail={setEmail}
         password={password}
         setPassword={setPassword}
-        isDarkMode={isDarkMode}
+        isDarkMode={false} // Always use light mode for login screen
         isLoading={authLoading}
         onToggleDarkMode={toggleDarkMode}
       />
@@ -3044,6 +3411,14 @@ Return the content in this exact format for each requested section:
   return (
     <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
       
+      {/* Tour */}
+      <Tour
+        isActive={showTour}
+        onComplete={handleTourComplete}
+        onOpenApiConfig={() => setShowApiKeyModal(true)}
+        isDarkMode={isDarkMode}
+      />
+      
       {/* Header */}
       <header className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}>
         <div className={`header-layout ${isHeaderCollapsed ? 'hidden' : ''}`}>
@@ -3092,15 +3467,15 @@ Return the content in this exact format for each requested section:
                 {/* API Key Dropdown Button */}
                 <div className="api-key-dropdown-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
                   <button
-                    className="btn btn-secondary"
+                    className="btn btn-secondary api-key-button"
                     onClick={() => setShowApiKeyModal(true)}
-                    title={(!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini) 
+                    title={(!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini && !apiKeys.gpt5nano && !apiKeys.mistral && !apiKeys.groq) 
                       ? "⚠️ No valid API key configured - Click to add one" 
                       : "Show API Keys"}
                     style={{ 
                       minWidth: '110px',
-                      border: (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini) ? '3px solid #ef4444' : undefined,
-                      boxShadow: (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini) ? '0 0 0 2px rgba(239, 68, 68, 0.3)' : undefined
+                      border: (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini && !apiKeys.gpt5nano && !apiKeys.mistral && !apiKeys.groq) ? '3px solid #ef4444' : undefined,
+                      boxShadow: (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.gemini && !apiKeys.gpt5nano && !apiKeys.mistral && !apiKeys.groq) ? '0 0 0 2px rgba(239, 68, 68, 0.3)' : undefined
                     }}
                   >
                     🔑 API Key
@@ -3116,12 +3491,58 @@ Return the content in this exact format for each requested section:
                   {viewModes[viewModeIndex].icon} {viewModes[viewModeIndex].name} ⇄
                 </button>
                 <button
-                  className="btn btn-secondary"
+                  className="btn btn-secondary settings-button"
                   onClick={() => setShowSettingsModal(true)}
                   title="Settings (S)"
                 >
                   ⚙️ Settings
                 </button>
+                
+                {/* Debug button for creating demo card */}
+                {flashcards.length === 0 && (
+                  <button
+                    className="btn btn-warning"
+                    onClick={() => {
+                      console.log('🔧 Manual demo card creation button clicked');
+                      
+                      // Create demo card directly in the button handler
+                      const demoCard = {
+                        id: 'demo-manual-' + Date.now(),
+                        question: 'What is 2 + 2?',
+                        answer: '4',
+                        category: 'Math',
+                        subCategory: 'Addition',
+                        active: true,
+                        createdAt: new Date(),
+                        lastReviewedAt: null,
+                        nextReviewAt: new Date(),
+                        difficulty: 5,
+                        easeFactor: 2.5,
+                        interval: 1,
+                        reviewCount: 0,
+                        level: 'new',
+                        isDemo: true,
+                        tags: ['demo', 'sample']
+                      };
+                      
+                      // Try window.addLocalFlashcard first
+                      if (window.addLocalFlashcard) {
+                        console.log('📱 Manual: Using window.addLocalFlashcard');
+                        window.addLocalFlashcard(demoCard);
+                      } else {
+                        console.log('📱 Manual: Using localStorage fallback');
+                        const existingCards = JSON.parse(localStorage.getItem('anonymous_flashcards') || '[]');
+                        existingCards.push(demoCard);
+                        localStorage.setItem('anonymous_flashcards', JSON.stringify(existingCards));
+                        window.dispatchEvent(new CustomEvent('anonymous-card-added'));
+                      }
+                    }}
+                    title="Create Demo Card"
+                    style={{ marginLeft: '8px' }}
+                  >
+                    🎯 Create Demo Card
+                  </button>
+                )}
                 <button
                   className="btn btn-secondary"
                   onClick={() => setShowAccountModal(true)}
@@ -3252,7 +3673,7 @@ Return the content in this exact format for each requested section:
           <div className="flashcard-area">
             <div className={`flashcard-with-notes-container ${isNotesHidden ? 'notes-hidden' : ''}`}>
               {/* Filters Section - Left panel (same as when cards are available) */}
-              <div className="filters-section-left">
+              <div className="filters-section-left category-filter-section">
                 <div className="filters-group">
                   {/* Due Cards Panel - Above categories */}
                   <div className="filter-section">
@@ -3331,7 +3752,7 @@ Return the content in this exact format for each requested section:
                       View All Cards
                     </button>
                     <button 
-                      className="btn btn-primary"
+                      className="btn btn-primary btn-add"
                       onClick={() => setShowCreateCardForm(true)}
                     >
                       Create New Card
@@ -3382,7 +3803,7 @@ Return the content in this exact format for each requested section:
           <div className="flashcard-area">
             <div className={`flashcard-with-notes-container ${isNotesHidden ? 'notes-hidden' : ''}`}>
               {/* Filters Section - Left of flashcard */}
-              <div className="filters-section-left">
+              <div className="filters-section-left category-filter-section">
                 <div className="filters-group">
                   {/* Due Cards Panel - Above categories */}
                   <div className="filter-section">
@@ -3778,7 +4199,7 @@ Return the content in this exact format for each requested section:
                 {/* Progress Bar moved to header */}
               </div>
 
-              <div className={`flashcard-main-content ${isMaximized || isPopouted ? 'windowed' : ''}`}>
+              <div className={`flashcard-main-content flashcard-display ${isMaximized || isPopouted ? 'windowed' : ''}`}>
                 {/* Overlay for popout mode */}
                 {isPopouted && !isMaximized && (
                   <div 
@@ -4010,7 +4431,7 @@ Return the content in this exact format for each requested section:
               <div className="right-side-content">
                 {/* Session Notes - Always visible (unless popped out or hidden) */}
                 {!isNotesPopouted && !isNotesHidden && (
-                <div className="notes-section-permanent">
+                <div className="notes-section-permanent notes-button">
                   <div className="notes-header">
                     <h4>📝 Notes</h4>
                     <div className="notes-header-controls">
@@ -4163,11 +4584,24 @@ Return the content in this exact format for each requested section:
           <span style={{ color: cardsDueToday.length > 0 ? '#feca57' : 'inherit' }}>
             Due Today: {cardsDueToday.length}
           </span>
+          <span style={{ 
+            color: apiKeys[selectedProvider] ? '#10b981' : '#ef4444',
+            fontWeight: '500'
+          }}>
+            AI: {selectedProvider === 'openai' ? 'OpenAI' : 
+                 selectedProvider === 'anthropic' ? 'Anthropic' : 
+                 selectedProvider === 'gemini' ? 'Gemini' : 
+                 selectedProvider === 'gpt5nano' ? 'GPT-4o Mini' : 
+                 selectedProvider === 'mistral' ? 'Mistral' : 
+                 selectedProvider === 'groq' ? 'Groq' : 
+                 selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}
+            {apiKeys[selectedProvider] ? ' ✓' : ' ✗'}
+          </span>
         </div>
         <div className="footer-shortcuts">
           <small>
             Shortcuts: <kbd>Space</kbd> Show Answer | <kbd>←/→</kbd> Navigate | 
-            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export | <kbd>M</kbd> Manage
+            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Edit Card | <kbd>M</kbd> Manage Cards
           </small>
         </div>
       </footer>
@@ -4362,11 +4796,24 @@ Return the content in this exact format for each requested section:
           <span style={{ color: cardsDueToday.length > 0 ? '#feca57' : 'inherit' }}>
             Due Today: {cardsDueToday.length}
           </span>
+          <span style={{ 
+            color: apiKeys[selectedProvider] ? '#10b981' : '#ef4444',
+            fontWeight: '500'
+          }}>
+            AI: {selectedProvider === 'openai' ? 'OpenAI' : 
+                 selectedProvider === 'anthropic' ? 'Anthropic' : 
+                 selectedProvider === 'gemini' ? 'Gemini' : 
+                 selectedProvider === 'gpt5nano' ? 'GPT-4o Mini' : 
+                 selectedProvider === 'mistral' ? 'Mistral' : 
+                 selectedProvider === 'groq' ? 'Groq' : 
+                 selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}
+            {apiKeys[selectedProvider] ? ' ✓' : ' ✗'}
+          </span>
         </div>
         <div className="footer-shortcuts">
           <small>
             Shortcuts: <kbd>Space</kbd> Show Answer | <kbd>←/→</kbd> Navigate | 
-            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export | <kbd>M</kbd> Manage
+            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Edit Card | <kbd>M</kbd> Manage Cards
           </small>
         </div>
       </footer>
@@ -4584,6 +5031,12 @@ Return the content in this exact format for each requested section:
         onToggleIntervalSettings={toggleIntervalSettings}
         userDisplayName={userDisplayName}
         flashcards={flashcards}
+        onStartTour={() => {
+          setShowSettingsModal(false);
+          // Start tour immediately - demo card should already exist for anonymous users
+          console.log('🎯 Manual tour start for user:', isAnonymous ? 'anonymous' : 'authenticated');
+          setShowTour(true);
+        }}
       />
 
       <ImportExportModal
@@ -5112,6 +5565,294 @@ Return the content in this exact format for each requested section:
                 </small>
               </div>
 
+              {/* GPT-5 Nano Section */}
+              <div 
+                onClick={() => handleProviderChange('gpt5nano')}
+                style={{
+                  marginBottom: '16px',
+                  padding: '16px',
+                  backgroundColor: localSelectedProvider === 'gpt5nano' ? (isDarkMode ? '#1e3a5f' : '#dbeafe') : (isDarkMode ? '#1e40af' : '#eff6ff'),
+                  borderRadius: '8px',
+                  border: localSelectedProvider === 'gpt5nano' ? `3px solid ${isDarkMode ? '#60a5fa' : '#3b82f6'}` : `2px solid ${isDarkMode ? '#3b82f6' : '#93c5fd'}`,
+                  boxShadow: localSelectedProvider === 'gpt5nano' ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none',
+                  transform: localSelectedProvider === 'gpt5nano' ? 'scale(1.02)' : 'scale(1)',
+                  transition: 'all 0.2s ease-in-out',
+                  position: 'relative',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => {
+                  if (localSelectedProvider !== 'gpt5nano') {
+                    e.target.style.transform = 'scale(1.01)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(59, 130, 246, 0.2)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (localSelectedProvider !== 'gpt5nano') {
+                    e.target.style.transform = 'scale(1)';
+                    e.target.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                {localSelectedProvider === 'gpt5nano' && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}>
+                    ACTIVE
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="radio"
+                      name="provider"
+                      value="gpt5nano"
+                      checked={localSelectedProvider === 'gpt5nano'}
+                      onChange={() => {}} // Handled by card click
+                      style={{ marginRight: '8px', pointerEvents: 'none' }}
+                    />
+                    <div>
+                      <strong style={{ color: isDarkMode ? '#f9fafb' : '#111827' }}>⚡ GPT-4o Mini</strong>
+                      <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                        Fast and cost-effective OpenAI model optimized for educational content generation
+                      </div>
+                      <div style={{ fontSize: '11px', color: isDarkMode ? '#6b7280' : '#9ca3af', marginTop: '2px' }}>
+                        <strong>Features:</strong> Lightning-fast responses, cost-effective, great for bulk card generation
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: localApiKeys.gpt5nano ? (isDarkMode ? '#065f46' : '#d1fae5') : (isDarkMode ? '#7f1d1d' : '#fee2e2'),
+                    color: localApiKeys.gpt5nano ? (isDarkMode ? '#34d399' : '#059669') : (isDarkMode ? '#fca5a5' : '#dc2626')
+                  }}>
+                    {localApiKeys.gpt5nano ? '✅ Connected' : '✗ Not Set'}
+                  </span>
+                </div>
+                <input
+                  type="password"
+                  placeholder="sk-..."
+                  value={localApiKeys.gpt5nano || ''}
+                  onChange={(e) => handleApiKeyChange('gpt5nano', e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: `1px solid ${isDarkMode ? '#374151' : '#d1d5db'}`,
+                    backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
+                    marginBottom: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                  Get your key from: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: isDarkMode ? '#60a5fa' : '#3b82f6' }}>OpenAI Platform</a>
+                </small>
+              </div>
+
+              {/* Mistral Section */}
+              <div 
+                onClick={() => handleProviderChange('mistral')}
+                style={{
+                  marginBottom: '16px',
+                  padding: '16px',
+                  backgroundColor: localSelectedProvider === 'mistral' ? (isDarkMode ? '#7c2d12' : '#fed7aa') : (isDarkMode ? '#ea580c' : '#fff7ed'),
+                  borderRadius: '8px',
+                  border: localSelectedProvider === 'mistral' ? `3px solid ${isDarkMode ? '#fb923c' : '#ea580c'}` : `2px solid ${isDarkMode ? '#ea580c' : '#fdba74'}`,
+                  boxShadow: localSelectedProvider === 'mistral' ? '0 4px 12px rgba(234, 88, 12, 0.3)' : 'none',
+                  transform: localSelectedProvider === 'mistral' ? 'scale(1.02)' : 'scale(1)',
+                  transition: 'all 0.2s ease-in-out',
+                  position: 'relative',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => {
+                  if (localSelectedProvider !== 'mistral') {
+                    e.target.style.transform = 'scale(1.01)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(234, 88, 12, 0.2)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (localSelectedProvider !== 'mistral') {
+                    e.target.style.transform = 'scale(1)';
+                    e.target.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                {localSelectedProvider === 'mistral' && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    backgroundColor: '#ea580c',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}>
+                    ACTIVE
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="radio"
+                      name="provider"
+                      value="mistral"
+                      checked={localSelectedProvider === 'mistral'}
+                      onChange={() => {}} // Handled by card click
+                      style={{ marginRight: '8px', pointerEvents: 'none' }}
+                    />
+                    <div>
+                      <strong style={{ color: isDarkMode ? '#f9fafb' : '#111827' }}>🌟 Mistral AI</strong>
+                      <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                        European AI excellence with powerful language models
+                      </div>
+                      <div style={{ fontSize: '11px', color: isDarkMode ? '#6b7280' : '#9ca3af', marginTop: '2px' }}>
+                        <strong>Features:</strong> Advanced reasoning, multilingual support, competitive pricing
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: localApiKeys.mistral ? (isDarkMode ? '#065f46' : '#d1fae5') : (isDarkMode ? '#7f1d1d' : '#fee2e2'),
+                    color: localApiKeys.mistral ? (isDarkMode ? '#34d399' : '#059669') : (isDarkMode ? '#fca5a5' : '#dc2626')
+                  }}>
+                    {localApiKeys.mistral ? '✅ Connected' : '✗ Not Set'}
+                  </span>
+                </div>
+                <input
+                  type="password"
+                  placeholder="..."
+                  value={localApiKeys.mistral || ''}
+                  onChange={(e) => handleApiKeyChange('mistral', e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: `1px solid ${isDarkMode ? '#374151' : '#d1d5db'}`,
+                    backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
+                    marginBottom: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                  Get your key from: <a href="https://console.mistral.ai/" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: isDarkMode ? '#60a5fa' : '#3b82f6' }}>Mistral Console</a>
+                </small>
+              </div>
+
+              {/* Groq Section */}
+              <div 
+                onClick={() => handleProviderChange('groq')}
+                style={{
+                  marginBottom: '16px',
+                  padding: '16px',
+                  backgroundColor: localSelectedProvider === 'groq' ? (isDarkMode ? '#4c1d95' : '#e0e7ff') : (isDarkMode ? '#6366f1' : '#f0f4ff'),
+                  borderRadius: '8px',
+                  border: localSelectedProvider === 'groq' ? `3px solid ${isDarkMode ? '#8b5cf6' : '#6366f1'}` : `2px solid ${isDarkMode ? '#6366f1' : '#a5b4fc'}`,
+                  boxShadow: localSelectedProvider === 'groq' ? '0 4px 12px rgba(99, 102, 241, 0.3)' : 'none',
+                  transform: localSelectedProvider === 'groq' ? 'scale(1.02)' : 'scale(1)',
+                  transition: 'all 0.2s ease-in-out',
+                  position: 'relative',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => {
+                  if (localSelectedProvider !== 'groq') {
+                    e.target.style.transform = 'scale(1.01)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.2)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (localSelectedProvider !== 'groq') {
+                    e.target.style.transform = 'scale(1)';
+                    e.target.style.boxShadow = 'none';
+                  }
+                }}
+              >
+                {localSelectedProvider === 'groq' && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '-8px',
+                    backgroundColor: '#6366f1',
+                    color: 'white',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}>
+                    ACTIVE
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="radio"
+                      name="provider"
+                      value="groq"
+                      checked={localSelectedProvider === 'groq'}
+                      onChange={() => {}} // Handled by card click
+                      style={{ marginRight: '8px', pointerEvents: 'none' }}
+                    />
+                    <div>
+                      <strong style={{ color: isDarkMode ? '#f9fafb' : '#111827' }}>⚡ Groq</strong>
+                      <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                        Lightning-fast inference with open-source models
+                      </div>
+                      <div style={{ fontSize: '11px', color: isDarkMode ? '#6b7280' : '#9ca3af', marginTop: '2px' }}>
+                        <strong>Features:</strong> Llama, Mixtral, Gemma models with incredible speed
+                      </div>
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: localApiKeys.groq ? (isDarkMode ? '#065f46' : '#d1fae5') : (isDarkMode ? '#7f1d1d' : '#fee2e2'),
+                    color: localApiKeys.groq ? (isDarkMode ? '#34d399' : '#059669') : (isDarkMode ? '#fca5a5' : '#dc2626')
+                  }}>
+                    {localApiKeys.groq ? '✅ Connected' : '✗ Not Set'}
+                  </span>
+                </div>
+                <input
+                  type="password"
+                  placeholder="gsk_..."
+                  value={localApiKeys.groq || ''}
+                  onChange={(e) => handleApiKeyChange('groq', e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: `1px solid ${isDarkMode ? '#374151' : '#d1d5db'}`,
+                    backgroundColor: isDarkMode ? '#374151' : '#ffffff',
+                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
+                    marginBottom: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+                <small style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
+                  Get your key from: <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: isDarkMode ? '#60a5fa' : '#3b82f6' }}>Groq Console</a>
+                </small>
+              </div>
+
               {/* Usage Tips */}
               <div style={{
                 backgroundColor: isDarkMode ? '#065f46' : '#ecfdf5',
@@ -5142,7 +5883,7 @@ Return the content in this exact format for each requested section:
                       color: isDarkMode ? '#6ee7b7' : '#047857'
                     }}>
                       <li><strong>Local Storage Only:</strong> Your API keys are stored exclusively in your browser's local storage</li>
-                      <li><strong>Direct Communication:</strong> API requests go directly from your browser to AI providers (OpenAI, Anthropic, Google)</li>
+                      <li><strong>Direct Communication:</strong> API requests go directly from your browser to AI providers (OpenAI, Anthropic, Google, GPT-5 Nano, Mistral, Groq)</li>
                       <li><strong>No Server Transit:</strong> This app's servers never see, store, or have access to your API keys</li>
                       <li><strong>Switch Anytime:</strong> You can change providers or update keys anytime - changes are immediate</li>
                       <li><strong>Secure by Design:</strong> Even if our servers were compromised, your API keys would remain safe</li>
@@ -5842,6 +6583,7 @@ Return the content in this exact format for each requested section:
                   {[
                     { label: 'Overview', checked: notesIncludeOverview, setter: setNotesIncludeOverview },
                     { label: 'Key Concepts', checked: notesIncludeKeyConcepts, setter: setNotesIncludeKeyConcepts },
+                    { label: 'Example', checked: notesIncludeExample, setter: setNotesIncludeExample },
                     { label: 'Techniques', checked: notesIncludeTechniques, setter: setNotesIncludeTechniques },
                     { label: 'Tools', checked: notesIncludeTools, setter: setNotesIncludeTools },
                     { label: 'Important Points', checked: notesIncludeImportantPoints, setter: setNotesIncludeImportantPoints },

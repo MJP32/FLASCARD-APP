@@ -1,0 +1,404 @@
+/* Tour Overlay */
+.tour-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 99998;
+  cursor: pointer;
+}
+
+/* Highlight Box */
+.tour-highlight {
+  position: absolute;
+  border: 3px solid #4CAF50;
+  border-radius: 8px;
+  box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.7);
+  animation: pulse 2s infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.7), 0 0 20px rgba(76, 175, 80, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.7), 0 0 30px rgba(76, 175, 80, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.7), 0 0 20px rgba(76, 175, 80, 0.5);
+  }
+}
+
+/* Tooltip */
+.tour-tooltip {
+  position: absolute;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  padding: 0;
+  min-width: 320px;
+  max-width: 400px;
+  z-index: 99999;
+  transform: translate(-50%, 0);
+  animation: slideIn 0.3s ease-out;
+}
+
+.tour-tooltip-top {
+  transform: translate(-50%, -100%);
+}
+
+.tour-tooltip-left {
+  transform: translate(-100%, -50%);
+}
+
+.tour-tooltip-right {
+  transform: translate(0, -50%);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Tooltip Arrow */
+.tour-tooltip::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.tour-tooltip-bottom::before {
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 0 10px 10px 10px;
+  border-color: transparent transparent white transparent;
+}
+
+.tour-tooltip-top::before {
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 10px 10px 0 10px;
+  border-color: white transparent transparent transparent;
+}
+
+.tour-tooltip-left::before {
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 0 10px 10px;
+  border-color: transparent transparent transparent white;
+}
+
+.tour-tooltip-right::before {
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 10px 10px 10px 0;
+  border-color: transparent white transparent transparent;
+}
+
+/* Tooltip Header */
+.tour-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.tour-tooltip-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #333;
+  font-weight: 600;
+}
+
+.tour-step-indicator {
+  font-size: 14px;
+  color: #666;
+  background: #f0f0f0;
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+/* Tooltip Content */
+.tour-tooltip-content {
+  padding: 20px 24px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #555;
+}
+
+.tour-tooltip-content p {
+  margin: 0 0 12px;
+}
+
+.tour-tooltip-content p:last-child {
+  margin-bottom: 0;
+}
+
+.tour-list {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.tour-list li {
+  margin-bottom: 8px;
+}
+
+.tour-tip {
+  background: #e8f5e9;
+  color: #2e7d32;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-top: 12px !important;
+  font-size: 14px;
+  display: block;
+}
+
+/* Tour Action */
+.tour-action {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.tour-action-button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tour-action-button:hover {
+  background: #45a049;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+/* Tooltip Footer */
+.tour-tooltip-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.tour-keyboard-hint {
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.tour-tooltip-footer > div:last-child {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Tour Buttons */
+.tour-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.tour-button-primary {
+  background: #2196F3;
+  color: white;
+}
+
+.tour-button-primary:hover {
+  background: #1976D2;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.tour-button-secondary {
+  background: #f0f0f0;
+  color: #666;
+}
+
+.tour-button-secondary:hover {
+  background: #e0e0e0;
+}
+
+.tour-button-skip {
+  background: transparent;
+  color: #999;
+  padding: 10px 16px;
+}
+
+.tour-button-skip:hover {
+  color: #666;
+  background: #f5f5f5;
+}
+
+/* Dark Mode Support */
+.dark .tour-tooltip {
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+.dark .tour-tooltip-header {
+  border-bottom-color: #444;
+}
+
+.dark .tour-tooltip-header h3 {
+  color: #fff;
+}
+
+.dark .tour-step-indicator {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+.dark .tour-tooltip-content {
+  color: #ccc;
+}
+
+.dark .tour-tooltip-footer {
+  border-top-color: #444;
+}
+
+.dark .tour-keyboard-hint span {
+  color: #999 !important;
+}
+
+.dark .tour-tip {
+  background: #1b5e20;
+  color: #a5d6a7;
+}
+
+.dark .tour-button-secondary {
+  background: #3a3a3a;
+  color: #ccc;
+}
+
+.dark .tour-button-secondary:hover {
+  background: #444;
+}
+
+.dark .tour-button-skip {
+  color: #888;
+}
+
+.dark .tour-button-skip:hover {
+  background: #3a3a3a;
+  color: #aaa;
+}
+
+/* Better viewport positioning */
+.tour-tooltip {
+  max-height: 80vh;
+  overflow-y: auto;
+  position: absolute;
+  z-index: 99999;
+}
+
+/* Centered tooltips for problematic steps */
+.tour-tooltip.tour-centered {
+  transform: translate(-50%, -50%) !important;
+  left: 50% !important;
+  top: 50% !important;
+  position: fixed !important;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+  margin: 20px;
+}
+
+.tour-tooltip.tour-centered::before {
+  display: none; /* Hide arrow for centered tooltips */
+}
+
+.tour-tooltip-content {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .tour-tooltip {
+    min-width: 280px;
+    max-width: calc(100vw - 40px);
+    max-height: 70vh;
+  }
+
+  .tour-tooltip-header {
+    padding: 16px 20px 12px;
+  }
+
+  .tour-tooltip-content {
+    padding: 16px 20px;
+    max-height: 40vh;
+  }
+
+  .tour-tooltip-footer {
+    padding: 12px 20px 16px;
+    gap: 8px;
+  }
+
+  .tour-tooltip-footer > div:last-child {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .tour-button {
+    font-size: 13px;
+    padding: 8px 16px;
+    flex: 1;
+    min-width: 80px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tour-tooltip {
+    min-width: 260px;
+    max-width: calc(100vw - 20px);
+    max-height: 60vh;
+    transform: none !important;
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    margin-top: -30vh;
+    margin-left: calc(-50vw + 10px);
+  }
+
+  .tour-tooltip::before {
+    display: none; /* Hide arrow on very small screens */
+  }
+
+  .tour-tooltip-content {
+    max-height: 30vh;
+    font-size: 14px;
+  }
+
+  .tour-button {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}

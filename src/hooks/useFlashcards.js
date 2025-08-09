@@ -128,10 +128,87 @@ export const useFlashcards = (firebaseApp, userId) => {
     }
   }, [firebaseApp]);
 
+  // Load anonymous cards from localStorage
+  const loadAnonymousCards = useCallback(() => {
+    try {
+      const storedCards = JSON.parse(localStorage.getItem('anonymous_flashcards') || '[]');
+      console.log('📱 Loading anonymous cards from localStorage:', storedCards.length, 'cards');
+      
+      // Convert dates back from strings
+      const processedCards = storedCards.map(card => ({
+        ...card,
+        createdAt: new Date(card.createdAt),
+        nextReviewAt: new Date(card.nextReviewAt),
+        lastReviewedAt: card.lastReviewedAt ? new Date(card.lastReviewedAt) : null,
+        dueDate: new Date(card.nextReviewAt) // Use nextReviewAt as dueDate
+      }));
+      
+      setFlashcards(processedCards);
+      setIsLoading(false);
+      return processedCards;
+    } catch (error) {
+      console.error('❌ Failed to load anonymous cards:', error);
+      setFlashcards([]);
+      setIsLoading(false);
+      return [];
+    }
+  }, []);
+
+  // Add card to localStorage for anonymous users
+  const addLocalFlashcard = useCallback((cardData) => {
+    console.log('📱 Adding card to localStorage for anonymous user:', cardData);
+    try {
+      const existingCards = JSON.parse(localStorage.getItem('anonymous_flashcards') || '[]');
+      existingCards.push(cardData);
+      localStorage.setItem('anonymous_flashcards', JSON.stringify(existingCards));
+      
+      // Update state immediately
+      setFlashcards(prev => [...prev, {
+        ...cardData,
+        dueDate: new Date(cardData.nextReviewAt)
+      }]);
+      
+      console.log('✅ Successfully added card to localStorage');
+    } catch (error) {
+      console.error('❌ Failed to add card to localStorage:', error);
+    }
+  }, []);
+
+  // Expose addLocalFlashcard to window for access from App.js
+  useEffect(() => {
+    window.addLocalFlashcard = addLocalFlashcard;
+    return () => {
+      delete window.addLocalFlashcard;
+    };
+  }, [addLocalFlashcard]);
+
+  // Listen for custom event when anonymous cards are added
+  useEffect(() => {
+    const handleAnonymousCardAdded = () => {
+      console.log('🔄 Anonymous card added event received, reloading cards');
+      loadAnonymousCards();
+    };
+
+    window.addEventListener('anonymous-card-added', handleAnonymousCardAdded);
+    return () => {
+      window.removeEventListener('anonymous-card-added', handleAnonymousCardAdded);
+    };
+  }, [loadAnonymousCards]);
+
   // Set up real-time listener for flashcards
   useEffect(() => {
-    if (!db || !userId) {
-      console.log('📦 Flashcards hook waiting for:', { db: !!db, userId });
+    if (!db) {
+      console.log('📦 No database available, checking for anonymous cards...');
+      if (!userId) {
+        // Anonymous user - load from localStorage
+        loadAnonymousCards();
+      }
+      return;
+    }
+
+    if (!userId) {
+      console.log('📦 No userId, loading anonymous cards from localStorage');
+      loadAnonymousCards();
       return;
     }
 
@@ -218,7 +295,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       setError(`Failed to initialize flashcards: ${error.message}`);
       setIsLoading(false);
     }
-  }, [db, userId]);
+  }, [db, userId, loadAnonymousCards]);
 
   /**
    * Infer level from FSRS parameters

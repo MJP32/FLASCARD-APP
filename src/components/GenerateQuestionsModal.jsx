@@ -395,8 +395,7 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
           { role: 'system', content: 'You are an expert educational content creator who generates diverse, thought-provoking flashcard questions. You excel at creating varied question types that explore topics from multiple angles. Always respond with valid JSON.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.9,
-        max_tokens: 1000
+        max_completion_tokens: 1000
       })
     });
 
@@ -433,7 +432,6 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
         body: JSON.stringify({
           model: 'claude-3-sonnet-20240229',
           max_tokens: 1000,
-          temperature: 0.9,
           messages: [
             { role: 'user', content: prompt }
           ]

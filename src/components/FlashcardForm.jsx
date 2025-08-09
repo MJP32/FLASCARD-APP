@@ -863,6 +863,8 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
         return await callAnthropic(prompt, apiKey);
       case 'gemini':
         return await callGemini(prompt, apiKey);
+      case 'gpt5nano':
+        return await callGPT5Nano(prompt, apiKey);
       default:
         throw new Error('Unsupported AI provider');
     }
@@ -881,8 +883,7 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
           { role: 'system', content: 'You are an expert educational content enhancer specializing in organizing information into clear, structured lists. Always format enhanced answers as HTML lists with key concepts, using proper <ul><li> or <ol><li> tags. Focus on breaking down complex information into digestible, well-organized points.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.7,
-        max_tokens: 800
+        max_completion_tokens: 800
       })
     });
 
@@ -908,7 +909,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
         body: JSON.stringify({
           model: 'claude-3-sonnet-20240229',
           max_tokens: 800,
-          temperature: 0.7,
           messages: [
             { role: 'user', content: prompt }
           ]
@@ -991,6 +991,32 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
 
     const data = await response.json();
     return data.candidates[0]?.content?.parts[0]?.text || '';
+  };
+
+  const callGPT5Nano = async (prompt, apiKey) => {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a helpful learning assistant focused on creating educational flashcards.' },
+          { role: 'user', content: prompt }
+        ],
+        max_completion_tokens: 800
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`GPT-5 Nano API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content || '';
   };
 
   // Delete handling functions

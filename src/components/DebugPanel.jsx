@@ -23,8 +23,18 @@ const DebugPanel = ({ firebaseApp, flashcards, currentCard }) => {
 
         const info = {
           currentUser: user ? { uid: user.uid, email: user.email } : null,
+          auth: user ? {
+            isAuthenticated: true,
+            isAnonymous: user.isAnonymous,
+            uid: user.uid,
+            email: user.email
+          } : { isAuthenticated: false, isAnonymous: false },
           currentCardLocal: currentCard,
           localCardsCount: flashcards?.length || 0,
+          flashcards: {
+            local: flashcards?.length || 0,
+            firestore: 0 // Will be updated below
+          },
           error: null
         };
 
@@ -44,6 +54,7 @@ const DebugPanel = ({ firebaseApp, flashcards, currentCard }) => {
           const querySnapshot = await getDocs(q);
           info.firestoreCards = [];
           info.firestoreCardsCount = querySnapshot.size;
+          info.flashcards.firestore = querySnapshot.size;
           
           querySnapshot.forEach((doc) => {
             info.firestoreCards.push({
@@ -117,10 +128,16 @@ const DebugPanel = ({ firebaseApp, flashcards, currentCard }) => {
       <div style={{ fontSize: '14px' }}>
         <div style={{ marginBottom: '15px', padding: '10px', background: '#f8f9fa', borderRadius: '5px' }}>
           <strong>👤 Current User:</strong><br />
-          {debugInfo.currentUser ? (
+          {debugInfo.auth?.isAuthenticated ? (
             <>
-              UID: {debugInfo.currentUser.uid}<br />
-              Email: {debugInfo.currentUser.email || 'Anonymous'}
+              UID: {debugInfo.auth.uid}<br />
+              Email: {debugInfo.auth.email || 'Anonymous'}<br />
+              <span style={{
+                color: debugInfo.auth.isAnonymous ? '#f59e0b' : '#10b981',
+                fontWeight: 'bold'
+              }}>
+                {debugInfo.auth.isAnonymous ? '🔓 Anonymous User' : '🔐 Registered User'}
+              </span>
             </>
           ) : 'Not logged in'}
         </div>
@@ -172,6 +189,78 @@ const DebugPanel = ({ firebaseApp, flashcards, currentCard }) => {
           <div style={{ padding: '10px', background: '#f8d7da', borderRadius: '5px', color: '#721c24' }}>
             <strong>❌ Error:</strong><br />
             {debugInfo.error}
+          </div>
+        )}
+
+        {/* Force create default card button for users with no cards */}
+        {debugInfo.flashcards?.local === 0 && (
+          <div style={{ marginTop: '10px', padding: '10px', background: '#fff3cd', borderRadius: '5px', border: '1px solid #ffeaa7' }}>
+            <div style={{ marginBottom: '5px', fontSize: '12px', color: '#856404' }}>
+              <strong>🎯 No cards found - Create demo card</strong>
+            </div>
+            <div style={{ marginBottom: '8px', fontSize: '11px', color: '#856404' }}>
+              Anonymous: {debugInfo.auth?.isAnonymous ? 'Yes' : 'No'}<br/>
+              Has addLocalFlashcard: {!!window.addLocalFlashcard ? 'Yes' : 'No'}<br/>
+              Has createAnonymousDefaultCard: {!!window.createAnonymousDefaultCard ? 'Yes' : 'No'}
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  console.log('🎯 Manual demo card creation started');
+
+                  const demoCard = {
+                    id: 'demo-manual-' + Date.now(),
+                    question: 'What is 2 + 2?',
+                    answer: '4',
+                    category: 'Math',
+                    subCategory: 'Addition',
+                    sub_category: 'Addition',
+                    active: true,
+                    createdAt: new Date(),
+                    lastReviewedAt: null,
+                    nextReviewAt: new Date(),
+                    dueDate: new Date(),
+                    difficulty: 5,
+                    easeFactor: 2.5,
+                    interval: 1,
+                    reviewCount: 0,
+                    level: 'new',
+                    isDemo: true,
+                    tags: ['demo', 'sample']
+                  };
+
+                  // Direct localStorage method (most reliable)
+                  console.log('📱 Using direct localStorage method');
+                  const existingCards = JSON.parse(localStorage.getItem('anonymous_flashcards') || '[]');
+
+                  // Remove any existing demo cards first
+                  const filteredCards = existingCards.filter(card => card.question !== 'What is 2 + 2?');
+                  filteredCards.push(demoCard);
+
+                  localStorage.setItem('anonymous_flashcards', JSON.stringify(filteredCards));
+                  console.log('✅ Demo card saved to localStorage');
+
+                  // Force reload to ensure card appears
+                  alert('✅ Demo card created! The page will reload to show the card.');
+                  window.location.reload();
+
+                } catch (error) {
+                  console.error('❌ Failed to create demo card:', error);
+                  alert('❌ Failed to create default card: ' + error.message);
+                }
+              }}
+              style={{
+                background: '#f59e0b',
+                color: 'white',
+                border: 'none',
+                padding: '8px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              🎯 Create Demo Card Now
+            </button>
           </div>
         )}
       </div>

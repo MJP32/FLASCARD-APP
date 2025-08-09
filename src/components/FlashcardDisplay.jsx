@@ -155,7 +155,7 @@ const FlashcardDisplay = ({
           {/* Explain Button - Next to Card Info */}
           {onExplain && (
             <button
-              className="explain-btn-card"
+              className="explain-btn-card explain-button"
               onClick={(e) => {
                 e.stopPropagation();
                 onExplain();
@@ -338,11 +338,12 @@ const FlashcardDisplay = ({
         <div className="keyboard-shortcuts">
           <div className="shortcuts-hint">
             <small>
-              ⌨️ <strong>Keyboard Shortcuts:</strong> 
-              <kbd>Space</kbd> Show Answer | 
-              <kbd>←/→</kbd> Navigate | 
-              <kbd>1-4</kbd> Rate Card | 
-              <kbd>Enter</kbd> Next Card
+              ⌨️ <strong>Shortcuts:</strong> 
+              <kbd>Space</kbd> Show Answer     •     
+              <kbd>←/→</kbd> Navigate     •     
+              <kbd>1-4</kbd> Rate     •     
+              <kbd>E</kbd> Edit     •     
+              <kbd>M</kbd> Manage
             </small>
           </div>
         </div>
@@ -395,7 +396,7 @@ const FlashcardDisplay = ({
           {/* Similar Questions Button */}
           {onGenerateQuestions && (
             <button
-              className="generate-questions-btn"
+              className="generate-questions-btn generate-button"
               onClick={onGenerateQuestions}
               aria-label="Generate similar questions"
               title="Generate similar questions based on this card"

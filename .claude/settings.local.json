@@ -59,7 +59,8 @@
       "Bash(/dev/null)",
       "Bash(npm run lint)",
       "Bash(npm run:*)",
-      "Bash(firebase deploy:*)"
+      "Bash(firebase deploy:*)",
+      "Bash(export FAST_REFRESH=false)"
     ],
     "deny": []
   }
