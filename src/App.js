@@ -10,7 +10,6 @@ import ImportExportModal from './components/ImportExportModal';
 import GenerateQuestionsModal from './components/GenerateQuestionsModal';
 import ManageCardsModal from './components/ManageCardsModal';
 import Calendar from './Calendar';
-import RichTextEditor from './RichTextEditor';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -189,13 +188,6 @@ function App() {
   const [resizeDirection, setResizeDirection] = useState('');
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  
-  // Notes window drag states
-  const [isNotesDragging, setIsNotesDragging] = useState(false);
-  const [isNotesResizing, setIsNotesResizing] = useState(false);
-  const [notesResizeDirection, setNotesResizeDirection] = useState('');
-  const [notesDragOffset, setNotesDragOffset] = useState({ x: 0, y: 0 });
-  const [notesResizeStart, setNotesResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
   // Message states
   const [message, setMessage] = useState('');
@@ -216,11 +208,6 @@ function App() {
     gemini: apiKeys.gemini || ''
   });
   const [localSelectedProvider, setLocalSelectedProvider] = useState(selectedProvider);
-
-  // Session-wide notes states
-  const [notes, setNotes] = useState(() => localStorage.getItem('flashcard_session_notes') || '');
-  const [notesCopied, setNotesCopied] = useState(false);
-  const [notesSaved, setNotesSaved] = useState(false);
 
   // Streak tracking state
   const [streakDays, setStreakDays] = useState(0);
@@ -250,11 +237,7 @@ function App() {
   const [isCategoriesCollapsed, setIsCategoriesCollapsed] = useState(window.innerWidth <= 768);
   const [isSubCategoriesCollapsed, setIsSubCategoriesCollapsed] = useState(window.innerWidth <= 768);
   const [isLevelsCollapsed, setIsLevelsCollapsed] = useState(window.innerWidth <= 768);
-  const [isNotesCollapsed, setIsNotesCollapsed] = useState(window.innerWidth <= 768);
-  const [isNotesPopouted, setIsNotesPopouted] = useState(false);
-  const [notesWindowPosition, setNotesWindowPosition] = useState({ x: 100, y: 100 });
-  const [notesWindowSize, setNotesWindowSize] = useState({ width: 600, height: 700 });
-  
+
   // Explain functionality state
   const [showExplainModal, setShowExplainModal] = useState(false);
   const [explainPrompt, setExplainPrompt] = useState('');
@@ -1082,28 +1065,6 @@ function App() {
     setWindowSize({ width: 1400, height: 900 });
   };
 
-  // Notes popout handlers
-  const handleNotesPopout = () => {
-    setIsNotesPopouted(true);
-    setIsNotesCollapsed(false); // Ensure notes are expanded when popped out
-    // Center the notes window
-    const newWidth = 600;
-    const newHeight = 700;
-    setNotesWindowPosition({ 
-      x: (window.innerWidth - newWidth) / 2, 
-      y: Math.max(20, (window.innerHeight - newHeight) / 2)
-    });
-    setNotesWindowSize({ width: newWidth, height: newHeight });
-    // No direct DOM manipulation
-  };
-
-  const handleCloseNotesPopout = () => {
-    setIsNotesPopouted(false);
-    setNotesWindowPosition({ x: 100, y: 100 });
-    setNotesWindowSize({ width: 600, height: 700 });
-    // No direct DOM manipulation
-  };
-
   // Explain functionality handlers
   const handleOpenExplain = () => {
     if (currentCard) {
@@ -1268,19 +1229,13 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         return processNode(tempDiv).trim();
       };
       
-      // Create a formatted explanation with a clear heading
-      const explanationTitle = `💡 AI EXPLANATION`;
+      // Create explanation text for the tooltip
       const explanationText = htmlToText(cleanResponse);
-      const explanationContent = `${explanationTitle}\n${'='.repeat(explanationTitle.length)}\n\n${explanationText}`;
-      
-      const currentNotes = notes.trim();
-      const newNotes = currentNotes ? `${currentNotes}\n\n${explanationContent}` : explanationContent;
-      
-      // Debug logging to see what we're getting
+
+      // Debug logging
       console.log('AI Response:', response);
       console.log('Clean Response:', cleanResponse);
-      console.log('Final Notes Content:', newNotes);
-      
+
       // Add explanation to question as dropdown if checkbox is checked
       if (addExplanationToQuestion && currentCard) {
         // Create a brief version of the explanation for the dropdown
@@ -1315,14 +1270,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           }
         }
       }
-      
-      // Update notes directly - try to preserve HTML formatting
-      setNotes(newNotes);
-      
-      // Trigger a manual update to the editor if needed
-      setTimeout(() => {
-        localStorage.setItem('flashcard_session_notes', newNotes);
-      }, 100);
+
       handleCloseExplain();
     } catch (error) {
       console.error('Explanation generation error:', error);
@@ -1504,79 +1452,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     setResizeDirection('');
   }, []);
 
-  // Notes window drag handlers
-  const handleNotesMouseDown = (e) => {
-    if (isNotesResizing) return;
-    setIsNotesDragging(true);
-    setNotesDragOffset({
-      x: e.clientX - notesWindowPosition.x,
-      y: e.clientY - notesWindowPosition.y
-    });
-  };
-
-  const handleNotesResizeStart = (e, direction) => {
-    e.stopPropagation();
-    setIsNotesResizing(true);
-    setNotesResizeDirection(direction);
-    setNotesResizeStart({
-      x: e.clientX,
-      y: e.clientY,
-      width: notesWindowSize.width,
-      height: notesWindowSize.height
-    });
-  };
-
-  const handleNotesMouseMove = useCallback((e) => {
-    if (isNotesDragging && isNotesPopouted) {
-      const newX = e.clientX - notesDragOffset.x;
-      const newY = e.clientY - notesDragOffset.y;
-      
-      // Keep window within viewport
-      const maxX = window.innerWidth - notesWindowSize.width;
-      const maxY = window.innerHeight - notesWindowSize.height;
-      
-      setNotesWindowPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
-      });
-    }
-    
-    if (isNotesResizing) {
-      const deltaX = e.clientX - notesResizeStart.x;
-      const deltaY = e.clientY - notesResizeStart.y;
-      let newWidth = notesWindowSize.width;
-      let newHeight = notesWindowSize.height;
-      let newX = notesWindowPosition.x;
-      let newY = notesWindowPosition.y;
-
-      if (notesResizeDirection.includes('e')) newWidth = notesResizeStart.width + deltaX;
-      if (notesResizeDirection.includes('w')) {
-        newWidth = notesResizeStart.width - deltaX;
-        newX = notesWindowPosition.x + deltaX;
-      }
-      if (notesResizeDirection.includes('s')) newHeight = notesResizeStart.height + deltaY;
-      if (notesResizeDirection.includes('n')) {
-        newHeight = notesResizeStart.height - deltaY;
-        newY = notesWindowPosition.y + deltaY;
-      }
-
-      // Minimum size constraints
-      newWidth = Math.max(400, Math.min(newWidth, window.innerWidth - 50));
-      newHeight = Math.max(300, Math.min(newHeight, window.innerHeight - 50));
-
-      setNotesWindowSize({ width: newWidth, height: newHeight });
-      if (notesResizeDirection.includes('w') || notesResizeDirection.includes('n')) {
-        setNotesWindowPosition({ x: newX, y: newY });
-      }
-    }
-  }, [isNotesDragging, notesDragOffset, isNotesPopouted, isNotesResizing, notesResizeDirection, notesResizeStart, notesWindowPosition, notesWindowSize]);
-
-  const handleNotesMouseUp = useCallback(() => {
-    setIsNotesDragging(false);
-    setIsNotesResizing(false);
-    setNotesResizeDirection('');
-  }, []);
-
   useEffect(() => {
     if (isDragging || isResizing) {
       document.addEventListener('mousemove', handleMouseMove);
@@ -1587,17 +1462,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       };
     }
   }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
-
-  useEffect(() => {
-    if (isNotesDragging || isNotesResizing) {
-      document.addEventListener('mousemove', handleNotesMouseMove);
-      document.addEventListener('mouseup', handleNotesMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleNotesMouseMove);
-        document.removeEventListener('mouseup', handleNotesMouseUp);
-      };
-    }
-  }, [isNotesDragging, isNotesResizing, handleNotesMouseMove, handleNotesMouseUp]);
 
   // Handle ESC key to exit fullscreen
   useEffect(() => {
@@ -1745,21 +1609,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
   // Computed values now declared earlier in the component
 
-  // Save notes to localStorage when changed
-  useEffect(() => {
-    localStorage.setItem('flashcard_session_notes', notes);
-  }, [notes]);
-
-  // Handle notes text change
-  const handleNotesChange = (value) => {
-    setNotes(value);
-  };
-
-  // Clear notes
-  const handleClearNotes = () => {
-    setNotes('');
-  };
-  
   // Get due cards for easy access
   const pastDueCards = getPastDueCards();
   const cardsDueToday = getCardsDueToday();
@@ -3398,108 +3247,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   )}
                 </div>
               </div>
-              
-              {/* Right Side Content - Notes and Review Panel */}
-              <div className="right-side-content">
-                {/* Session Notes - Always visible (unless popped out) */}
-                {!isNotesPopouted && (
-                <div className={`notes-section-permanent ${isNotesCollapsed ? 'collapsed' : ''}`}>
-                  <div className="notes-header">
-                    <h4>📝 Notes</h4>
-                    <div className="notes-header-controls">
-                      <button
-                        className="explain-btn notes-explain-btn"
-                        onClick={handleOpenExplain}
-                        aria-label="Generate explanation"
-                        title="Generate AI explanation about the current question"
-                      >
-                        💡 Explain
-                      </button>
-                      <button
-                        className="popout-btn notes-popout-btn"
-                        onClick={handleNotesPopout}
-                        aria-label="Pop out notes"
-                        title="Pop out notes to separate window"
-                      >
-                        ⬜
-                      </button>
-                      <button
-                        className="collapse-toggle notes-collapse-toggle"
-                        onClick={() => {
-                          console.log('Notes collapse clicked, current state:', isNotesCollapsed);
-                          setIsNotesCollapsed(!isNotesCollapsed);
-                        }}
-                        aria-label={isNotesCollapsed ? "Expand notes" : "Collapse notes"}
-                      >
-                        {isNotesCollapsed ? '▼' : '▲'}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="notes-content">
-                    <div className="notes-content-wrapper">
-                      <div className="notes-editor-container">
-                        <RichTextEditor
-                          value={notes}
-                          onChange={handleNotesChange}
-                          placeholder="Take notes for your study session..."
-                          className="notes-textarea-permanent"
-                          minHeight="700px"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="notes-footer">
-                      <button 
-                        className="notes-footer-btn copy-btn"
-                        onClick={() => {
-                          // Copy notes content to clipboard
-                          const tempDiv = document.createElement('div');
-                          tempDiv.innerHTML = notes;
-                          const textContent = tempDiv.textContent || tempDiv.innerText || '';
-                          navigator.clipboard.writeText(textContent).then(() => {
-                            setNotesCopied(true);
-                            setTimeout(() => setNotesCopied(false), 2000);
-                          }).catch(err => {
-                            console.error('Failed to copy notes:', err);
-                          });
-                        }}
-                        disabled={notes.length === 0}
-                        title="Copy notes to clipboard"
-                      >
-                        {notesCopied ? '✅ Copied!' : '📋 Copy'}
-                      </button>
-                      <button 
-                        className="notes-footer-btn save-btn"
-                        onClick={() => {
-                          // Save notes to local storage or trigger save
-                          if (userId) {
-                            localStorage.setItem(`flashcard_notes_${userId}`, notes);
-                            setNotesSaved(true);
-                            setTimeout(() => setNotesSaved(false), 2000);
-                          }
-                        }}
-                        title="Save notes"
-                      >
-                        {notesSaved ? '✅ Saved!' : '💾 Save'}
-                      </button>
-                      <button 
-                        className="notes-footer-btn clear-btn"
-                        onClick={() => {
-                          if (window.confirm('Are you sure you want to clear all notes? This action cannot be undone.')) {
-                            handleClearNotes();
-                          }
-                        }}
-                        disabled={notes.length === 0}
-                        title="Clear all notes"
-                      >
-                        🗑️ Clear
-                      </button>
-                  </div>
-                </div>
-                )}
-              </div>
             </div>
           </div>
         )}
@@ -3525,201 +3272,6 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           </small>
         </div>
       </footer>
-
-      {/* Notes Popout Window */}
-      {isNotesPopouted && (
-        <>
-          {/* Overlay for notes popout */}
-          <div 
-            className="notes-popout-overlay"
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100vw',
-              height: '100vh',
-              backgroundColor: 'rgba(0, 0, 0, 0.3)',
-              zIndex: 9990
-            }}
-            onClick={handleCloseNotesPopout}
-          />
-          
-          {/* Notes popout window */}
-          <div 
-            className="notes-popout-window"
-            style={{
-              position: 'fixed',
-              left: `${notesWindowPosition.x}px`,
-              top: `${notesWindowPosition.y}px`,
-              width: `${notesWindowSize.width}px`,
-              height: `${notesWindowSize.height}px`,
-              backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
-              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)',
-              borderRadius: '8px',
-              border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-              zIndex: 9991,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden'
-            }}
-          >
-            {/* Drag handle */}
-            <div 
-              className="notes-drag-handle"
-              onMouseDown={handleNotesMouseDown}
-              style={{
-                height: '40px',
-                background: isDarkMode ? '#334155' : '#f8fafc',
-                borderBottom: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                cursor: 'move',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0 1rem',
-                userSelect: 'none'
-              }}
-            >
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: isDarkMode ? '#f1f5f9' : '#1e293b' }}>
-                📝 Notes
-              </h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button
-                  className="explain-btn notes-explain-btn-popout"
-                  onClick={handleOpenExplain}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
-                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: '0.25rem',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    transition: 'all 0.2s ease'
-                  }}
-                  aria-label="Generate explanation"
-                  title="Generate AI explanation about the current question"
-                >
-                  💡 Explain
-                </button>
-                <button
-                  className="close-btn"
-                  onClick={handleCloseNotesPopout}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '1.5rem',
-                    cursor: 'pointer',
-                    color: isDarkMode ? '#94a3b8' : '#64748b',
-                    padding: '0 0.5rem'
-                  }}
-                  aria-label="Close notes window"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            
-            {/* Notes content */}
-            <div style={{ flex: 1, padding: '1rem', overflow: 'auto' }}>
-              <RichTextEditor
-                value={notes}
-                onChange={handleNotesChange}
-                placeholder="Take notes for your study session..."
-                className="notes-textarea-popout"
-                minHeight="100%"
-              />
-            </div>
-            
-            {/* Notes actions */}
-            <div style={{
-              padding: '1rem',
-              borderTop: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-              display: 'flex',
-              gap: '0.5rem',
-              justifyContent: 'flex-end'
-            }}>
-              <button 
-                className="notes-action-btn"
-                onClick={() => {
-                  // Copy notes content to clipboard
-                  const tempDiv = document.createElement('div');
-                  tempDiv.innerHTML = notes;
-                  const textContent = tempDiv.textContent || tempDiv.innerText || '';
-                  navigator.clipboard.writeText(textContent).then(() => {
-                    setNotesCopied(true);
-                    setTimeout(() => setNotesCopied(false), 2000);
-                  }).catch(err => {
-                    console.error('Failed to copy notes:', err);
-                  });
-                }}
-                disabled={notes.length === 0}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.375rem',
-                  border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                  background: isDarkMode ? '#475569' : '#f3f4f6',
-                  color: isDarkMode ? '#f1f5f9' : '#374151',
-                  cursor: 'pointer'
-                }}
-              >
-                {notesCopied ? '✅ Copied!' : '📋 Copy'}
-              </button>
-              <button 
-                className="notes-action-btn"
-                onClick={() => {
-                  // Save notes to local storage or trigger save
-                  if (userId) {
-                    localStorage.setItem(`flashcard_notes_${userId}`, notes);
-                    setNotesSaved(true);
-                    setTimeout(() => setNotesSaved(false), 2000);
-                  }
-                }}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.375rem',
-                  border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                  background: isDarkMode ? '#475569' : '#f3f4f6',
-                  color: isDarkMode ? '#f1f5f9' : '#374151',
-                  cursor: 'pointer'
-                }}
-              >
-                {notesSaved ? '✅ Saved!' : '💾 Save'}
-              </button>
-              <button 
-                className="notes-action-btn"
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to clear all notes? This action cannot be undone.')) {
-                    handleClearNotes();
-                  }
-                }}
-                disabled={notes.length === 0}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '0.375rem',
-                  border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                  background: notes.length === 0 ? (isDarkMode ? '#374151' : '#f9fafb') : (isDarkMode ? '#dc2626' : '#fee2e2'),
-                  color: notes.length === 0 ? (isDarkMode ? '#6b7280' : '#9ca3af') : (isDarkMode ? '#fecaca' : '#dc2626'),
-                  cursor: notes.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: notes.length === 0 ? 0.5 : 1
-                }}
-                title="Clear all notes"
-              >
-                🗑️ Clear
-              </button>
-            </div>
-            
-            {/* Resize handles */}
-            <div className="resize-handle resize-n" onMouseDown={(e) => handleNotesResizeStart(e, 'n')} />
-            <div className="resize-handle resize-ne" onMouseDown={(e) => handleNotesResizeStart(e, 'ne')} />
-            <div className="resize-handle resize-e" onMouseDown={(e) => handleNotesResizeStart(e, 'e')} />
-            <div className="resize-handle resize-se" onMouseDown={(e) => handleNotesResizeStart(e, 'se')} />
-            <div className="resize-handle resize-s" onMouseDown={(e) => handleNotesResizeStart(e, 's')} />
-            <div className="resize-handle resize-sw" onMouseDown={(e) => handleNotesResizeStart(e, 'sw')} />
-            <div className="resize-handle resize-w" onMouseDown={(e) => handleNotesResizeStart(e, 'w')} />
-            <div className="resize-handle resize-nw" onMouseDown={(e) => handleNotesResizeStart(e, 'nw')} />
-          </div>
-        </>
-      )}
 
       {/* Explain Modal */}
       {showExplainModal && (
