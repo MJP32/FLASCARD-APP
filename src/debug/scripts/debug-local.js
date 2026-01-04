@@ -12,8 +12,7 @@
  * 3. Or make executable: chmod +x debug-local.js && ./debug-local.js
  */
 
-const fs = require('fs');
-const path = require('path');
+// const fs = require('fs'); // not needed in this simulation
 
 console.log('🔍 FLASHCARD CATEGORY DEBUG SCRIPT');
 console.log('='.repeat(50));

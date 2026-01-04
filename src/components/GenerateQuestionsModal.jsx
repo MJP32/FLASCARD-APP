@@ -488,7 +488,7 @@ IMPORTANT: Respond with ONLY a valid JSON array with exactly 6 questions (no ext
   };
 
   const callGemini = async (prompt, apiKey) => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

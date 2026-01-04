@@ -221,7 +221,7 @@ function App() {
   // Track initial due cards count for the day
   const [, setInitialDueCardsCount] = useState(0);
   const [cardsCompletedToday, setCardsCompletedToday] = useState(0);
-  const [initialCategoryStats, setInitialCategoryStats] = useState({});
+  const [, setInitialCategoryStats] = useState({});
   const [categoryCompletedCounts, setCategoryCompletedCounts] = useState({});
   const [, setInitialSubCategoryStats] = useState({});
   const [subCategoryCompletedCounts, setSubCategoryCompletedCounts] = useState({});
@@ -245,9 +245,8 @@ function App() {
   const [explainError, setExplainError] = useState('');
   const [addExplanationToQuestion, setAddExplanationToQuestion] = useState(true);
 
-
-  
-
+  // Card transition state to prevent flicker
+  const [isCardTransitioning, setIsCardTransitioning] = useState(false);
 
   // Initialize Firebase
   useEffect(() => {
@@ -511,6 +510,7 @@ function App() {
         window._hasLoggedCategories = true;
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flashcards, userId, filteredFlashcards, selectedCategory, selectedSubCategory, selectedLevel, showDueTodayOnly]);
 
   // Sync login screen visibility with authentication state
@@ -562,6 +562,7 @@ function App() {
         clearTimeout(timer);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthReady, userId, addFlashcard, flashcards.length, hasCheckedForDefaults]);
 
   // Handle authentication
@@ -846,20 +847,18 @@ function App() {
         localStorage.setItem(`flashcard_subcategory_completed_${userId}`, JSON.stringify(newSubCategoryCompleted));
       }
       
-      // Hide answer and move to next card
+      // Start transition - hide card content to prevent flicker
+      setIsCardTransitioning(true);
       setShowAnswer(false);
-      
-      // Let the filtering effect handle navigation automatically, but add a backup
-      // The useFlashcards hook should detect that the current card is no longer available
-      // and automatically move to the next card via smart index management
-      // console.log('🔄 Card review completed, waiting for automatic navigation...');
 
-      // Force navigation to next card after a brief delay
+      // Move to next card immediately, then end transition
+      nextCard();
+
+      // End transition after a brief delay to allow render
       setTimeout(() => {
-        // console.log('🔄 FORCING NAVIGATION: Moving to next card');
-        nextCard();
-      }, 100);
-      
+        setIsCardTransitioning(false);
+      }, 50);
+
       clearMessage();
       
     } catch (error) {
@@ -1029,33 +1028,12 @@ function App() {
   }, []);
 
   // Window management functions
-  const handleMaximize = () => {
-    setIsMaximized(true);
-    setIsPopouted(false); // Don't use popout positioning for true fullscreen
-    setWindowPosition({ x: 0, y: 0 });
-    setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-    // Removed direct DOM manipulation. Use React state and conditional rendering for fullscreen mode.
-  };
-
   const handleRestore = () => {
     // Reset all window states to default embedded view
     setIsMaximized(false);
     setIsPopouted(false);
     setWindowPosition({ x: 0, y: 0 });
     setWindowSize({ width: 1400, height: 900 });
-  };
-
-  const handlePopout = () => {
-    setIsPopouted(true);
-    setIsMaximized(false);
-    // Center the window and make it larger - use 90% of screen size or minimum size
-    const newWidth = Math.min(1800, Math.max(1400, window.innerWidth * 0.9));
-    const newHeight = Math.min(1200, Math.max(900, window.innerHeight * 0.9));
-    setWindowPosition({ 
-      x: (window.innerWidth - newWidth) / 2, 
-      y: Math.max(20, (window.innerHeight - newHeight) / 2)
-    });
-    setWindowSize({ width: newWidth, height: newHeight });
   };
 
   const handleClosePopout = () => {
@@ -1066,7 +1044,8 @@ function App() {
   };
 
   // Explain functionality handlers
-  const handleOpenExplain = () => {
+  // eslint-disable-next-line no-unused-vars
+  const _handleOpenExplain = () => {
     if (currentCard) {
       const defaultPrompt = `Explain "${currentCard.question?.replace(/<[^>]*>/g, '') || 'this question'}" including concepts and why it is important to know`;
       setExplainPrompt(defaultPrompt);
@@ -1357,7 +1336,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
   };
 
   const callGemini = async (prompt, apiKey) => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1388,10 +1367,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     return content;
   };
 
-  const handleRestorePosition = () => {
-    // This function should restore to default embedded view, same as handleRestore
-    handleRestore();
-  };
+  // handleRestorePosition was intentionally removed (previously unused)
 
   const handleMouseDown = (e) => {
     if (isMaximized || isResizing) return;
@@ -1651,7 +1627,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       const storedDate = localStorage.getItem(`flashcard_due_date_${userId}`);
       const storedCount = localStorage.getItem(`flashcard_initial_due_${userId}`);
       const storedCompleted = localStorage.getItem(`flashcard_completed_today_${userId}`);
-      const storedCategoryStats = localStorage.getItem(`flashcard_initial_category_stats_${userId}`);
+      // eslint-disable-next-line no-unused-vars
+      const _storedCategoryStats = localStorage.getItem(`flashcard_initial_category_stats_${userId}`);
       const storedCategoryCompleted = localStorage.getItem(`flashcard_category_completed_${userId}`);
       const storedSubCategoryStats = localStorage.getItem(`flashcard_initial_subcategory_stats_${userId}`);
       const storedSubCategoryCompleted = localStorage.getItem(`flashcard_subcategory_completed_${userId}`);
@@ -1689,6 +1666,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         setSubCategoryCompletedCounts(storedSubCategoryCompleted ? JSON.parse(storedSubCategoryCompleted) : {});
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, allDueCards.length, categoryStats, getAllSubCategoryStats]);
 
   // Fix completion count inconsistencies - DISABLED to prevent infinite loop
@@ -1813,6 +1791,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       console.log('⚠️ WARNING: Due cards exist but none are showing!');
       debugDueCards(flashcards, selectedCategory, selectedSubCategory);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pastDueCards.length, cardsDueToday.length, allDueCards.length, filteredDueCards.length, filteredFlashcards.length, showDueTodayOnly, selectedCategory, selectedSubCategory, flashcards]);
 
   // CATEGORY SYNC DEBUG: Track category changes to identify timing issues
@@ -2218,6 +2197,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           case 'easy':
             stats.easy++;
             break;
+          default:
+            break;
         }
       }
     });
@@ -2243,14 +2224,9 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       {/* Header */}
       <header className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}>
         <div className={`header-layout ${isHeaderCollapsed ? 'hidden' : ''}`}>
-          {/* Left Section - User Welcome */}
-          <div className="header-left">
-            {/* Welcome panel removed */}
-          </div>
-
           {/* Left Section - Logo */}
-          <div 
-            className="header-left-logo clickable-logo"
+          <div
+            className="header-logo clickable-logo"
             onClick={() => {
               setShowSettingsModal(true);
               // Toggle interval settings to show FSRS explanation
@@ -2264,79 +2240,89 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             <p className="app-subtitle">AI Learning Platform</p>
           </div>
 
-          {/* Right Section - Actions */}
-          <div className="header-right">
-            <div className="actions-toggle-section">
-              {/* Action Buttons */}
-              <div className="action-buttons">
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowManageCardsModal(true)}
-                  title="Manage cards (M)"
-                >
-                  📋 Manage Cards
-                </button>
+          {/* Center Section - Action Buttons */}
+          <div className="header-center">
+            <div className="action-buttons">
+              <button
+                className="header-btn"
+                onClick={() => setShowManageCardsModal(true)}
+                title="Manage cards (M)"
+              >
+                Manage Cards
+              </button>
 
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowCalendarModal(true)}
-                  title="View calendar"
-                >
-                  📅 Calendar
-                </button>
+              <button
+                className="header-btn"
+                onClick={() => setShowCalendarModal(true)}
+                title="View calendar"
+              >
+                Calendar
+              </button>
 
-                {/* API Key Dropdown Button */}
-                <div className="api-key-dropdown-wrapper" style={{ position: 'relative', display: 'inline-block' }}>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setShowApiKeyModal(true)}
-                    title="Show API Keys"
-                    style={{ minWidth: '110px' }}
-                  >
-                    🔑 API Key
-                  </button>
-                  {/* API Key Modal will be moved to end of component */}
-                </div>
+              <button
+                className="header-btn"
+                onClick={() => setShowApiKeyModal(true)}
+                title="Configure API Keys"
+              >
+                API Keys
+              </button>
 
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowSettingsModal(true)}
-                  title="Settings (S)"
-                >
-                  ⚙️ Settings
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setShowAccountModal(true)}
-                  title="Account Information"
-                >
-                  👤 Account
-                </button>
+              <button
+                className="header-btn"
+                onClick={() => setShowSettingsModal(true)}
+                title="Settings (S)"
+              >
+                Settings
+              </button>
 
-                {/* Header Toggle Arrow */}
-                <button 
-                  className="header-arrow-toggle"
-                  onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-                  aria-label="Collapse header"
-                  title="Hide header controls"
-                >
-                  ▲
-                </button>
-              </div>
+              <button
+                className="header-btn"
+                onClick={() => setShowAccountModal(true)}
+                title="Account Information"
+              >
+                Account
+              </button>
+
+              <button
+                className="header-btn"
+                onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+                aria-label={isHeaderCollapsed ? "Exit focus mode" : "Enter focus mode"}
+                title={isHeaderCollapsed ? "Exit focus mode" : "Enter focus mode"}
+                style={{ background: '#7c3aed' }}
+              >
+                {isHeaderCollapsed ? "Exit Focus" : "Focus Mode"}
+              </button>
             </div>
           </div>
+
+          {/* Right Section - Daily Progress */}
+          {((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
+            <div className="header-right-progress">
+              <div className="daily-progress-compact">
+                <span className="progress-label">{cardsCompletedToday}/{cardsCompletedToday + cardsDueToday.length}</span>
+                <div className="progress-bar-mini">
+                  <div
+                    className="progress-bar-fill-mini"
+                    style={{
+                      width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%`
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        
-        {/* Show toggle button when header is collapsed */}
+
+        {/* Show toggle button when in focus mode */}
         {isHeaderCollapsed && (
-          <div className="collapsed-header-controls">
+          <div className="focus-mode-controls">
             <button
-              className="header-toggle-btn-collapsed collapse-toggle header-collapse-toggle"
+              className="focus-mode-exit-btn"
               onClick={() => setIsHeaderCollapsed(false)}
-              aria-label="Expand header"
-              title="Show header controls"
+              aria-label="Exit focus mode"
+              title="Exit focus mode"
             >
-              ▼
+              Exit Focus
             </button>
           </div>
         )}
@@ -2460,7 +2446,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     margin: '1.5rem 0',
                     padding: '1rem',
                     backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: '8px'
+                    borderRadius: '4px'
                   }}>
                     <p>📊 Today's Stats:</p>
                     <p>✅ Cards reviewed today: {cardsReviewedToday.length}</p>
@@ -2491,9 +2477,23 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   <>
                     <h2>No flashcards available for the current filters.</h2>
                     <p>
-                      Try adjusting your filters (category, subcategory, level, due/starred toggles) or
-                      <strong>create new flashcards</strong> or <strong>import existing collections</strong> to get started!
+                      Try adjusting your filters or reset them to see all cards.
                     </p>
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setShowDueTodayOnly(false);
+                        setShowStarredOnly(false);
+                        setSelectedCategory('All');
+                        setSelectedSubCategory('All');
+                        setSelectedLevel('All');
+                        setMessage('Filters reset - showing all cards');
+                        setTimeout(() => setMessage(''), 3000);
+                      }}
+                      style={{ marginBottom: '1rem' }}
+                    >
+                      🔄 Reset All Filters
+                    </button>
                   </>
                 ) : (
                   // When specific category selected but no cards - auto-navigate to optimal category/subcategory
@@ -2509,23 +2509,26 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   />
                 )}
                 <div className="no-cards-actions">
-                  <button 
+                  <button
                     className="btn btn-primary"
-                    onClick={() => setShowManageCardsModal(true)}
-                  >
-                    📋 Manage Cards
-                  </button>
-                  
-                  <button 
-                    className="btn btn-outline"
                     onClick={() => {
+                      setShowDueTodayOnly(false);
+                      setShowStarredOnly(false);
                       setSelectedCategory('All');
                       setSelectedSubCategory('All');
-                      setMessage('Switched to All categories');
+                      setSelectedLevel('All');
+                      setMessage('Filters reset - showing all cards');
                       setTimeout(() => setMessage(''), 3000);
                     }}
                   >
-                    📂 View All Categories
+                    🔄 Reset All Filters
+                  </button>
+
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setShowManageCardsModal(true)}
+                  >
+                    📋 Manage Cards
                   </button>
                 </div>
               </>
@@ -2539,6 +2542,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               {/* Filters Section - Left of flashcard */}
               <div className="filters-section-left">
                 <div className="filters-group">
+
                   {/* Due Cards Panel - Above categories */}
                   <div className="filter-section">
                     <div className="card-filter-toggle">
@@ -2888,77 +2892,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   </div>
                 </div>
 
-                {/* Review Panel - Always visible when there's a current card */}
-                {currentCard && (
-                  <div className="review-panel-below-categories">
-                    <div className="review-panel-frame" title="Rate Your Knowledge">
-                      <div className="review-button-grid">
-                        <button 
-                          className="review-btn again-btn"
-                          onClick={() => handleReviewCard('again')}
-                          title="Completely forgot (1)"
-                        >
-                          <span className="btn-number">1</span>
-                          <span className="btn-emoji">😵</span>
-                          <span className="btn-text">Again</span>
-                        </button>
-                        
-                        <button 
-                          className="review-btn hard-btn"
-                          onClick={() => handleReviewCard('hard')}
-                          title="Hard to remember (2)"
-                        >
-                          <span className="btn-number">2</span>
-                          <span className="btn-emoji">😓</span>
-                          <span className="btn-text">Hard</span>
-                        </button>
-                        
-                        <button 
-                          className="review-btn good-btn"
-                          onClick={() => handleReviewCard('good')}
-                          title="Remembered with effort (3)"
-                        >
-                          <span className="btn-number">3</span>
-                          <span className="btn-emoji">😊</span>
-                          <span className="btn-text">Good</span>
-                        </button>
-                        
-                        <button 
-                          className="review-btn easy-btn"
-                          onClick={() => handleReviewCard('easy')}
-                          title="Easy to remember (4)"
-                        >
-                          <span className="btn-number">4</span>
-                          <span className="btn-emoji">😎</span>
-                          <span className="btn-text">Easy</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
-                {/* Progress Bar - Shows daily completion progress using consistent real-time counting */}
-                {((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
-                  <div className="daily-progress-section-wide">
-                    <div className="progress-header">
-                      <h4>Daily Progress</h4>
-                      <span className="progress-stats">
-                        {cardsCompletedToday} / {cardsCompletedToday + cardsDueToday.length} cards completed
-                      </span>
-                    </div>
-                    <div className="progress-bar-container">
-                      <div 
-                        className="progress-bar-fill" 
-                        style={{ 
-                          width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%` 
-                        }}
-                      />
-                    </div>
-                    <div className="progress-percentage">
-                      {Math.round(Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100))}%
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className={`flashcard-main-content ${isMaximized || isPopouted ? 'windowed' : ''}`}>
@@ -2992,7 +2926,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     zIndex: 9999,
                     backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
                     boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
-                    borderRadius: '8px',
+                    borderRadius: '4px',
                     overflow: 'visible', // Changed from 'hidden' to allow resize handles
                     cursor: isDragging ? 'move' : 'default',
                     margin: 'auto',
@@ -3002,10 +2936,10 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     position: 'relative',
                     width: '100%',
                     height: 'auto',
-                    backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
+                    backgroundColor: 'transparent',
+                    boxShadow: 'none',
+                    borderRadius: '0',
+                    overflow: 'visible',
                     margin: 'auto',
                     display: 'flex',
                     flexDirection: 'column',
@@ -3040,161 +2974,17 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   )}
                   
                   {/* Window Control Buttons - Top Right - Hide when API dropdown is open */}
-                  {!showApiKeyModal && (isMaximized ? (
-                    /* Floating Restore Button - Only when maximized */
-                    <button
-                      onClick={handleRestore}
-                      style={{
-                        position: 'absolute',
-                        top: '16px',
-                        right: '16px',
-                        zIndex: 10001,
-                        padding: '10px 10px',
-                        backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '20px',
-                        lineHeight: '1',
-                        color: isDarkMode ? '#d1d5db' : '#374151',
-                        transition: 'all 0.2s',
-                        backdropFilter: 'blur(4px)',
-                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                      }}
-                      onMouseOver={(e) => {
-                        e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                      }}
-                      title="Exit Fullscreen (ESC)"
-                    >
-                      ⊡
-                    </button>
-                  ) : isPopouted ? (
-                    /* Popout mode - Maximize and Close buttons */
-                    <div style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '20px',
-                      zIndex: 10001,
-                      display: 'flex',
-                      gap: '4px'
-                    }}>
+                  {!showApiKeyModal && currentCard && (
+                    <div className="window-controls">
                       <button
-                        onClick={handleMaximize}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Maximize to fullscreen"
+                        className={`window-btn star-btn ${currentCard.starred ? 'starred' : ''}`}
+                        onClick={() => toggleStarCard(currentCard.id)}
+                        title={currentCard.starred ? "Remove from starred" : "Add to starred"}
                       >
-                        ⛶
-                      </button>
-                      <button
-                        onClick={handleRestorePosition}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Close popout and restore to normal view"
-                      >
-                        ⊡
+                        {currentCard.starred ? '★' : '☆'}
                       </button>
                     </div>
-                  ) : (
-                    /* Normal mode - Maximize and Popout buttons */
-                    <div style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '20px',
-                      zIndex: 10001,
-                      display: 'flex',
-                      gap: '4px'
-                    }}>
-                      <button
-                        onClick={handleMaximize}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Maximize to fullscreen"
-                      >
-                        ⛶
-                      </button>
-                      <button
-                        onClick={handlePopout}
-                        style={{
-                          padding: '8px 8px',
-                          backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          lineHeight: '1',
-                          color: isDarkMode ? '#d1d5db' : '#374151',
-                          transition: 'all 0.2s',
-                          backdropFilter: 'blur(4px)',
-                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.9)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.backgroundColor = isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(147, 197, 253, 0.9)';
-                        }}
-                        title="Popout window"
-                      >
-                        {/* Unicode popout icon */}
-                        <span style={{fontSize: '1.2em'}}>⧉</span>
-                      </button>
-                    </div>
-                  ))}
+                  )}
                   
                   {/* Flashcard Content */}
                   <div
@@ -3223,12 +3013,57 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       currentIndex={currentCardIndex}
                       totalCards={filteredFlashcards.length}
                       isDarkMode={isDarkMode}
-                      onToggleStarCard={toggleStarCard}
                       onEditCard={handleEditCard}
                       onGenerateQuestions={() => setShowGenerateModal(true)}
+                      isTransitioning={isCardTransitioning}
                     />
+
+                    {/* Review Buttons - Below the card, only when answer is shown and not transitioning */}
+                    {currentCard && showAnswer && !isCardTransitioning && (
+                      <div className="review-buttons-below-card">
+                        <button
+                          className="review-btn again-btn"
+                          onClick={() => handleReviewCard('again')}
+                          title="Completely forgot (1)"
+                        >
+                          <span className="btn-number">1</span>
+                          <span className="btn-emoji">😵</span>
+                          <span className="btn-text">Again</span>
+                        </button>
+
+                        <button
+                          className="review-btn hard-btn"
+                          onClick={() => handleReviewCard('hard')}
+                          title="Hard to remember (2)"
+                        >
+                          <span className="btn-number">2</span>
+                          <span className="btn-emoji">😓</span>
+                          <span className="btn-text">Hard</span>
+                        </button>
+
+                        <button
+                          className="review-btn good-btn"
+                          onClick={() => handleReviewCard('good')}
+                          title="Remembered with effort (3)"
+                        >
+                          <span className="btn-number">3</span>
+                          <span className="btn-emoji">😊</span>
+                          <span className="btn-text">Good</span>
+                        </button>
+
+                        <button
+                          className="review-btn easy-btn"
+                          onClick={() => handleReviewCard('easy')}
+                          title="Easy to remember (4)"
+                        >
+                          <span className="btn-number">4</span>
+                          <span className="btn-emoji">😎</span>
+                          <span className="btn-text">Easy</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  
+
                   {/* Resize Handles - Only show when popouted */}
                   {isPopouted && !isMaximized && (
                     <>
@@ -3316,7 +3151,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     minHeight: '100px',
                     padding: '0.75rem',
                     border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
-                    borderRadius: '0.5rem',
+                    borderRadius: '4px',
                     backgroundColor: isDarkMode ? '#374151' : '#ffffff',
                     color: isDarkMode ? '#f1f5f9' : '#374151',
                     fontSize: '0.95rem',
@@ -3357,7 +3192,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   color: '#dc2626',
                   backgroundColor: isDarkMode ? 'rgba(220, 38, 38, 0.1)' : 'rgba(220, 38, 38, 0.05)',
                   border: '1px solid rgba(220, 38, 38, 0.2)',
-                  borderRadius: '0.375rem',
+                  borderRadius: '3px',
                   padding: '0.75rem',
                   marginBottom: '1rem',
                   fontSize: '0.875rem'
@@ -3381,7 +3216,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                 disabled={isGeneratingExplanation}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  borderRadius: '0.5rem',
+                  borderRadius: '4px',
                   border: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
                   backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
                   color: isDarkMode ? '#f1f5f9' : '#374151',
@@ -3396,7 +3231,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                 disabled={isGeneratingExplanation || !explainPrompt.trim()}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  borderRadius: '0.5rem',
+                  borderRadius: '4px',
                   border: 'none',
                   backgroundColor: isGeneratingExplanation || !explainPrompt.trim() ? '#9ca3af' : '#3b82f6',
                   color: 'white',
@@ -3481,604 +3316,215 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
+          zIndex: 200000,
           padding: '20px'
         }}>
           <div style={{
-            backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-            borderRadius: '12px',
+            backgroundColor: '#ffffff',
+            borderRadius: '4px',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            maxWidth: '600px',
+            maxWidth: '500px',
             width: '100%',
             maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
-            border: '3px solid #2563eb'
+            border: '3px solid #2563eb',
+            overflow: 'hidden'
           }}>
             {/* Header */}
             <div style={{
-              padding: '24px 24px 0 24px',
-              borderBottom: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
-              paddingBottom: '16px'
+              padding: '14px 20px',
+              background: '#2563eb',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <h2 style={{
-                  margin: 0,
-                  fontSize: '24px',
-                  fontWeight: '700',
-                  color: isDarkMode ? '#f9fafb' : '#111827'
-                }}>
-                  🔑 API Configuration
-                </h2>
-                <button
-                  onClick={() => setShowApiKeyModal(false)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '24px',
-                    cursor: 'pointer',
-                    color: isDarkMode ? '#9ca3af' : '#6b7280',
-                    padding: '4px',
-                    borderRadius: '6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '600', color: 'white' }}>
+                API Configuration
+              </h2>
+              <button
+                onClick={() => setShowApiKeyModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: 'white',
+                  opacity: 0.8
+                }}
+              >
+                ×
+              </button>
             </div>
 
             {/* Content */}
-            <div style={{
-              flex: 1,
-              overflow: 'auto',
-              padding: '24px'
-            }}>
-              <p style={{
-                margin: '0 0 16px 0',
-                fontSize: '14px',
-                color: isDarkMode ? '#9ca3af' : '#6b7280'
-              }}>
-                Configure your AI providers for question generation, explanations, and other AI features. Your API keys enable direct communication with AI services.
-              </p>
-              
-              {/* Currently Selected Provider Display */}
-              <div style={{
-                backgroundColor: isDarkMode ? '#1e40af' : '#3b82f6',
-                borderRadius: '12px',
-                padding: '16px',
-                marginBottom: '20px',
-                border: '3px solid #60a5fa',
-                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{ 
-                      fontSize: '24px', 
-                      marginRight: '12px',
-                      animation: 'pulse 2s infinite'
+            <div style={{ flex: 1, overflow: 'auto', padding: '20px', background: '#ffffff' }}>
+              {/* Provider Selection */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#1e40af' }}>
+                  Select AI Provider
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {['openai', 'anthropic', 'gemini'].map(provider => (
+                    <button
+                      key={provider}
+                      onClick={() => handleProviderChange(provider)}
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        border: localSelectedProvider === provider ? '2px solid #2563eb' : '2px solid #e5e7eb',
+                        borderRadius: '4px',
+                        background: localSelectedProvider === provider ? '#dbeafe' : '#f8fafc',
+                        cursor: 'pointer',
+                        fontWeight: localSelectedProvider === provider ? '600' : '400',
+                        color: localSelectedProvider === provider ? '#1e40af' : '#64748b'
+                      }}
+                    >
+                      {provider === 'openai' ? '⚡ OpenAI' : provider === 'anthropic' ? '🧠 Claude' : '🤖 Gemini'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* API Key Inputs */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* OpenAI */}
+                <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontWeight: '600', color: '#374151' }}>⚡ OpenAI API Key</label>
+                    <span style={{
+                      fontSize: '12px',
+                      padding: '2px 8px',
+                      borderRadius: '2px',
+                      background: localApiKeys.openai ? '#dcfce7' : '#fee2e2',
+                      color: localApiKeys.openai ? '#16a34a' : '#dc2626'
                     }}>
-                      {localSelectedProvider === 'openai' ? '⚡' : 
-                       localSelectedProvider === 'anthropic' ? '🧠' : '🤖'}
+                      {localApiKeys.openai ? '✓ Set' : '✗ Not Set'}
                     </span>
-                    <div>
-                      <div style={{
-                        fontSize: '18px',
-                        fontWeight: 'bold',
-                        color: 'white',
-                        marginBottom: '4px'
-                      }}>
-                        Currently Selected: {
-                          localSelectedProvider === 'openai' ? 'OpenAI (GPT)' :
-                          localSelectedProvider === 'anthropic' ? 'Anthropic (Claude)' :
-                          'Google Gemini'
-                        }
-                      </div>
-                      <div style={{
-                        fontSize: '14px',
-                        color: '#dbeafe',
-                        opacity: 0.9
-                      }}>
-                        {localSelectedProvider === 'openai' ? 'Most versatile AI for creative content and explanations' :
-                         localSelectedProvider === 'anthropic' ? 'Superior reasoning and analysis for educational content' :
-                         'Fast and efficient with great balance of performance and cost'}
-                      </div>
-                    </div>
                   </div>
-                  <div style={{
-                    backgroundColor: localApiKeys[localSelectedProvider] ? '#10b981' : '#ef4444',
-                    color: 'white',
-                    padding: '8px 16px',
-                    borderRadius: '20px',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}>
-                    <span>{localApiKeys[localSelectedProvider] ? '✓' : '⚠️'}</span>
-                    {localApiKeys[localSelectedProvider] ? 'API Key Configured' : 'API Key Missing'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Security Notice */}
-              <div style={{
-                backgroundColor: isDarkMode ? '#1e3a8a' : '#dbeafe',
-                border: `1px solid ${isDarkMode ? '#3b82f6' : '#2563eb'}`,
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'flex-start'
-              }}>
-                <span style={{ 
-                  fontSize: '18px', 
-                  marginRight: '10px', 
-                  color: isDarkMode ? '#60a5fa' : '#1d4ed8' 
-                }}>🔒</span>
-                <div>
-                  <p style={{
-                    margin: '0 0 8px 0',
-                    fontSize: '14px',
-                    color: isDarkMode ? '#93c5fd' : '#1e40af',
-                    fontWeight: '700'
-                  }}>
-                    <strong>Zero Server Storage Policy</strong>
-                  </p>
-                  <p style={{
-                    margin: '0 0 8px 0',
-                    fontSize: '12px',
-                    color: isDarkMode ? '#bfdbfe' : '#1e40af',
-                    lineHeight: '1.4'
-                  }}>
-                    <strong>We NEVER store your API keys on our servers.</strong> Your keys are saved only in your browser's local storage and are encrypted for security.
-                  </p>
-                  <p style={{
-                    margin: 0,
-                    fontSize: '12px',
-                    color: isDarkMode ? '#bfdbfe' : '#1e40af',
-                    lineHeight: '1.4'
-                  }}>
-                    All AI requests are made directly from your browser to the AI provider's servers. This app acts as a secure interface only.
-                  </p>
-                </div>
-              </div>
-
-              {/* How API Keys Are Used */}
-              <div style={{
-                backgroundColor: isDarkMode ? '#0f172a' : '#f1f5f9',
-                border: `1px solid ${isDarkMode ? '#334155' : '#cbd5e1'}`,
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '20px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-                  <span style={{ 
-                    fontSize: '18px', 
-                    marginRight: '10px', 
-                    color: isDarkMode ? '#94a3b8' : '#475569' 
-                  }}>🔄</span>
-                  <div>
-                    <p style={{
-                      margin: '0 0 8px 0',
+                  <input
+                    type="password"
+                    placeholder="sk-..."
+                    value={localApiKeys.openai || ''}
+                    onChange={(e) => handleApiKeyChange('openai', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '4px',
+                      border: '2px solid #cbd5e1',
                       fontSize: '14px',
-                      color: isDarkMode ? '#e2e8f0' : '#334155',
-                      fontWeight: '700'
-                    }}>
-                      <strong>How This App Uses Your API Keys</strong>
-                    </p>
-                    <div style={{ fontSize: '12px', color: isDarkMode ? '#cbd5e1' : '#475569', lineHeight: '1.4' }}>
-                      <p style={{ margin: '0 0 6px 0' }}>
-                        <strong>📝 Question Generation:</strong> When you click "Generate Questions", your API key is used to create new flashcard questions based on your content.
-                      </p>
-                      <p style={{ margin: '0 0 6px 0' }}>
-                        <strong>💡 AI Explanations:</strong> The "Explain" feature uses your key to provide detailed explanations of flashcard content.
-                      </p>
-                      <p style={{ margin: '0 0 6px 0' }}>
-                        <strong>📚 Study Guide Creation:</strong> Your key enables AI-powered study guide generation from your difficult cards.
-                      </p>
-                      <p style={{ margin: '0 0 0 0' }}>
-                        <strong>🔍 Content Analysis:</strong> AI features for analyzing and improving your flashcard content use your configured provider.
-                      </p>
-                    </div>
-                  </div>
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563eb' }}>
+                    Get API Key →
+                  </a>
                 </div>
-              </div>
 
-              {/* OpenAI Section */}
-              <div 
-                onClick={() => handleProviderChange('openai')}
-                style={{
-                  marginBottom: '16px',
-                  padding: '16px',
-                  backgroundColor: localSelectedProvider === 'openai' ? (isDarkMode ? '#064e3b' : '#d1fae5') : (isDarkMode ? '#065f46' : '#ecfdf5'),
-                  borderRadius: '8px',
-                  border: localSelectedProvider === 'openai' ? `3px solid ${isDarkMode ? '#34d399' : '#10b981'}` : `2px solid ${isDarkMode ? '#059669' : '#6ee7b7'}`,
-                  boxShadow: localSelectedProvider === 'openai' ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
-                  transform: localSelectedProvider === 'openai' ? 'scale(1.02)' : 'scale(1)',
-                  transition: 'all 0.2s ease-in-out',
-                  position: 'relative',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={(e) => {
-                  if (localSelectedProvider !== 'openai') {
-                    e.target.style.transform = 'scale(1.01)';
-                    e.target.style.boxShadow = '0 2px 8px rgba(16, 185, 129, 0.2)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (localSelectedProvider !== 'openai') {
-                    e.target.style.transform = 'scale(1)';
-                    e.target.style.boxShadow = 'none';
-                  }
-                }}
-              >
-                {localSelectedProvider === 'openai' && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '-8px',
-                    right: '-8px',
-                    backgroundColor: '#10b981',
-                    color: 'white',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    padding: '4px 8px',
-                    borderRadius: '12px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}>
-                    ACTIVE
-                  </div>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="openai"
-                      checked={localSelectedProvider === 'openai'}
-                      onChange={() => {}} // Handled by card click
-                      style={{ marginRight: '8px', pointerEvents: 'none' }}
-                    />
-                    <div>
-                      <strong style={{ color: isDarkMode ? '#f9fafb' : '#111827' }}>⚡ OpenAI (GPT-4/GPT-3.5)</strong>
-                      <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
-                        Most versatile AI, excellent for creative content, coding, and detailed explanations
-                      </div>
-                      <div style={{ fontSize: '11px', color: isDarkMode ? '#6b7280' : '#9ca3af', marginTop: '2px' }}>
-                        <strong>Features:</strong> Question generation, answer explanations, content analysis
-                      </div>
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '12px',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    backgroundColor: localApiKeys.openai ? (isDarkMode ? '#065f46' : '#d1fae5') : (isDarkMode ? '#7f1d1d' : '#fee2e2'),
-                    color: localApiKeys.openai ? (isDarkMode ? '#34d399' : '#059669') : (isDarkMode ? '#fca5a5' : '#dc2626')
-                  }}>
-                    {localApiKeys.openai ? '✅ Connected' : '✗ Not Set'}
-                  </span>
-                </div>
-                <input
-                  type="password"
-                  placeholder="sk-..."
-                  value={localApiKeys.openai || ''}
-                  onChange={(e) => handleApiKeyChange('openai', e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    border: `1px solid ${isDarkMode ? '#374151' : '#d1d5db'}`,
-                    backgroundColor: isDarkMode ? '#374151' : '#ffffff',
-                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
-                    marginBottom: '4px',
-                    fontSize: '14px'
-                  }}
-                />
-                <small style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
-                  Get your key from: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: isDarkMode ? '#60a5fa' : '#3b82f6' }}>OpenAI API Keys</a>
-                </small>
-              </div>
-
-              {/* Anthropic Section */}
-              <div 
-                onClick={() => handleProviderChange('anthropic')}
-                style={{
-                  marginBottom: '16px',
-                  padding: '16px',
-                  backgroundColor: localSelectedProvider === 'anthropic' ? (isDarkMode ? '#7c2d12' : '#fed7aa') : (isDarkMode ? '#9a3412' : '#ffedd5'),
-                  borderRadius: '8px',
-                  border: localSelectedProvider === 'anthropic' ? `3px solid ${isDarkMode ? '#fb923c' : '#ea580c'}` : `2px solid ${isDarkMode ? '#ea580c' : '#fdba74'}`,
-                  boxShadow: localSelectedProvider === 'anthropic' ? '0 4px 12px rgba(234, 88, 12, 0.3)' : 'none',
-                  transform: localSelectedProvider === 'anthropic' ? 'scale(1.02)' : 'scale(1)',
-                  transition: 'all 0.2s ease-in-out',
-                  position: 'relative',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={(e) => {
-                  if (localSelectedProvider !== 'anthropic') {
-                    e.target.style.transform = 'scale(1.01)';
-                    e.target.style.boxShadow = '0 2px 8px rgba(234, 88, 12, 0.2)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (localSelectedProvider !== 'anthropic') {
-                    e.target.style.transform = 'scale(1)';
-                    e.target.style.boxShadow = 'none';
-                  }
-                }}
-              >
-                {localSelectedProvider === 'anthropic' && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '-8px',
-                    right: '-8px',
-                    backgroundColor: '#ea580c',
-                    color: 'white',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    padding: '4px 8px',
-                    borderRadius: '12px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}>
-                    ACTIVE
-                  </div>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="anthropic"
-                      checked={localSelectedProvider === 'anthropic'}
-                      onChange={() => {}} // Handled by card click
-                      style={{ marginRight: '8px', pointerEvents: 'none' }}
-                    />
-                    <div>
-                      <strong style={{ color: isDarkMode ? '#f9fafb' : '#111827' }}>🧠 Anthropic (Claude)</strong>
-                      <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
-                        Superior reasoning and analysis, excellent for educational content and complex explanations
-                      </div>
-                      <div style={{ fontSize: '11px', color: isDarkMode ? '#6b7280' : '#9ca3af', marginTop: '2px' }}>
-                        <strong>Features:</strong> Advanced reasoning, study guides, detailed breakdowns
-                      </div>
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '12px',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    backgroundColor: localApiKeys.anthropic ? (isDarkMode ? '#065f46' : '#d1fae5') : (isDarkMode ? '#7f1d1d' : '#fee2e2'),
-                    color: localApiKeys.anthropic ? (isDarkMode ? '#34d399' : '#059669') : (isDarkMode ? '#fca5a5' : '#dc2626')
-                  }}>
-                    {localApiKeys.anthropic ? '✅ Connected' : '✗ Not Set'}
-                  </span>
-                </div>
-                <input
-                  type="password"
-                  placeholder="sk-ant-..."
-                  value={localApiKeys.anthropic || ''}
-                  onChange={(e) => handleApiKeyChange('anthropic', e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    border: `1px solid ${isDarkMode ? '#374151' : '#d1d5db'}`,
-                    backgroundColor: isDarkMode ? '#374151' : '#ffffff',
-                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
-                    marginBottom: '4px',
-                    fontSize: '14px'
-                  }}
-                />
-                <small style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
-                  Get your key from: <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: isDarkMode ? '#60a5fa' : '#3b82f6' }}>Anthropic Console</a>
-                </small>
-              </div>
-
-              {/* Google Gemini Section */}
-              <div 
-                onClick={() => handleProviderChange('gemini')}
-                style={{
-                  marginBottom: '16px',
-                  padding: '16px',
-                  backgroundColor: localSelectedProvider === 'gemini' ? (isDarkMode ? '#581c87' : '#ddd6fe') : (isDarkMode ? '#6b21a8' : '#ede9fe'),
-                  borderRadius: '8px',
-                  border: localSelectedProvider === 'gemini' ? `3px solid ${isDarkMode ? '#a855f7' : '#8b5cf6'}` : `2px solid ${isDarkMode ? '#8b5cf6' : '#c4b5fd'}`,
-                  boxShadow: localSelectedProvider === 'gemini' ? '0 4px 12px rgba(139, 92, 246, 0.3)' : 'none',
-                  transform: localSelectedProvider === 'gemini' ? 'scale(1.02)' : 'scale(1)',
-                  transition: 'all 0.2s ease-in-out',
-                  position: 'relative',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={(e) => {
-                  if (localSelectedProvider !== 'gemini') {
-                    e.target.style.transform = 'scale(1.01)';
-                    e.target.style.boxShadow = '0 2px 8px rgba(139, 92, 246, 0.2)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (localSelectedProvider !== 'gemini') {
-                    e.target.style.transform = 'scale(1)';
-                    e.target.style.boxShadow = 'none';
-                  }
-                }}
-              >
-                {localSelectedProvider === 'gemini' && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '-8px',
-                    right: '-8px',
-                    backgroundColor: '#8b5cf6',
-                    color: 'white',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    padding: '4px 8px',
-                    borderRadius: '12px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                  }}>
-                    ACTIVE
-                  </div>
-                )}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <input
-                      type="radio"
-                      name="provider"
-                      value="gemini"
-                      checked={localSelectedProvider === 'gemini'}
-                      onChange={() => {}} // Handled by card click
-                      style={{ marginRight: '8px', pointerEvents: 'none' }}
-                    />
-                    <div>
-                      <strong style={{ color: isDarkMode ? '#f9fafb' : '#111827' }}>🤖 Google Gemini</strong>
-                      <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
-                        Fast and efficient, great balance of performance and cost-effectiveness
-                      </div>
-                      <div style={{ fontSize: '11px', color: isDarkMode ? '#6b7280' : '#9ca3af', marginTop: '2px' }}>
-                        <strong>Features:</strong> Quick responses, multimodal capabilities, cost-efficient
-                      </div>
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '12px',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    backgroundColor: localApiKeys.gemini ? (isDarkMode ? '#065f46' : '#d1fae5') : (isDarkMode ? '#7f1d1d' : '#fee2e2'),
-                    color: localApiKeys.gemini ? (isDarkMode ? '#34d399' : '#059669') : (isDarkMode ? '#fca5a5' : '#dc2626')
-                  }}>
-                    {localApiKeys.gemini ? '✅ Connected' : '✗ Not Set'}
-                  </span>
-                </div>
-                <input
-                  type="password"
-                  placeholder="AI..."
-                  value={localApiKeys.gemini || ''}
-                  onChange={(e) => handleApiKeyChange('gemini', e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    border: `1px solid ${isDarkMode ? '#374151' : '#d1d5db'}`,
-                    backgroundColor: isDarkMode ? '#374151' : '#ffffff',
-                    color: isDarkMode ? '#f1f5f9' : '#1e293b',
-                    marginBottom: '4px',
-                    fontSize: '14px'
-                  }}
-                />
-                <small style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280' }}>
-                  Get your key from: <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: isDarkMode ? '#60a5fa' : '#3b82f6' }}>Google AI Studio</a>
-                </small>
-              </div>
-
-              {/* Usage Tips */}
-              <div style={{
-                backgroundColor: isDarkMode ? '#065f46' : '#ecfdf5',
-                border: `1px solid ${isDarkMode ? '#059669' : '#10b981'}`,
-                borderRadius: '8px',
-                padding: '12px',
-                marginTop: '20px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-                  <span style={{ 
-                    fontSize: '16px', 
-                    marginRight: '8px', 
-                    color: isDarkMode ? '#34d399' : '#059669' 
-                  }}>💡</span>
-                  <div>
-                    <p style={{
-                      margin: '0 0 8px 0',
-                      fontSize: '13px',
-                      color: isDarkMode ? '#10b981' : '#065f46',
-                      fontWeight: '600'
-                    }}>
-                      <strong>Usage Tips:</strong>
-                    </p>
-                    <ul style={{
-                      margin: 0,
-                      paddingLeft: '16px',
+                {/* Anthropic */}
+                <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontWeight: '600', color: '#374151' }}>🧠 Anthropic API Key</label>
+                    <span style={{
                       fontSize: '12px',
-                      color: isDarkMode ? '#6ee7b7' : '#047857'
+                      padding: '2px 8px',
+                      borderRadius: '2px',
+                      background: localApiKeys.anthropic ? '#dcfce7' : '#fee2e2',
+                      color: localApiKeys.anthropic ? '#16a34a' : '#dc2626'
                     }}>
-                      <li><strong>Local Storage Only:</strong> Your API keys are stored exclusively in your browser's local storage</li>
-                      <li><strong>Direct Communication:</strong> API requests go directly from your browser to AI providers (OpenAI, Anthropic, Google)</li>
-                      <li><strong>No Server Transit:</strong> This app's servers never see, store, or have access to your API keys</li>
-                      <li><strong>Switch Anytime:</strong> You can change providers or update keys anytime - changes are immediate</li>
-                      <li><strong>Secure by Design:</strong> Even if our servers were compromised, your API keys would remain safe</li>
-                      <li><strong>Keep Keys Private:</strong> Never share your API keys in screenshots, support requests, or publicly</li>
-                    </ul>
+                      {localApiKeys.anthropic ? '✓ Set' : '✗ Not Set'}
+                    </span>
                   </div>
+                  <input
+                    type="password"
+                    placeholder="sk-ant-..."
+                    value={localApiKeys.anthropic || ''}
+                    onChange={(e) => handleApiKeyChange('anthropic', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '4px',
+                      border: '2px solid #cbd5e1',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563eb' }}>
+                    Get API Key →
+                  </a>
+                </div>
+
+                {/* Gemini */}
+                <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <label style={{ fontWeight: '600', color: '#374151' }}>🤖 Google Gemini API Key</label>
+                    <span style={{
+                      fontSize: '12px',
+                      padding: '2px 8px',
+                      borderRadius: '2px',
+                      background: localApiKeys.gemini ? '#dcfce7' : '#fee2e2',
+                      color: localApiKeys.gemini ? '#16a34a' : '#dc2626'
+                    }}>
+                      {localApiKeys.gemini ? '✓ Set' : '✗ Not Set'}
+                    </span>
+                  </div>
+                  <input
+                    type="password"
+                    placeholder="AI..."
+                    value={localApiKeys.gemini || ''}
+                    onChange={(e) => handleApiKeyChange('gemini', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '4px',
+                      border: '2px solid #cbd5e1',
+                      fontSize: '14px',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563eb' }}>
+                    Get API Key →
+                  </a>
                 </div>
               </div>
 
-              {/* Model Information */}
+              {/* Info Box */}
               <div style={{
-                backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
-                border: `1px solid ${isDarkMode ? '#475569' : '#cbd5e1'}`,
-                borderRadius: '8px',
+                marginTop: '20px',
                 padding: '12px',
-                marginTop: '12px'
+                background: '#dbeafe',
+                borderRadius: '4px',
+                border: '1px solid #93c5fd'
               }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-                  <span style={{ 
-                    fontSize: '16px', 
-                    marginRight: '8px', 
-                    color: isDarkMode ? '#94a3b8' : '#64748b' 
-                  }}>ℹ️</span>
-                  <div>
-                    <p style={{
-                      margin: '0 0 6px 0',
-                      fontSize: '13px',
-                      color: isDarkMode ? '#e2e8f0' : '#334155',
-                      fontWeight: '600'
-                    }}>
-                      <strong>Current AI Features:</strong>
-                    </p>
-                    <p style={{
-                      margin: 0,
-                      fontSize: '12px',
-                      color: isDarkMode ? '#cbd5e1' : '#475569',
-                      lineHeight: '1.4'
-                    }}>
-                      Question generation, answer explanations, study guide creation, content analysis, and interactive learning assistance. More features coming soon!
-                    </p>
-                  </div>
-                </div>
+                <p style={{ margin: 0, fontSize: '13px', color: '#1e40af' }}>
+                  🔒 Your API keys are stored locally in your browser and never sent to our servers.
+                </p>
               </div>
             </div>
 
             {/* Footer */}
             <div style={{
-              padding: '16px 24px',
-              borderTop: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
+              padding: '14px 20px',
+              borderTop: '1px solid #e2e8f0',
+              background: '#f1f5f9',
               display: 'flex',
-              gap: '12px',
+              gap: '10px',
               justifyContent: 'flex-end'
             }}>
               <button
                 onClick={() => setShowApiKeyModal(false)}
                 style={{
-                  backgroundColor: isDarkMode ? '#4b5563' : '#6b7280',
+                  padding: '10px 20px',
+                  background: '#64748b',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
-                  padding: '10px 16px',
-                  fontSize: '14px',
+                  borderRadius: '4px',
                   cursor: 'pointer',
-                  fontWeight: '500'
+                  fontWeight: '600'
                 }}
               >
                 Cancel
@@ -4086,14 +3532,13 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               <button
                 onClick={handleSaveApiKeys}
                 style={{
-                  backgroundColor: '#10b981',
+                  padding: '10px 20px',
+                  background: '#2563eb',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
-                  padding: '10px 16px',
-                  fontSize: '14px',
+                  borderRadius: '4px',
                   cursor: 'pointer',
-                  fontWeight: '500'
+                  fontWeight: '600'
                 }}
               >
                 Save
@@ -4111,82 +3556,79 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
+          zIndex: 200000,
           padding: '20px'
         }}>
           <div style={{
-            backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
-            borderRadius: '12px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            backgroundColor: '#ffffff',
+            borderRadius: '4px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
             maxWidth: '500px',
             width: '100%',
-            maxHeight: '80vh',
+            maxHeight: '90vh',
             display: 'flex',
             flexDirection: 'column',
-            border: '3px solid #3b82f6'
+            overflow: 'hidden'
           }}>
             {/* Header */}
             <div style={{
-              padding: '24px 24px 0 24px',
-              borderBottom: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
-              paddingBottom: '16px'
+              background: '#2563eb',
+              padding: '16px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
             }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
+              <h2 style={{
+                margin: 0,
+                fontSize: '20px',
+                fontWeight: '600',
+                color: 'white'
               }}>
-                <h2 style={{
-                  margin: 0,
-                  fontSize: '24px',
-                  fontWeight: '700',
-                  color: isDarkMode ? '#f9fafb' : '#111827'
-                }}>
-                  👤 Account Information
-                </h2>
-                <button
-                  onClick={() => setShowAccountModal(false)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '24px',
-                    cursor: 'pointer',
-                    color: isDarkMode ? '#9ca3af' : '#6b7280',
-                    padding: '4px',
-                    borderRadius: '6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
+                Account
+              </h2>
+              <button
+                onClick={() => setShowAccountModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: '28px',
+                  cursor: 'pointer',
+                  padding: '0 8px',
+                  lineHeight: 1
+                }}
+              >
+                ×
+              </button>
             </div>
 
             {/* Content */}
             <div style={{
               flex: 1,
               overflow: 'auto',
-              padding: '24px'
+              padding: '20px',
+              background: '#ffffff'
             }}>
 
               {/* Account Details */}
               <div style={{
-                backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                borderRadius: '8px',
+                backgroundColor: '#f8fafc',
+                borderRadius: '4px',
                 padding: '16px',
-                marginBottom: '20px'
+                marginBottom: '16px',
+                border: '2px solid #e2e8f0'
               }}>
                 <h4 style={{
                   margin: '0 0 12px 0',
-                  fontSize: '16px',
+                  fontSize: '14px',
                   fontWeight: '600',
-                  color: isDarkMode ? '#f9fafb' : '#111827'
+                  color: '#1e40af',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
                 }}>
                   Account Details
                 </h4>
@@ -4200,8 +3642,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     justifyContent: 'space-between',
                     fontSize: '14px'
                   }}>
-                    <span style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Email:</span>
-                    <span style={{ color: isDarkMode ? '#f3f4f6' : '#374151', fontWeight: '500' }}>
+                    <span style={{ color: '#64748b' }}>Email:</span>
+                    <span style={{ color: '#1e293b', fontWeight: '500' }}>
                       {userDisplayName || 'Not available'}
                     </span>
                   </div>
@@ -4210,9 +3652,9 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     justifyContent: 'space-between',
                     fontSize: '14px'
                   }}>
-                    <span style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>User ID:</span>
-                    <span style={{ 
-                      color: isDarkMode ? '#f3f4f6' : '#374151', 
+                    <span style={{ color: '#64748b' }}>User ID:</span>
+                    <span style={{
+                      color: '#1e293b',
                       fontWeight: '500',
                       fontSize: '12px',
                       fontFamily: 'monospace'
@@ -4225,8 +3667,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     justifyContent: 'space-between',
                     fontSize: '14px'
                   }}>
-                    <span style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Account Type:</span>
-                    <span style={{ color: isDarkMode ? '#f3f4f6' : '#374151', fontWeight: '500' }}>
+                    <span style={{ color: '#64748b' }}>Account Type:</span>
+                    <span style={{ color: '#1e293b', fontWeight: '500' }}>
                       {userId?.startsWith('anon-') ? 'Anonymous' : 'Registered'}
                     </span>
                   </div>
@@ -4235,235 +3677,134 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
               {/* Statistics */}
               <div style={{
-                backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '20px'
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '10px',
+                marginBottom: '16px'
               }}>
-                <h4 style={{
-                  margin: '0 0 12px 0',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  color: isDarkMode ? '#f9fafb' : '#111827'
-                }}>
-                  Study Statistics
-                </h4>
                 <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '12px'
+                  backgroundColor: '#eff6ff',
+                  borderRadius: '4px',
+                  padding: '12px',
+                  textAlign: 'center',
+                  border: '2px solid #bfdbfe'
                 }}>
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{
-                      fontSize: '24px',
-                      fontWeight: 'bold',
-                      color: isDarkMode ? '#f9fafb' : '#111827'
-                    }}>
-                      {flashcards.length}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: isDarkMode ? '#9ca3af' : '#6b7280'
-                    }}>
-                      Total Cards
-                    </div>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#2563eb' }}>
+                    {flashcards.length}
                   </div>
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{
-                      fontSize: '24px',
-                      fontWeight: 'bold',
-                      color: isDarkMode ? '#f9fafb' : '#111827'
-                    }}>
-                      {cardsCompletedToday}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: isDarkMode ? '#9ca3af' : '#6b7280'
-                    }}>
-                      Completed Today
-                    </div>
+                  <div style={{ fontSize: '11px', color: '#3b82f6', fontWeight: '600' }}>
+                    Total
                   </div>
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{
-                      fontSize: '24px',
-                      fontWeight: 'bold',
-                      color: '#10b981'
-                    }}>
-                      {categories.length}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: isDarkMode ? '#9ca3af' : '#6b7280'
-                    }}>
-                      Categories
-                    </div>
+                </div>
+                <div style={{
+                  backgroundColor: '#f0fdf4',
+                  borderRadius: '4px',
+                  padding: '12px',
+                  textAlign: 'center',
+                  border: '2px solid #bbf7d0'
+                }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#16a34a' }}>
+                    {cardsCompletedToday}
                   </div>
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{
-                      fontSize: '24px',
-                      fontWeight: 'bold',
-                      color: '#f59e0b'
-                    }}>
-                      {streakDays}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: isDarkMode ? '#9ca3af' : '#6b7280'
-                    }}>
-                      Day Streak
-                    </div>
+                  <div style={{ fontSize: '11px', color: '#22c55e', fontWeight: '600' }}>
+                    Today
+                  </div>
+                </div>
+                <div style={{
+                  backgroundColor: '#faf5ff',
+                  borderRadius: '4px',
+                  padding: '12px',
+                  textAlign: 'center',
+                  border: '2px solid #e9d5ff'
+                }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#7c3aed' }}>
+                    {categories.length}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: '600' }}>
+                    Categories
+                  </div>
+                </div>
+                <div style={{
+                  backgroundColor: '#fefce8',
+                  borderRadius: '4px',
+                  padding: '12px',
+                  textAlign: 'center',
+                  border: '2px solid #fde047'
+                }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#ca8a04' }}>
+                    {streakDays}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#eab308', fontWeight: '600' }}>
+                    Streak
                   </div>
                 </div>
               </div>
 
               {/* Card Performance */}
               <div style={{
-                backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                borderRadius: '8px',
+                backgroundColor: '#f8fafc',
+                borderRadius: '4px',
                 padding: '16px',
-                marginBottom: '20px'
+                marginBottom: '16px',
+                border: '2px solid #e2e8f0'
               }}>
                 <h4 style={{
-                  margin: '0 0 16px 0',
-                  fontSize: '16px',
+                  margin: '0 0 12px 0',
+                  fontSize: '14px',
                   fontWeight: '600',
-                  color: isDarkMode ? '#f9fafb' : '#111827',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
+                  color: '#1e40af',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
                 }}>
-                  <span>📊</span>
-                  Card Performance
+                  Performance
                 </h4>
-                
+
                 {/* Performance Metrics */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
-                  gap: '12px',
-                  marginBottom: '16px'
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '8px',
+                  marginBottom: '12px'
                 }}>
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px 8px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '20px', marginBottom: '4px' }}>🆕</div>
-                    <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: '2px' }}>New</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#3b82f6' }}>
-                      {performanceStats.new}
-                    </div>
+                  <div style={{ textAlign: 'center', padding: '8px 4px', background: '#dbeafe', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#2563eb' }}>{performanceStats.new}</div>
+                    <div style={{ fontSize: '10px', color: '#3b82f6', fontWeight: '600' }}>New</div>
                   </div>
-                  
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px 8px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '20px', marginBottom: '4px' }}>😵</div>
-                    <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: '2px' }}>Again</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#ef4444' }}>
-                      {performanceStats.again}
-                    </div>
+                  <div style={{ textAlign: 'center', padding: '8px 4px', background: '#fee2e2', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#dc2626' }}>{performanceStats.again}</div>
+                    <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: '600' }}>Again</div>
                   </div>
-                  
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px 8px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '20px', marginBottom: '4px' }}>😰</div>
-                    <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: '2px' }}>Hard</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b' }}>
-                      {performanceStats.hard}
-                    </div>
+                  <div style={{ textAlign: 'center', padding: '8px 4px', background: '#fef3c7', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#d97706' }}>{performanceStats.hard}</div>
+                    <div style={{ fontSize: '10px', color: '#f59e0b', fontWeight: '600' }}>Hard</div>
                   </div>
-                  
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px 8px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '20px', marginBottom: '4px' }}>😊</div>
-                    <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: '2px' }}>Good</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#10b981' }}>
-                      {performanceStats.good}
-                    </div>
+                  <div style={{ textAlign: 'center', padding: '8px 4px', background: '#dcfce7', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#16a34a' }}>{performanceStats.good}</div>
+                    <div style={{ fontSize: '10px', color: '#22c55e', fontWeight: '600' }}>Good</div>
                   </div>
-                  
-                  <div style={{
-                    backgroundColor: isDarkMode ? '#4b5563' : '#e5e7eb',
-                    borderRadius: '6px',
-                    padding: '12px 8px',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{ fontSize: '20px', marginBottom: '4px' }}>😎</div>
-                    <div style={{ fontSize: '12px', color: isDarkMode ? '#9ca3af' : '#6b7280', marginBottom: '2px' }}>Easy</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#8b5cf6' }}>
-                      {performanceStats.easy}
-                    </div>
+                  <div style={{ textAlign: 'center', padding: '8px 4px', background: '#ede9fe', borderRadius: '4px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#7c3aed' }}>{performanceStats.easy}</div>
+                    <div style={{ fontSize: '10px', color: '#8b5cf6', fontWeight: '600' }}>Easy</div>
                   </div>
                 </div>
-                
+
                 {/* Summary Stats */}
                 <div style={{
-                  borderTop: `1px solid ${isDarkMode ? '#4b5563' : '#d1d5db'}`,
-                  paddingTop: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '12px'
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  background: '#e2e8f0',
+                  borderRadius: '4px'
                 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: '14px'
-                  }}>
-                    <span style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Reviewed:</span>
-                    <span style={{ 
-                      color: isDarkMode ? '#f3f4f6' : '#374151', 
-                      fontWeight: '600',
-                      fontSize: '16px'
-                    }}>
-                      {performanceStats.reviewed}
-                    </span>
+                  <div style={{ fontSize: '13px' }}>
+                    <span style={{ color: '#64748b' }}>Reviewed: </span>
+                    <span style={{ fontWeight: '600', color: '#1e293b' }}>{performanceStats.reviewed}</span>
                   </div>
-                  
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    fontSize: '14px'
-                  }}>
-                    <span style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Mastery Rate:</span>
-                    <span style={{ 
-                      color: performanceStats.masteryRate >= 70 ? '#10b981' : performanceStats.masteryRate >= 50 ? '#f59e0b' : '#ef4444',
+                  <div style={{ fontSize: '13px' }}>
+                    <span style={{ color: '#64748b' }}>Mastery: </span>
+                    <span style={{
                       fontWeight: '600',
-                      fontSize: '16px'
+                      color: performanceStats.masteryRate >= 70 ? '#16a34a' : performanceStats.masteryRate >= 50 ? '#d97706' : '#dc2626'
                     }}>
                       {performanceStats.masteryRate}%
                     </span>
@@ -4473,65 +3814,53 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
               {/* FSRS Settings Summary */}
               <div style={{
-                backgroundColor: isDarkMode ? '#374151' : '#f3f4f6',
-                borderRadius: '8px',
-                padding: '16px'
+                backgroundColor: '#dbeafe',
+                borderRadius: '4px',
+                padding: '14px 16px',
+                border: '2px solid #93c5fd'
               }}>
-                <h4 style={{
-                  margin: '0 0 12px 0',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  color: isDarkMode ? '#f9fafb' : '#111827'
-                }}>
-                  Learning Settings
-                </h4>
                 <div style={{
                   display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  fontSize: '14px'
+                  justifyContent: 'space-between',
+                  fontSize: '13px'
                 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between'
-                  }}>
-                    <span style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Algorithm:</span>
-                    <span style={{ color: isDarkMode ? '#f3f4f6' : '#374151', fontWeight: '500' }}>
-                      FSRS (Free Spaced Repetition Scheduler)
-                    </span>
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between'
-                  }}>
-                    <span style={{ color: isDarkMode ? '#9ca3af' : '#6b7280' }}>Theme:</span>
-                    <span style={{ color: isDarkMode ? '#f3f4f6' : '#374151', fontWeight: '500' }}>
-                      {isDarkMode ? '🌙 Dark Mode' : '☀️ Light Mode'}
-                    </span>
-                  </div>
+                  <span style={{ color: '#1e40af' }}>Algorithm:</span>
+                  <span style={{ color: '#1e40af', fontWeight: '600' }}>FSRS</span>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '13px',
+                  marginTop: '6px'
+                }}>
+                  <span style={{ color: '#1e40af' }}>Theme:</span>
+                  <span style={{ color: '#1e40af', fontWeight: '600' }}>
+                    {isDarkMode ? 'Dark' : 'Light'}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Footer */}
             <div style={{
-              padding: '16px 24px',
-              borderTop: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
+              padding: '14px 20px',
+              borderTop: '1px solid #e2e8f0',
+              background: '#f1f5f9',
               display: 'flex',
-              gap: '12px',
+              gap: '10px',
               justifyContent: 'space-between'
             }}>
               <button
                 onClick={handleSignOut}
                 style={{
-                  backgroundColor: '#ef4444',
+                  backgroundColor: '#dc2626',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
-                  padding: '10px 16px',
+                  borderRadius: '4px',
+                  padding: '10px 20px',
                   fontSize: '14px',
                   cursor: 'pointer',
-                  fontWeight: '500'
+                  fontWeight: '600'
                 }}
               >
                 Sign Out
@@ -4539,14 +3868,14 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               <button
                 onClick={() => setShowAccountModal(false)}
                 style={{
-                  backgroundColor: isDarkMode ? '#4b5563' : '#6b7280',
+                  backgroundColor: '#64748b',
                   color: 'white',
                   border: 'none',
-                  borderRadius: '8px',
-                  padding: '10px 16px',
+                  borderRadius: '4px',
+                  padding: '10px 20px',
                   fontSize: '14px',
                   cursor: 'pointer',
-                  fontWeight: '500'
+                  fontWeight: '600'
                 }}
               >
                 Close

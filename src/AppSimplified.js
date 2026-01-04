@@ -128,7 +128,7 @@ function AppSimplified() {
         measurementId: "G-6LJ19R2ZTZ"
       };
       
-      const app = initializeApp(firebaseConfig);
+      initializeApp(firebaseConfig);
       console.log('Firebase initialized successfully');
       setIsLoading(false);
     } catch (err) {

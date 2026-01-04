@@ -41,11 +41,7 @@ function AppWithHooks() {
     authError,
     isLoading: authLoading,
     signInAnonymouslyUser,
-    signInWithEmail,
-    createUserWithEmail,
-    signOutUser,
-    sendPasswordReset,
-    clearAuthError
+    signOutUser
   } = useAuth(firebaseApp);
   
   console.log('AppWithHooks: Render state', { 

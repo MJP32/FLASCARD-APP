@@ -99,6 +99,7 @@ export const useSettings = (firebaseApp, userId) => {
     };
 
     loadUserSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [db, userId]);
 
   /**

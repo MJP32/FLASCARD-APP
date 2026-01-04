@@ -88,7 +88,7 @@ async function fixAWS() {
     if (fixedCards > 0) {
       console.log('\n🔄 Refresh your page to see the AWS category appear!');
       setTimeout(() => {
-        if (confirm('Refresh page now to see the fixed AWS cards?')) {
+        if (window.confirm('Refresh page now to see the fixed AWS cards?')) {
           window.location.reload();
         }
       }, 2000);
@@ -126,8 +126,6 @@ async function fixAWSSimple() {
     if (!db && firebase) {
       db = firebase.firestore();
     }
-    
-    const userId = 'Wxww8kEiROTO6Jg8WfXQGpSAbMp1'; // From your debug output
     
     console.log('🔍 Searching for AWS cards...');
     

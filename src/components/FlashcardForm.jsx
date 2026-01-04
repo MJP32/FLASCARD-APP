@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import RichTextEditor from '../RichTextEditor';
 
 /**
  * Component for creating and editing flashcards
@@ -47,6 +46,7 @@ const FlashcardForm = ({
   const [isGeneratingAiResponse, setIsGeneratingAiResponse] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [selectedOptions, setSelectedOptions] = useState({
+    answerQuestion: true,
     keyConcepts: true,
     example: true,
     customQuestion: false,
@@ -59,15 +59,13 @@ const FlashcardForm = ({
   // Track original form data to detect changes
   const [originalFormData, setOriginalFormData] = useState(null);
 
-  // Preview/Edit mode states
-  const [questionPreviewMode, setQuestionPreviewMode] = useState(false);
-  const [answerPreviewMode, setAnswerPreviewMode] = useState(false);
 
   // Reset checkboxes to checked when modal opens
   useEffect(() => {
     if (showGenerateModal) {
       console.log('🔍 Modal opened, setting checkboxes to true');
       setSelectedOptions({
+        answerQuestion: true,
         keyConcepts: true,
         example: true,
         customQuestion: false,
@@ -109,9 +107,6 @@ const FlashcardForm = ({
       setOriginalFormData(newFormData); // Track original state
       setErrors({});
       setEnhancementError('');
-      // Default to preview mode if content has HTML
-      setQuestionPreviewMode(editCard?.question?.includes('<') || false);
-      setAnswerPreviewMode(editCard?.answer?.includes('<') || false);
     }
   }, [isVisible, editCard]);
 
@@ -331,21 +326,15 @@ const FlashcardForm = ({
 
   const generateExampleContent = async () => {
     if (!formData.question.trim()) {
-      setEnhancementError('Question is required to generate custom content');
-      return;
+      throw new Error('Question is required to generate example content');
     }
 
     const apiKey = apiKeys[selectedProvider];
     if (!apiKey) {
-      setEnhancementError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
-      return;
+      throw new Error(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
     }
 
-
-    setEnhancementError('');
-
-    try {
-      const prompt = `Based on this flashcard, determine if a code example or practical example would be appropriate:
+    const prompt = `Based on this flashcard, determine if a code example or practical example would be appropriate:
 
 Question: ${formData.question.replace(/<[^>]*>/g, '')}
 Answer: ${formData.answer.replace(/<[^>]*>/g, '')}
@@ -426,46 +415,22 @@ Format practical examples like this:
 
 If not applicable, return exactly: NOT_APPLICABLE`;
 
-      // Call the AI with the constructed prompt
-      const result = await callAI(prompt, selectedProvider, apiKey);
-      
-      // Check if result is valid
-      if (!result || typeof result !== 'string') {
-        throw new Error('AI response was empty or invalid');
-      }
+    // Call the AI with the constructed prompt
+    const result = await callAI(prompt, selectedProvider, apiKey);
 
-      // Safely clean the result
-      const safeResult = String(result || '').trim();
-      if (!safeResult) {
-        throw new Error('AI response was empty after processing');
-      }
-      
-      // Check if AI determined an example is not applicable
-      if (safeResult === 'NOT_APPLICABLE') {
-        // Show a user-friendly message instead of adding content
-        setEnhancementError('An example is not applicable for this type of content');
-      } else {
-        // Wrap the generated example in a collapsible section
-        const collapsibleContent = `
-<details class="generated-content-section">
-  <summary class="generated-content-header">💡 Example</summary>
-  <div class="generated-content-body">
-    ${safeResult}
-  </div>
-</details>`;
-
-        const currentAnswer = String(formData.answer || '').trim();
-        const newAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
-        handleFieldChange('answer', newAnswer);
-      }
-    } catch (error) {
-      // Log error for debugging and show user-friendly error message
-      console.error('Example generation error:', error);
-      setEnhancementError('Failed to generate example: ' + error.message);
-    } finally {
-      // Always reset loading state when operation completes
-
+    // Check if result is valid
+    if (!result || typeof result !== 'string') {
+      throw new Error('AI response was empty or invalid');
     }
+
+    // Safely clean the result
+    const safeResult = String(result || '').trim();
+    if (!safeResult) {
+      throw new Error('AI response was empty after processing');
+    }
+
+    // Return the result (NOT_APPLICABLE will be handled by caller)
+    return safeResult;
   };
 
 
@@ -547,15 +512,50 @@ Return only the formatted summary content:`;
     return result;
   };
 
+  /**
+   * Generates a short summary answer to the flashcard question
+   */
+  const generateDirectAnswerContent = async () => {
+    if (!formData.question.trim()) {
+      throw new Error('Question is required to generate an answer');
+    }
+
+    const prompt = `Please provide a SHORT, CONCISE summary answer to the following flashcard question:
+
+Question: ${formData.question.replace(/<[^>]*>/g, '')}
+Category: ${formData.category}
+${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
+
+Create a brief summary answer that:
+1. Directly answers the question in 1-3 sentences
+2. Captures the essential information only
+3. Is easy to memorize and recall
+4. Avoids unnecessary details or elaboration
+
+Format: Use a simple <p> tag. Keep it SHORT - ideally 1-2 sentences, maximum 3 sentences.
+
+Example good responses:
+- <p>A HashMap stores key-value pairs using hashing for O(1) average lookup time.</p>
+- <p>Polymorphism allows objects of different classes to be treated as objects of a common superclass, enabling flexible and reusable code.</p>
+
+Return ONLY the short summary answer:`;
+
+    const result = await callAI(prompt, selectedProvider, apiKeys[selectedProvider]);
+    if (!result || typeof result !== 'string') {
+      throw new Error('AI response was empty or invalid');
+    }
+    return result;
+  };
+
 
   /**
    * Generates multiple AI responses based on selected options
    */
   const generateBatchContent = async () => {
     console.log('🔍 generateBatchContent called with selectedOptions:', selectedOptions);
-    
+
     // Validate that at least one option is selected
-    const hasSelections = selectedOptions.keyConcepts || selectedOptions.example || selectedOptions.customQuestion || selectedOptions.customAi;
+    const hasSelections = selectedOptions.answerQuestion || selectedOptions.keyConcepts || selectedOptions.example || selectedOptions.customQuestion || selectedOptions.customAi;
     if (!hasSelections) {
       setEnhancementError('Please select at least one content type to generate');
       return;
@@ -581,6 +581,22 @@ Return only the formatted summary content:`;
       let currentAnswer = String(formData.answer || '').trim();
       let hasErrors = false;
       let errorMessages = [];
+
+      // Generate Answer Question if selected (direct answer without collapsible wrapper)
+      if (selectedOptions.answerQuestion) {
+        try {
+          const directAnswer = await generateDirectAnswerContent();
+          const safeDirectAnswer = String(directAnswer || '').trim();
+          if (safeDirectAnswer) {
+            // Add direct answer at the beginning (not in a collapsible)
+            currentAnswer = safeDirectAnswer;
+          }
+        } catch (error) {
+          console.error('Answer question generation failed:', error);
+          hasErrors = true;
+          errorMessages.push(`Answer question: ${error.message}`);
+        }
+      }
 
       // Generate Key Concepts if selected
       if (selectedOptions.keyConcepts) {
@@ -685,6 +701,7 @@ Return only the formatted summary content:`;
       // Close the modal and reset selections
       setShowGenerateModal(false);
       setSelectedOptions({
+        answerQuestion: true,
         keyConcepts: true,
         example: true,
         customQuestion: false,
@@ -882,6 +899,23 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
     }
   };
 
+  // Clean markdown code block markers from AI responses
+  const cleanMarkdownCodeBlocks = (text) => {
+    if (!text || typeof text !== 'string') return text;
+
+    // Remove ```html, ```java, ```javascript, ```xml, etc. at the start
+    let cleaned = text.replace(/^```(?:html|java|javascript|js|xml|css|json|typescript|ts|python|py|sql|bash|shell|sh|code)?\s*\n?/gim, '');
+
+    // Remove closing ``` at the end
+    cleaned = cleaned.replace(/\n?```\s*$/gim, '');
+
+    // Also handle cases where ``` appears in the middle (multiple code blocks)
+    cleaned = cleaned.replace(/```(?:html|java|javascript|js|xml|css|json|typescript|ts|python|py|sql|bash|shell|sh|code)?\s*\n?/gim, '');
+    cleaned = cleaned.replace(/\n?```/gim, '');
+
+    return cleaned.trim();
+  };
+
   // Generic AI calling function
   const callAI = async (prompt, provider, apiKey) => {
     // Validate API key before making calls
@@ -894,16 +928,23 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
       throw new Error('Invalid Anthropic API key format. API key should start with "sk-ant-"');
     }
 
+    let result;
     switch (provider) {
       case 'openai':
-        return await callOpenAI(prompt, apiKey);
+        result = await callOpenAI(prompt, apiKey);
+        break;
       case 'anthropic':
-        return await callAnthropic(prompt, apiKey);
+        result = await callAnthropic(prompt, apiKey);
+        break;
       case 'gemini':
-        return await callGemini(prompt, apiKey);
+        result = await callGemini(prompt, apiKey);
+        break;
       default:
         throw new Error('Unsupported AI provider');
     }
+
+    // Clean markdown code block markers from the response
+    return cleanMarkdownCodeBlocks(result);
   };
 
   const callOpenAI = async (prompt, apiKey) => {
@@ -1017,7 +1058,7 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
   };
 
   const callGemini = async (prompt, apiKey) => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1072,7 +1113,7 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
       <div className={`modal-content flashcard-form-modal ${isDarkMode ? 'dark' : ''}`}>
         <div className="modal-header">
           <h2>{editCard ? 'Edit Flashcard' : 'Create New Flashcard'}</h2>
-          <button 
+          <button
             className="close-btn"
             onClick={handleCancel}
             disabled={isSubmitting}
@@ -1082,6 +1123,7 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
           </button>
         </div>
 
+        <div className="modal-body">
         <form onSubmit={handleSubmit} className="flashcard-form">
           {/* Category Selection */}
           <div className="form-group">
@@ -1127,91 +1169,21 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
 
           {/* Question Field */}
           <div className="form-group">
-            <div className="field-header">
-              <label htmlFor="question">Question *</label>
-              <div className="preview-toggle">
-                <button
-                  type="button"
-                  className={`toggle-btn ${!questionPreviewMode ? 'active' : ''}`}
-                  onClick={() => setQuestionPreviewMode(false)}
-                >
-                  📝 Edit
-                </button>
-                <button
-                  type="button"
-                  className={`toggle-btn ${questionPreviewMode ? 'active' : ''}`}
-                  onClick={() => setQuestionPreviewMode(true)}
-                >
-                  👁️ Preview
-                </button>
-              </div>
-            </div>
-            
-            {questionPreviewMode ? (
-              <div 
-                className="content-preview"
-                dangerouslySetInnerHTML={{ __html: formData.question }}
-              />
-            ) : (
-              <RichTextEditor
-                value={formData.question}
-                onChange={(value) => handleFieldChange('question', value)}
-                placeholder="Enter your question here..."
-                className={errors.question ? 'error' : ''}
-                minHeight="120px"
-                enableRichText={true}
-              />
-            )}
-            {questionPreviewMode && formData.question.includes('<') && (
-              <div className="preview-note">
-                <small>⚠️ Switch to Edit mode to modify the content. HTML formatting will be preserved.</small>
-              </div>
-            )}
+            <label htmlFor="question">Question *</label>
+            <div
+              className="content-preview"
+              dangerouslySetInnerHTML={{ __html: formData.question || '<span class="placeholder-text">No question content</span>' }}
+            />
             {errors.question && <span className="error-message">{errors.question}</span>}
           </div>
 
           {/* Answer Field */}
           <div className="form-group">
-            <div className="field-header">
-              <label htmlFor="answer">Answer *</label>
-              <div className="preview-toggle">
-                <button
-                  type="button"
-                  className={`toggle-btn ${!answerPreviewMode ? 'active' : ''}`}
-                  onClick={() => setAnswerPreviewMode(false)}
-                >
-                  📝 Edit
-                </button>
-                <button
-                  type="button"
-                  className={`toggle-btn ${answerPreviewMode ? 'active' : ''}`}
-                  onClick={() => setAnswerPreviewMode(true)}
-                >
-                  👁️ Preview
-                </button>
-              </div>
-            </div>
-
-            {answerPreviewMode ? (
-              <div 
-                className="content-preview"
-                dangerouslySetInnerHTML={{ __html: formData.answer }}
-              />
-            ) : (
-              <RichTextEditor
-                value={formData.answer}
-                onChange={(value) => handleFieldChange('answer', value)}
-                placeholder="Enter your answer here..."
-                className={errors.answer ? 'error' : ''}
-                minHeight="120px"
-                enableRichText={true}
-              />
-            )}
-            {answerPreviewMode && formData.answer.includes('<') && (
-              <div className="preview-note">
-                <small>⚠️ Switch to Edit mode to modify the content. HTML formatting will be preserved.</small>
-              </div>
-            )}
+            <label htmlFor="answer">Answer *</label>
+            <div
+              className="content-preview"
+              dangerouslySetInnerHTML={{ __html: formData.answer || '<span class="placeholder-text">No answer content</span>' }}
+            />
             {errors.answer && <span className="error-message">{errors.answer}</span>}
             
             {/* AI Enhancement Button */}
@@ -1273,50 +1245,53 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
             </label>
           </div>
 
-          {/* Form Actions */}
-          <div className="form-actions">
-            <div className="form-actions-left">
-              {editCard && onDelete && (
-                <button
-                  type="button"
-                  className="btn btn-danger delete-card-btn"
-                  onClick={handleDeleteClick}
-                  disabled={isSubmitting || isDeleting || isGeneratingAiResponse}
-                  title="Delete this card"
-                >
-                  {isDeleting ? (
-                    <>
-                      <span className="loading-spinner-small"></span>
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      🗑️ Delete Card
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-            
-            <div className="form-actions-right">
+        </form>
+        </div>
+
+        {/* Form Actions - Fixed Footer */}
+        <div className="form-actions">
+          <div className="form-actions-left">
+            {editCard && onDelete && (
               <button
                 type="button"
-                className="btn btn-secondary"
-                onClick={handleCancel}
-                disabled={isSubmitting || isDeleting}
+                className="btn btn-danger delete-card-btn"
+                onClick={handleDeleteClick}
+                disabled={isSubmitting || isDeleting || isGeneratingAiResponse}
+                title="Delete this card"
               >
-                Cancel
+                {isDeleting ? (
+                  <>
+                    <span className="loading-spinner-small"></span>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    🗑️ Delete Card
+                  </>
+                )}
               </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={isSubmitting || isLoading || isDeleting || isGeneratingAiResponse}
-              >
-                {isSubmitting ? 'Saving...' : editCard ? 'Update Card' : 'Create Card'}
-              </button>
-            </div>
+            )}
           </div>
-        </form>
+
+          <div className="form-actions-right">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleCancel}
+              disabled={isSubmitting || isDeleting}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleSubmit}
+              disabled={isSubmitting || isLoading || isDeleting || isGeneratingAiResponse}
+            >
+              {isSubmitting ? 'Saving...' : editCard ? 'Update Card' : 'Create Card'}
+            </button>
+          </div>
+        </div>
 
         {/* Loading Indicator */}
         {(isSubmitting || isLoading) && (
@@ -1408,14 +1383,15 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
       {/* Generate Answer Modal */}
       {showGenerateModal && (
         <div className="modal-overlay ai-modal-overlay">
-          <div className="modal-content ai-modal-content">
-            <div className="modal-header">
-              <h3>Generate Answer Content</h3>
-              <button 
+          <div className="modal-content ai-modal-content" style={{ maxWidth: '500px', background: '#ffffff', border: '3px solid #2563eb', borderRadius: '8px' }}>
+            <div className="modal-header" style={{ background: '#2563eb', color: 'white', padding: '14px 20px' }}>
+              <h3 style={{ margin: 0, color: 'white' }}>Generate Answer Content</h3>
+              <button
                 className="close-btn"
                 onClick={() => {
                   setShowGenerateModal(false);
                   setSelectedOptions({
+                    answerQuestion: true,
                     keyConcepts: true,
                     example: true,
                     customQuestion: false,
@@ -1425,188 +1401,227 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
                   setCustomQuestion('');
                 }}
                 disabled={isGeneratingBatch}
-                aria-label="Close Generate Answer modal"
+                style={{ color: 'white' }}
               >
                 ×
               </button>
             </div>
-            
-            <div className="ai-modal-body">
-              <p className="ai-modal-description">
-                Select which types of content you'd like to generate for this flashcard:
-              </p>
-              
-              <div style={{ marginBottom: '15px', textAlign: 'center' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setSelectedOptions({
-                    keyConcepts: true,
-                    example: true,
-                    customQuestion: true,
-                    customAi: true
-                  })}
-                  disabled={isGeneratingBatch}
-                  style={{ 
-                    fontSize: '14px', 
-                    padding: '6px 16px',
-                    marginRight: '10px'
-                  }}
-                >
-                  ✅ Select All
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setSelectedOptions({
-                    keyConcepts: false,
-                    example: false,
-                    customQuestion: false,
-                    customAi: false
-                  })}
-                  disabled={isGeneratingBatch}
-                  style={{ 
-                    fontSize: '14px', 
-                    padding: '6px 16px'
-                  }}
-                >
-                  ❌ Clear All
-                </button>
-              </div>
-              
-              <div className="generate-options">
-                <div className="form-group checkbox-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedOptions.keyConcepts}
-                      defaultChecked={true}
-                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, keyConcepts: e.target.checked }))}
-                      disabled={isGeneratingBatch}
-                      className="checkbox-input"
-                    />
-                    <span className="checkbox-text">
-                      🧠 Key Concepts - Organized list of main concepts
-                    </span>
-                  </label>
-                </div>
 
-                <div className="form-group checkbox-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedOptions.example}
-                      defaultChecked={true}
-                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, example: e.target.checked }))}
-                      disabled={isGeneratingBatch}
-                      className="checkbox-input"
-                    />
-                    <span className="checkbox-text">
-                      💡 Example - Code or practical example
-                    </span>
-                  </label>
+            <div className="ai-modal-body" style={{ padding: '20px', background: '#ffffff' }}>
+              {!apiKeys[selectedProvider] ? (
+                <div style={{
+                  padding: '20px',
+                  textAlign: 'center',
+                  background: '#fef2f2',
+                  border: '2px solid #fecaca',
+                  borderRadius: '8px'
+                }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '10px' }}>⚠️</div>
+                  <h3 style={{ margin: '0 0 10px 0', color: '#dc2626' }}>No API Key Found</h3>
+                  <p style={{ margin: '0 0 15px 0', color: '#7f1d1d' }}>
+                    Please configure your {selectedProvider.toUpperCase()} API key in Settings to use AI generation features.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setShowGenerateModal(false)}
+                    style={{ padding: '10px 24px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                  >
+                    Close
+                  </button>
                 </div>
+              ) : (
+                <>
+                  <p style={{ marginBottom: '15px', color: '#374151' }}>
+                    Select which types of content you'd like to generate:
+                  </p>
 
-                <div className="form-group checkbox-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedOptions.customQuestion}
-                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, customQuestion: e.target.checked }))}
-                      disabled={isGeneratingBatch}
-                      className="checkbox-input"
-                    />
-                    <span className="checkbox-text">
-                      ❓ Custom Question
-                    </span>
-                  </label>
-                  <div style={{ marginTop: '5px', marginLeft: '25px' }}>
-                    <input
-                      type="text"
-                      value={customQuestion}
-                      onChange={(e) => {
-                        setCustomQuestion(e.target.value);
-                        // Auto-check the checkbox when user starts typing
-                        if (e.target.value.trim() && !selectedOptions.customQuestion) {
-                          setSelectedOptions(prev => ({ ...prev, customQuestion: true }));
-                        }
-                      }}
-                      placeholder="Type your question here (e.g., 'How is this used in practice?')"
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOptions({
+                        answerQuestion: true,
+                        keyConcepts: true,
+                        example: true,
+                        customQuestion: true,
+                        customAi: true
+                      })}
                       disabled={isGeneratingBatch}
                       style={{
-                        width: '100%',
-                        padding: '8px 12px',
-                        border: '1px solid #ccc',
-                        borderRadius: '4px',
-                        fontSize: '14px',
-                        opacity: selectedOptions.customQuestion ? 1 : 0.7
+                        flex: 1,
+                        padding: '8px 16px',
+                        background: '#dbeafe',
+                        border: '1px solid #2563eb',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        color: '#1e40af',
+                        fontWeight: '600'
                       }}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group checkbox-group">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selectedOptions.customAi}
-                      defaultChecked={true}
-                      onChange={(e) => setSelectedOptions(prev => ({ ...prev, customAi: e.target.checked }))}
+                    >
+                      ✅ Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOptions({
+                        answerQuestion: false,
+                        keyConcepts: false,
+                        example: false,
+                        customQuestion: false,
+                        customAi: false
+                      })}
                       disabled={isGeneratingBatch}
-                      className="checkbox-input"
-                    />
-                    <span className="checkbox-text">
-                      📝 Question Summary - Summary of the question content
-                    </span>
-                  </label>
-                </div>
+                      style={{
+                        flex: 1,
+                        padding: '8px 16px',
+                        background: '#f1f5f9',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        color: '#64748b',
+                        fontWeight: '600'
+                      }}
+                    >
+                      ❌ Clear All
+                    </button>
+                  </div>
 
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedOptions.answerQuestion}
+                        onChange={(e) => setSelectedOptions(prev => ({ ...prev, answerQuestion: e.target.checked }))}
+                        disabled={isGeneratingBatch}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ color: '#374151' }}>✅ Answer Question</span>
+                    </label>
 
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedOptions.keyConcepts}
+                        onChange={(e) => setSelectedOptions(prev => ({ ...prev, keyConcepts: e.target.checked }))}
+                        disabled={isGeneratingBatch}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ color: '#374151' }}>🧠 Key Concepts</span>
+                    </label>
 
-              </div>
-              
-              {enhancementError && (
-                <div className="error-message">
-                  ❌ {enhancementError}
-                </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedOptions.example}
+                        onChange={(e) => setSelectedOptions(prev => ({ ...prev, example: e.target.checked }))}
+                        disabled={isGeneratingBatch}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ color: '#374151' }}>💡 Example</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', background: '#f8fafc', borderRadius: '6px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedOptions.customAi}
+                        onChange={(e) => setSelectedOptions(prev => ({ ...prev, customAi: e.target.checked }))}
+                        disabled={isGeneratingBatch}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ color: '#374151' }}>📝 Question Summary</span>
+                    </label>
+
+                    <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '6px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginBottom: '8px' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedOptions.customQuestion}
+                          onChange={(e) => setSelectedOptions(prev => ({ ...prev, customQuestion: e.target.checked }))}
+                          disabled={isGeneratingBatch}
+                          style={{ width: '18px', height: '18px' }}
+                        />
+                        <span style={{ color: '#374151' }}>❓ Custom Question</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={customQuestion}
+                        onChange={(e) => {
+                          setCustomQuestion(e.target.value);
+                          if (e.target.value.trim() && !selectedOptions.customQuestion) {
+                            setSelectedOptions(prev => ({ ...prev, customQuestion: true }));
+                          }
+                        }}
+                        placeholder="Type your question here..."
+                        disabled={isGeneratingBatch}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {enhancementError && (
+                    <div style={{ marginTop: '15px', padding: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#dc2626' }}>
+                      ❌ {enhancementError}
+                    </div>
+                  )}
+                </>
               )}
             </div>
-            
-            <div className="ai-modal-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => {
-                  setShowGenerateModal(false);
-                  setSelectedOptions({
-                    keyConcepts: true,
-                    example: true,
-                    customQuestion: false,
-                    customAi: true
-                  });
-                  setEnhancementError('');
-                  setCustomQuestion('');
-                }}
-                disabled={isGeneratingBatch}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={generateBatchContent}
-                disabled={isGeneratingBatch || (!selectedOptions.keyConcepts && !selectedOptions.example && !selectedOptions.customQuestion && !selectedOptions.customAi)}
-              >
-                {isGeneratingBatch ? (
-                  <>
-                    <span className="loading-spinner-small"></span>
-                    Generating...
-                  </>
-                ) : (
-                  'Generate Selected Content'
-                )}
-              </button>
-            </div>
+
+            {apiKeys[selectedProvider] && (
+              <div style={{ display: 'flex', gap: '10px', padding: '14px 20px', background: '#f1f5f9', borderTop: '1px solid #e2e8f0' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowGenerateModal(false);
+                    setSelectedOptions({
+                      answerQuestion: true,
+                      keyConcepts: true,
+                      example: true,
+                      customQuestion: false,
+                      customAi: true
+                    });
+                    setEnhancementError('');
+                    setCustomQuestion('');
+                  }}
+                  disabled={isGeneratingBatch}
+                  style={{
+                    flex: 1,
+                    padding: '10px 20px',
+                    background: '#64748b',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '600'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={generateBatchContent}
+                  disabled={isGeneratingBatch || (!selectedOptions.answerQuestion && !selectedOptions.keyConcepts && !selectedOptions.example && !selectedOptions.customQuestion && !selectedOptions.customAi)}
+                  style={{
+                    flex: 1,
+                    padding: '10px 20px',
+                    background: isGeneratingBatch ? '#93c5fd' : '#2563eb',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: isGeneratingBatch ? 'not-allowed' : 'pointer',
+                    fontWeight: '600'
+                  }}
+                >
+                  {isGeneratingBatch ? 'Generating...' : 'Generate'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

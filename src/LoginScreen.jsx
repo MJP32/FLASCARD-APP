@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 
-function LoginScreen({ 
-  authError, 
-  handleLogin, 
-  handleRegister, 
-  handleAnonymousLogin, 
-  handlePasswordReset, 
-  email, 
-  setEmail, 
-  password, 
-  setPassword, 
-  isDarkMode, 
-  isLoading, 
-  onToggleDarkMode 
+function LoginScreen({
+  authError,
+  handleLogin,
+  handleRegister,
+  handleAnonymousLogin,
+  handlePasswordReset,
+  email,
+  setEmail,
+  password,
+  setPassword,
+  isDarkMode,
+  isLoading,
+  onToggleDarkMode
 }) {
   const [isLoginView, setIsLoginView] = useState(true);
   const [isPasswordResetView, setIsPasswordResetView] = useState(false);
@@ -21,7 +21,7 @@ function LoginScreen({
   const [mounted, setMounted] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
-  
+
   // Use the more specific loading state for password reset, or fall back to general loading
   const currentLoading = isPasswordResetView ? isLocalLoading : (isLoading || isLocalLoading);
 
@@ -71,14 +71,12 @@ function LoginScreen({
   };
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-6 font-inter login-container transition-all duration-1000 ease-out ${mounted ? 'animate-fadeIn' : 'opacity-0'} ${isDarkMode ? 'dark' : ''} relative`}
-         style={{
-           background: isDarkMode 
-             ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)' 
-             : 'linear-gradient(135deg, #f8fafc 0%, #e0e7ff 25%, #dbeafe 50%, #e0e7ff 75%, #f8fafc 100%)',
-           backgroundSize: '400% 400%',
-           animation: 'gradientShift 20s ease infinite'
-         }}>
+    <div className={`min-h-screen flex flex-col items-center justify-center p-8 font-inter login-container transition-all duration-1000 ease-out ${mounted ? 'animate-fadeIn' : 'opacity-0'} ${isDarkMode ? 'dark' : ''} relative`}
+      style={{
+        background: isDarkMode
+          ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)'
+          : '#f8fafc'
+      }}>
       {/* Dark Mode Toggle */}
       {onToggleDarkMode && (
         <button
@@ -99,21 +97,20 @@ function LoginScreen({
         </button>
       )}
       {/* Hero Section */}
-      <div className={`backdrop-blur-2xl ${isDarkMode ? 'bg-slate-800/30' : 'bg-white/20'} rounded-3xl shadow-2xl p-8 mb-8 transform hover:scale-105 transition-all duration-500 animate-float border ${isDarkMode ? 'border-slate-700/50' : 'border-white/30'}`}
-           style={{ 
-             animationDelay: '0.2s',
-             boxShadow: isDarkMode 
-               ? '0 32px 64px -12px rgba(0, 0, 0, 0.5), 0 0 80px rgba(79, 70, 229, 0.1)' 
-               : '0 32px 64px -12px rgba(79, 70, 229, 0.15), 0 0 80px rgba(255, 255, 255, 0.5)',
-             backdropFilter: 'blur(20px) saturate(180%)'
-           }}>
+      <div className={`${isDarkMode ? 'bg-slate-800/90' : 'bg-white'} rounded-2xl shadow-xl p-8 mb-8 transform hover:scale-105 transition-all duration-500 animate-float border-none`}
+        style={{
+          animationDelay: '0.2s',
+          boxShadow: isDarkMode
+            ? '0 20px 40px rgba(0, 0, 0, 0.3)'
+            : '0 20px 40px rgba(37, 99, 235, 0.1)'
+        }}>
         <div className="text-center space-y-4">
           {/* Logo/Icon */}
-          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-primary-color to-secondary-color rounded-2xl flex items-center justify-center backdrop-blur-xl animate-float shadow-lg" 
-               style={{ 
-                 animationDelay: '0.5s',
-                 background: 'linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%)'
-               }}>
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center shadow-lg"
+            style={{
+              animationDelay: '0.5s',
+              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.95) 0%, rgba(79, 70, 229, 0.9) 100%)'
+            }}>
             <svg className="w-10 h-10 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
@@ -130,29 +127,28 @@ function LoginScreen({
         </div>
       </div>
       {/* Login Form */}
-      <div className={`w-full max-w-md backdrop-blur-2xl ${isDarkMode ? 'bg-slate-800/25' : 'bg-white/25'} rounded-3xl shadow-2xl border ${isDarkMode ? 'border-slate-700/40' : 'border-white/40'} p-8 transform transition-all duration-500 hover:shadow-3xl`}
-           style={{ 
-             boxShadow: isDarkMode 
-               ? '0 32px 64px -12px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(79, 70, 229, 0.2)' 
-               : '0 32px 64px -12px rgba(79, 70, 229, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
-             backdropFilter: 'blur(20px) saturate(180%)'
-           }}>
+      <div className={`w-full max-w-md ${isDarkMode ? 'bg-slate-800/90' : 'bg-white'} rounded-2xl shadow-xl border-none p-8 transform transition-all duration-500`}
+        style={{
+          boxShadow: isDarkMode
+            ? '0 20px 40px rgba(0, 0, 0, 0.3)'
+            : '0 20px 40px rgba(37, 99, 235, 0.1)'
+        }}>
         <div className="text-center mb-8">
           <h2 className={`text-3xl font-bold mb-2 drop-shadow-lg ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
             {isPasswordResetView ? 'Reset Password' : isLoginView ? 'Welcome Back' : 'Join Us'}
           </h2>
           <p className={`text-sm ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
-            {isPasswordResetView 
-              ? 'Enter your email to receive reset instructions' 
-              : isLoginView 
-                ? 'Continue your learning journey' 
+            {isPasswordResetView
+              ? 'Enter your email to receive reset instructions'
+              : isLoginView
+                ? 'Continue your learning journey'
                 : 'Start mastering new skills today'
             }
           </p>
         </div>
         {authError && (
           <div className={`backdrop-blur-xl bg-red-500/20 border border-red-400/30 px-6 py-4 rounded-2xl relative mb-6 shadow-xl animate-fadeIn ${isDarkMode ? 'text-white' : 'text-red-800'}`} role="alert"
-               style={{ backdropFilter: 'blur(12px)' }}>
+            style={{ backdropFilter: 'blur(12px)' }}>
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-red-500/30 rounded-full flex items-center justify-center">
                 <svg className={`w-4 h-4 ${isDarkMode ? 'text-white' : 'text-red-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -313,7 +309,7 @@ function LoginScreen({
                 </button>
               </div>
             </div>
-            
+
             {/* Forgot Password Link */}
             {isLoginView && (
               <div className="text-right">
@@ -327,15 +323,15 @@ function LoginScreen({
                 </button>
               </div>
             )}
-            
+
             <button
               type="submit"
               disabled={currentLoading}
               className="w-full group relative backdrop-blur-xl font-semibold py-4 px-6 rounded-2xl shadow-xl border transition-all duration-300 transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none btn-primary text-white focus:ring-indigo-300"
-              style={{ 
+              style={{
                 background: 'linear-gradient(135deg, #4f46e5 0%, #0ea5e9 100%)',
                 borderColor: '#4f46e5',
-                backdropFilter: 'blur(12px)' 
+                backdropFilter: 'blur(12px)'
               }}
             >
               <span className="relative z-10 flex items-center justify-center gap-3">
@@ -364,7 +360,7 @@ function LoginScreen({
             </button>
           </form>
         )}
-        
+
         {/* Guest Login and Toggle - Only show when not in password reset view */}
         {!isPasswordResetView && (
           <>
@@ -377,7 +373,7 @@ function LoginScreen({
                   <span className="px-4 bg-white/10 text-white/80 rounded-full backdrop-blur-xl" style={{ backdropFilter: 'blur(8px)' }}>or</span>
                 </div>
               </div>
-              
+
               <button
                 onClick={handleGuestLogin}
                 disabled={currentLoading}

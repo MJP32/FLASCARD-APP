@@ -131,14 +131,34 @@ const SettingsModal = ({
   if (!isVisible) return null;
 
   return (
-    <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className="modal-content settings-modal">
-        <div className="modal-header">
-          <h2>⚙️ Settings</h2>
-          <button 
-            className="close-btn"
+    <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`} style={{ zIndex: 200000 }}>
+      <div className="modal-content settings-modal" style={{
+        maxWidth: '600px',
+        borderRadius: '4px',
+        border: 'none',
+        overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+      }}>
+        <div style={{
+          background: '#2563eb',
+          padding: '16px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <h2 style={{ margin: 0, color: 'white', fontSize: '20px', fontWeight: '600' }}>Settings</h2>
+          <button
             onClick={onClose}
             aria-label="Close settings"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              fontSize: '28px',
+              cursor: 'pointer',
+              padding: '0 8px',
+              lineHeight: 1
+            }}
           >
             ×
           </button>
@@ -147,117 +167,54 @@ const SettingsModal = ({
         <div className="modal-body">
           {/* Study Guide Section */}
           <section className="settings-section">
-            <div className="section-header-with-checkbox">
-              <div className="checkbox-container">
-                <input
-                  type="checkbox"
-                  id="show-study-guide-section"
-                  checked={showStudyGuideSection}
-                  onChange={(e) => setShowStudyGuideSection(e.target.checked)}
-                />
-                <label htmlFor="show-study-guide-section">
-                  <h3>📖 Study Guide</h3>
-                </label>
-              </div>
-              <button 
-                className="btn btn-info btn-small"
-                onClick={() => setShowStudyGuideSection(!showStudyGuideSection)}
-              >
-                {showStudyGuideSection ? '📖 Hide' : '📖'} Study Guide
-              </button>
-            </div>
-            
-            <p className="section-description">
-              Generate comprehensive study guides from your challenging flashcards to help focus your learning.
-            </p>
-            
+            <button
+              className="section-toggle-btn"
+              onClick={() => setShowStudyGuideSection(!showStudyGuideSection)}
+            >
+              <span className="section-icon">📖</span>
+              <span className="section-title">Study Guide</span>
+              <span className="section-arrow">{showStudyGuideSection ? '▲' : '▼'}</span>
+            </button>
+
             {showStudyGuideSection && (
-              <div className="study-guide-section-content">
-            <div className="study-guide-info">
-              <div className="study-guide-details">
-                <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
-                  Create a personalized study guide based on cards you've marked as "Hard" or are struggling with. 
-                  The guide will help you focus on areas that need the most attention.
+              <div className="section-content">
+                <p className="section-description">
+                  Generate comprehensive study guides from your challenging flashcards.
                 </p>
-              </div>
-            </div>
-            
-              {/* Study Guide Section */}
-              <div className="study-guide-section">
-                <button 
-                  className="btn btn-primary study-guide-btn"
+                <button
+                  className="btn btn-primary"
                   onClick={() => setShowStudyGuideModal(true)}
-                  disabled={false}
-                  style={{
-                    width: '100%',
-                    marginTop: '16px',
-                    marginBottom: '16px',
-                    backgroundColor: '#3b82f6',
-                    border: 'none',
-                    borderRadius: '8px',
-                    color: 'white',
-                    padding: '12px 16px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
+                  style={{ width: '100%', marginTop: '8px' }}
                 >
                   📖 Open Study Guide
                 </button>
-                
               </div>
-              
-            </div>
             )}
           </section>
 
           {/* Appearance Section */}
           <section className="settings-section">
-            <div className="section-header-with-checkbox">
-              <div className="checkbox-container">
-                <input
-                  type="checkbox"
-                  id="show-appearance-section"
-                  checked={showAppearanceSection}
-                  onChange={(e) => setShowAppearanceSection(e.target.checked)}
-                />
-                <label htmlFor="show-appearance-section">
-                  <h3>🎨 Appearance</h3>
-                </label>
-              </div>
-              <button 
-                className="btn btn-info btn-small"
-                onClick={() => setShowAppearanceSection(!showAppearanceSection)}
-              >
-                {showAppearanceSection ? '🎨 Hide' : '🎨'} Theme Settings
-              </button>
-            </div>
-            
-            <p className="section-description">
-              Customize the visual appearance and theme of the application.
-            </p>
-            
+            <button
+              className="section-toggle-btn"
+              onClick={() => setShowAppearanceSection(!showAppearanceSection)}
+            >
+              <span className="section-icon">🎨</span>
+              <span className="section-title">Appearance</span>
+              <span className="section-arrow">{showAppearanceSection ? '▲' : '▼'}</span>
+            </button>
+
             {showAppearanceSection && (
-              <div className="setting-item">
-                <div className="toggle-setting">
-                  <div className="toggle-info">
-                    <span className="toggle-label">Theme</span>
-                    <span className="toggle-description">
-                      {isDarkMode ? 'Dark mode is enabled' : 'Light mode is enabled'}
-                    </span>
-                  </div>
-                  <div className="theme-toggle">
-                    <span className="theme-label light">☀️ Light</span>
-                    <button
-                      className={`toggle-switch ${isDarkMode ? 'dark' : 'light'}`}
-                      onClick={onToggleDarkMode}
-                      aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
-                    >
-                      <div className="toggle-slider"></div>
-                    </button>
-                    <span className="theme-label dark">🌙 Dark</span>
-                  </div>
+              <div className="section-content">
+                <div className="theme-toggle-row">
+                  <span className="theme-label">☀️ Light</span>
+                  <button
+                    className={`toggle-switch ${isDarkMode ? 'dark' : 'light'}`}
+                    onClick={onToggleDarkMode}
+                    aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
+                  >
+                    <div className="toggle-slider"></div>
+                  </button>
+                  <span className="theme-label">🌙 Dark</span>
                 </div>
               </div>
             )}
@@ -265,29 +222,14 @@ const SettingsModal = ({
 
           {/* Study Settings Section */}
           <section className="settings-section">
-            <div className="section-header-with-checkbox">
-              <div className="checkbox-container">
-                <input
-                  type="checkbox"
-                  id="show-study-settings"
-                  checked={showIntervalSettings}
-                  onChange={onToggleIntervalSettings}
-                />
-                <label htmlFor="show-study-settings">
-                  <h3>📚 Study Settings</h3>
-                </label>
-              </div>
-              <button 
-                className="btn btn-info btn-small"
-                onClick={onToggleIntervalSettings}
-              >
-                {showIntervalSettings ? '⚙️ Hide' : '⚙️'} Advanced FSRS
-              </button>
-            </div>
-            
-            <p className="section-description">
-              Configure advanced spaced repetition algorithm parameters and study behavior settings.
-            </p>
+            <button
+              className="section-toggle-btn"
+              onClick={onToggleIntervalSettings}
+            >
+              <span className="section-icon">📚</span>
+              <span className="section-title">Study Settings (FSRS)</span>
+              <span className="section-arrow">{showIntervalSettings ? '▲' : '▼'}</span>
+            </button>
             
             {/* FSRS Parameters Section - Moved inside dropdown */}
             {showIntervalSettings && (
@@ -576,31 +518,15 @@ const SettingsModal = ({
 
           {/* File Format Section */}
           <section className="settings-section">
-            <div className="section-header-with-checkbox">
-              <div className="checkbox-container">
-                <input
-                  type="checkbox"
-                  id="show-file-format"
-                  checked={showFileFormat}
-                  onChange={(e) => setShowFileFormat(e.target.checked)}
-                />
-                <label htmlFor="show-file-format">
-                  <h3>📁 File Format</h3>
-                </label>
-              </div>
-              <button 
-                className="btn btn-info btn-small"
-                onClick={() => setShowFileFormat(!showFileFormat)}
-              >
-                {showFileFormat ? '📖 Hide' : '📚'} Format Guide
-              </button>
-            </div>
-            
-            <p className="section-description">
-              Configure import settings and view file format requirements for CSV and Excel files.
-            </p>
-            
-            {/* File Format Guide - Moved inside dropdown */}
+            <button
+              className="section-toggle-btn"
+              onClick={() => setShowFileFormat(!showFileFormat)}
+            >
+              <span className="section-icon">📁</span>
+              <span className="section-title">File Format Guide</span>
+              <span className="section-arrow">{showFileFormat ? '▲' : '▼'}</span>
+            </button>
+
             {showFileFormat && (
               <div className="file-format-info">
                 <p className="section-description">
@@ -654,30 +580,15 @@ Option 2: Without headers (uses default column order)
 
           {/* User Feedback Section */}
           <section className="settings-section">
-            <div className="section-header-with-checkbox">
-              <div className="checkbox-container">
-                <input
-                  type="checkbox"
-                  id="enable-feedback"
-                  checked={showFeedbackSection}
-                  onChange={(e) => setShowFeedbackSection(e.target.checked)}
-                />
-                <label htmlFor="enable-feedback">
-                  <h3>💬 User Feedback</h3>
-                </label>
-              </div>
-              <button 
-                className="btn btn-info btn-small"
-                onClick={() => setShowFeedbackSection(!showFeedbackSection)}
-              >
-                {showFeedbackSection ? '📝 Hide' : '📝'} Feedback Form
-              </button>
-            </div>
-            
-            <p className="section-description">
-              We value your feedback! Share your thoughts, suggestions, or report issues to help us improve FSRS Flashcards.
-            </p>
-            
+            <button
+              className="section-toggle-btn"
+              onClick={() => setShowFeedbackSection(!showFeedbackSection)}
+            >
+              <span className="section-icon">💬</span>
+              <span className="section-title">User Feedback</span>
+              <span className="section-arrow">{showFeedbackSection ? '▲' : '▼'}</span>
+            </button>
+
             {showFeedbackSection && (
               <div className="feedback-section">
                 <div className="feedback-form">
@@ -734,30 +645,15 @@ Option 2: Without headers (uses default column order)
 
           {/* Invite & Share Section */}
           <section className="settings-section">
-            <div className="section-header-with-checkbox">
-              <div className="checkbox-container">
-                <input
-                  type="checkbox"
-                  id="show-invite-section"
-                  checked={showInviteSection}
-                  onChange={(e) => setShowInviteSection(e.target.checked)}
-                />
-                <label htmlFor="show-invite-section">
-                  <h3>🤝 Invite & Share</h3>
-                </label>
-              </div>
-              <button 
-                className="btn btn-info btn-small"
-                onClick={() => setShowInviteSection(!showInviteSection)}
-              >
-                {showInviteSection ? '🔗 Hide' : '🔗'} Share Options
-              </button>
-            </div>
-            
-            <p className="section-description">
-              Share this flashcard app with friends and colleagues to help them learn more effectively!
-            </p>
-            
+            <button
+              className="section-toggle-btn"
+              onClick={() => setShowInviteSection(!showInviteSection)}
+            >
+              <span className="section-icon">🤝</span>
+              <span className="section-title">Invite & Share</span>
+              <span className="section-arrow">{showInviteSection ? '▲' : '▼'}</span>
+            </button>
+
             {showInviteSection && (
               <div className="invite-section">
                 <div className="share-options">

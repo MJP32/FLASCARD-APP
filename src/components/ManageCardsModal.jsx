@@ -2,15 +2,6 @@ import React, { useState } from 'react';
 
 /**
  * Modal for managing flashcard active/inactive states
- * @param {Object} props - Component props
- * @param {boolean} props.isVisible - Whether the modal is visible
- * @param {Function} props.onClose - Callback to close the modal
- * @param {Array} props.flashcards - All flashcards
- * @param {Function} props.onToggleActive - Callback to toggle card active state
- * @param {Function} props.onCreateCard - Callback to create new card
- * @param {Function} props.onImportExport - Callback to open import/export modal
- * @param {boolean} props.isDarkMode - Dark mode state
- * @returns {JSX.Element} Manage cards modal component
  */
 const ManageCardsModal = ({
   isVisible,
@@ -22,14 +13,14 @@ const ManageCardsModal = ({
   isDarkMode
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'active', 'inactive'
+  const [filterStatus, setFilterStatus] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSubCategory, setSelectedSubCategory] = useState('All');
-  const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'alphabetical', 'category', 'dueDateAsc', 'dueDateDesc'
+  const [sortBy, setSortBy] = useState('newest');
 
   // Get unique categories
   const categories = ['All', ...new Set(flashcards.map(card => card.category || 'Uncategorized'))];
-  
+
   // Get unique sub-categories based on selected category
   const subCategories = ['All', ...new Set(
     flashcards
@@ -37,59 +28,23 @@ const ManageCardsModal = ({
       .map(card => card.sub_category)
       .filter(subCat => subCat && subCat.trim() !== '')
   )];
-  
-  // Calculate subcategory stats
-  const getSubCategoryStats = () => {
-    const stats = {};
-    const now = new Date();
-    
-    flashcards.forEach(card => {
-      if (selectedCategory !== 'All' && card.category !== selectedCategory) return;
-      if (!card.sub_category || !card.sub_category.trim()) return;
-      
-      const subCat = card.sub_category;
-      if (!stats[subCat]) {
-        stats[subCat] = { total: 0, due: 0, active: 0, inactive: 0 };
-      }
-      
-      stats[subCat].total++;
-      
-      if (card.active !== false) {
-        stats[subCat].active++;
-        const dueDate = card.dueDate || new Date(0);
-        if (dueDate <= now) {
-          stats[subCat].due++;
-        }
-      } else {
-        stats[subCat].inactive++;
-      }
-    });
-    
-    return stats;
-  };
-  
-  const subCategoryStats = getSubCategoryStats();
 
   // Filter and sort cards
   const filteredCards = flashcards
     .filter(card => {
-      // Search filter
-      const matchesSearch = searchTerm === '' || 
+      const matchesSearch = searchTerm === '' ||
         card.question?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         card.answer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         card.category?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Category filter
-      const matchesCategory = selectedCategory === 'All' || 
+      const matchesCategory = selectedCategory === 'All' ||
         card.category === selectedCategory ||
         (selectedCategory === 'Uncategorized' && !card.category);
 
-      // Sub-category filter
       const matchesSubCategory = selectedSubCategory === 'All' ||
         card.sub_category === selectedSubCategory;
 
-      // Status filter
-      const isActive = card.active !== false; // Default to true if not set
+      const isActive = card.active !== false;
       const matchesStatus = filterStatus === 'all' ||
         (filterStatus === 'active' && isActive) ||
         (filterStatus === 'inactive' && !isActive);
@@ -107,15 +62,13 @@ const ManageCardsModal = ({
         case 'category':
           return (a.category || 'Uncategorized').localeCompare(b.category || 'Uncategorized');
         case 'dueDateAsc':
-          // Convert to Date objects for comparison - earliest first
           const dateAAsc = a.dueDate ? (a.dueDate.toDate ? a.dueDate.toDate() : new Date(a.dueDate)) : new Date(0);
           const dateBAsc = b.dueDate ? (b.dueDate.toDate ? b.dueDate.toDate() : new Date(b.dueDate)) : new Date(0);
-          return dateAAsc - dateBAsc; // Earliest due dates first
+          return dateAAsc - dateBAsc;
         case 'dueDateDesc':
-          // Convert to Date objects for comparison - latest first
           const dateADesc = a.dueDate ? (a.dueDate.toDate ? a.dueDate.toDate() : new Date(a.dueDate)) : new Date(9999, 11, 31);
           const dateBDesc = b.dueDate ? (b.dueDate.toDate ? b.dueDate.toDate() : new Date(b.dueDate)) : new Date(9999, 11, 31);
-          return dateBDesc - dateADesc; // Latest due dates first
+          return dateBDesc - dateADesc;
         default:
           return 0;
       }
@@ -125,232 +78,356 @@ const ManageCardsModal = ({
   const activeCount = flashcards.filter(card => card.active !== false).length;
   const inactiveCount = flashcards.filter(card => card.active === false).length;
 
+  // Strip HTML tags for display
+  const stripHtml = (html) => {
+    if (!html) return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  };
 
   if (!isVisible) return null;
 
+  const modalStyles = {
+    overlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 200000,
+      padding: '20px'
+    },
+    modal: {
+      background: '#ffffff',
+      borderRadius: '4px',
+      width: '100%',
+      maxWidth: '900px',
+      maxHeight: '90vh',
+      display: 'flex',
+      flexDirection: 'column',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+    },
+    header: {
+      background: '#2563eb',
+      color: 'white',
+      padding: '16px 24px',
+      borderRadius: '4px 4px 0 0',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    headerTitle: {
+      margin: 0,
+      fontSize: '20px',
+      fontWeight: '600'
+    },
+    closeBtn: {
+      background: 'transparent',
+      border: 'none',
+      color: 'white',
+      fontSize: '28px',
+      cursor: 'pointer',
+      padding: '0 8px',
+      lineHeight: 1
+    },
+    body: {
+      padding: '20px 24px',
+      overflowY: 'auto',
+      flex: 1
+    },
+    statsRow: {
+      display: 'flex',
+      gap: '12px',
+      marginBottom: '20px'
+    },
+    statCard: {
+      flex: 1,
+      padding: '16px',
+      borderRadius: '4px',
+      textAlign: 'center'
+    },
+    actionsRow: {
+      display: 'flex',
+      gap: '10px',
+      marginBottom: '20px',
+      flexWrap: 'wrap'
+    },
+    actionBtn: {
+      padding: '10px 16px',
+      borderRadius: '4px',
+      border: 'none',
+      cursor: 'pointer',
+      fontWeight: '600',
+      fontSize: '14px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    },
+    filtersRow: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+      gap: '12px',
+      marginBottom: '20px'
+    },
+    filterInput: {
+      padding: '10px 14px',
+      borderRadius: '4px',
+      border: '2px solid #e2e8f0',
+      fontSize: '14px',
+      outline: 'none',
+      transition: 'border-color 0.2s'
+    },
+    cardsList: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px'
+    },
+    cardItem: {
+      background: '#f8fafc',
+      border: '2px solid #e2e8f0',
+      borderRadius: '4px',
+      padding: '14px 16px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: '12px',
+      transition: 'border-color 0.2s, box-shadow 0.2s'
+    },
+    cardContent: {
+      flex: 1,
+      minWidth: 0
+    },
+    cardQuestion: {
+      fontSize: '14px',
+      fontWeight: '600',
+      color: '#1e293b',
+      marginBottom: '6px',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    },
+    cardAnswer: {
+      fontSize: '13px',
+      color: '#64748b',
+      marginBottom: '8px',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    },
+    cardMeta: {
+      fontSize: '12px',
+      color: '#94a3b8',
+      display: 'flex',
+      gap: '12px',
+      flexWrap: 'wrap'
+    },
+    toggleBtn: {
+      padding: '8px 14px',
+      borderRadius: '4px',
+      border: 'none',
+      cursor: 'pointer',
+      fontWeight: '600',
+      fontSize: '13px',
+      whiteSpace: 'nowrap',
+      transition: 'transform 0.1s'
+    },
+    noCards: {
+      textAlign: 'center',
+      padding: '40px 20px',
+      color: '#64748b'
+    },
+    resultsCount: {
+      fontSize: '14px',
+      color: '#64748b',
+      marginBottom: '12px'
+    }
+  };
+
   return (
-    <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className={`modal-content manage-cards-modal ${isDarkMode ? 'dark' : ''}`}>
-        <div className="modal-header">
-          <h2>📋 Manage Cards</h2>
-          <button 
-            className="close-btn"
-            onClick={onClose}
-            aria-label="Close modal"
-          >
-            ×
-          </button>
+    <div style={modalStyles.overlay}>
+      <div style={modalStyles.modal}>
+        {/* Header */}
+        <div style={modalStyles.header}>
+          <h2 style={modalStyles.headerTitle}>Manage Cards</h2>
+          <button style={modalStyles.closeBtn} onClick={onClose}>×</button>
         </div>
 
-        <div className="manage-cards-stats">
-          <div className="stat-item">
-            <span className="stat-label">Total Cards:</span>
-            <span className="stat-value">{flashcards.length}</span>
+        {/* Body */}
+        <div style={modalStyles.body}>
+          {/* Stats Row */}
+          <div style={modalStyles.statsRow}>
+            <div style={{...modalStyles.statCard, background: '#eff6ff', border: '2px solid #bfdbfe'}}>
+              <div style={{fontSize: '28px', fontWeight: '700', color: '#2563eb'}}>{flashcards.length}</div>
+              <div style={{fontSize: '13px', color: '#3b82f6', fontWeight: '600'}}>Total Cards</div>
+            </div>
+            <div style={{...modalStyles.statCard, background: '#f0fdf4', border: '2px solid #bbf7d0'}}>
+              <div style={{fontSize: '28px', fontWeight: '700', color: '#16a34a'}}>{activeCount}</div>
+              <div style={{fontSize: '13px', color: '#22c55e', fontWeight: '600'}}>Active</div>
+            </div>
+            <div style={{...modalStyles.statCard, background: '#fefce8', border: '2px solid #fde047'}}>
+              <div style={{fontSize: '28px', fontWeight: '700', color: '#ca8a04'}}>{inactiveCount}</div>
+              <div style={{fontSize: '13px', color: '#eab308', fontWeight: '600'}}>Inactive</div>
+            </div>
           </div>
-          <div className="stat-item">
-            <span className="stat-label">Active:</span>
-            <span className="stat-value" style={{ color: 'var(--success-color)' }}>{activeCount}</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">Inactive:</span>
-            <span className="stat-value" style={{ color: 'var(--warning-color)' }}>{inactiveCount}</span>
-          </div>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="modal-actions" style={{marginBottom: '20px'}}>
-          {/* Card Management Actions */}
-          <div className="card-management-actions">
-            <button 
-              className="btn btn-primary"
+          {/* Action Buttons */}
+          <div style={modalStyles.actionsRow}>
+            <button
+              style={{...modalStyles.actionBtn, background: '#2563eb', color: 'white'}}
               onClick={onCreateCard}
-              title="Create a new flashcard"
             >
-              ➕ New Card
+              + New Card
             </button>
-            <button 
-              className="btn btn-secondary"
+            <button
+              style={{...modalStyles.actionBtn, background: '#7c3aed', color: 'white'}}
               onClick={onImportExport}
-              title="Import or export flashcards"
             >
-              📁 Import/Export
+              Import/Export
             </button>
-          </div>
-
-          {/* Bulk Actions */}
-          <div className="bulk-actions">
-            <button 
-              className="btn btn-secondary"
+            <button
+              style={{...modalStyles.actionBtn, background: '#10b981', color: 'white'}}
               onClick={() => {
-                if (window.confirm('Are you sure you want to activate all filtered cards?')) {
+                if (window.confirm(`Activate all ${filteredCards.length} filtered cards?`)) {
                   filteredCards.forEach(card => {
-                    if (card.active === false) {
-                      onToggleActive(card.id, true);
-                    }
+                    if (card.active === false) onToggleActive(card.id, true);
                   });
                 }
               }}
               disabled={filteredCards.length === 0}
-              title="Activate all cards matching current filters"
             >
-              ✅ Activate All Filtered
+              Activate Filtered
             </button>
-            <button 
-              className="btn btn-secondary"
+            <button
+              style={{...modalStyles.actionBtn, background: '#f59e0b', color: 'white'}}
               onClick={() => {
-                if (window.confirm('Are you sure you want to deactivate all filtered cards?')) {
+                if (window.confirm(`Deactivate all ${filteredCards.length} filtered cards?`)) {
                   filteredCards.forEach(card => {
-                    if (card.active !== false) {
-                      onToggleActive(card.id, false);
-                    }
+                    if (card.active !== false) onToggleActive(card.id, false);
                   });
                 }
               }}
               disabled={filteredCards.length === 0}
-              title="Deactivate all cards matching current filters"
             >
-              ⏸️ Deactivate All Filtered
+              Deactivate Filtered
             </button>
           </div>
 
-          {/* Close Action */}
-          <div className="close-actions">
-            <button 
-              className="btn btn-secondary"
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-
-        <div className="manage-cards-filters">
-          <input
-            type="text"
-            placeholder="Search cards..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-
-          <select
-            value={selectedCategory}
-            onChange={(e) => {
-              setSelectedCategory(e.target.value);
-              setSelectedSubCategory('All'); // Reset sub-category when category changes
-            }}
-            className="filter-select"
-          >
-            {categories.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-
-          {subCategories.length > 1 && (
+          {/* Filters */}
+          <div style={modalStyles.filtersRow}>
+            <input
+              type="text"
+              placeholder="Search cards..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{...modalStyles.filterInput, gridColumn: 'span 2'}}
+            />
             <select
-              value={selectedSubCategory}
-              onChange={(e) => setSelectedSubCategory(e.target.value)}
-              className="filter-select"
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setSelectedSubCategory('All');
+              }}
+              style={modalStyles.filterInput}
             >
-              <option value="All">All Sub-Categories</option>
-              {subCategories.filter(sub => sub !== 'All').map(subCat => {
-                const stats = subCategoryStats[subCat] || { total: 0, due: 0, active: 0 };
-                return (
-                  <option key={subCat} value={subCat}>
-                    {subCat} (Due: {stats.due}, Active: {stats.active}/{stats.total})
-                  </option>
-                );
-              })}
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
-          )}
+            {subCategories.length > 1 && (
+              <select
+                value={selectedSubCategory}
+                onChange={(e) => setSelectedSubCategory(e.target.value)}
+                style={modalStyles.filterInput}
+              >
+                {subCategories.map(sub => (
+                  <option key={sub} value={sub}>{sub === 'All' ? 'All Sub-Categories' : sub}</option>
+                ))}
+              </select>
+            )}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={modalStyles.filterInput}
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active Only</option>
+              <option value="inactive">Inactive Only</option>
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={modalStyles.filterInput}
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="alphabetical">Alphabetical</option>
+              <option value="category">By Category</option>
+              <option value="dueDateAsc">Due Date ↑</option>
+              <option value="dueDateDesc">Due Date ↓</option>
+            </select>
+          </div>
 
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="filter-select"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active Only</option>
-            <option value="inactive">Inactive Only</option>
-          </select>
+          {/* Results Count */}
+          <div style={modalStyles.resultsCount}>
+            Showing {filteredCards.length} of {flashcards.length} cards
+          </div>
 
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="filter-select"
-          >
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="alphabetical">Alphabetical</option>
-            <option value="category">By Category</option>
-            <option value="dueDateAsc">Due Date (Earliest First)</option>
-            <option value="dueDateDesc">Due Date (Latest First)</option>
-          </select>
-        </div>
-
-        <div className="manage-cards-content">
+          {/* Cards List */}
           {filteredCards.length === 0 ? (
-            <div className="no-cards-message">
-              <p>No cards found matching your filters.</p>
+            <div style={modalStyles.noCards}>
+              <div style={{fontSize: '48px', marginBottom: '12px'}}>📭</div>
+              <p style={{margin: 0}}>No cards found matching your filters.</p>
             </div>
           ) : (
-            <div className="cards-list">
+            <div style={modalStyles.cardsList}>
               {filteredCards.map(card => {
                 const isActive = card.active !== false;
                 const dueDate = card.dueDate ? (card.dueDate.toDate ? card.dueDate.toDate() : new Date(card.dueDate)) : null;
-                
+
                 return (
-                  <div key={card.id} style={{
-                    background: 'white',
-                    border: '1px solid #ccc',
-                    margin: '8px 0',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start'
-                  }}>
-                    <div style={{flex: 1}}>
-                      <div style={{marginBottom: '8px', fontSize: '14px'}}>
-                        <strong style={{color: '#4f46e5'}}>Q:</strong> 
-                        <span style={{marginLeft: '8px'}}>{card.question || 'No question'}</span>
+                  <div
+                    key={card.id}
+                    style={{
+                      ...modalStyles.cardItem,
+                      borderColor: isActive ? '#e2e8f0' : '#fde047',
+                      background: isActive ? '#f8fafc' : '#fffbeb'
+                    }}
+                  >
+                    <div style={modalStyles.cardContent}>
+                      <div style={modalStyles.cardQuestion}>
+                        {stripHtml(card.question) || 'No question'}
                       </div>
-                      <div style={{marginBottom: '8px', fontSize: '14px'}}>
-                        <strong style={{color: '#4f46e5'}}>A:</strong> 
-                        <span style={{marginLeft: '8px'}}>{card.answer || 'No answer'}</span>
+                      <div style={modalStyles.cardAnswer}>
+                        {stripHtml(card.answer) || 'No answer'}
                       </div>
-                      <div style={{fontSize: '12px', color: '#666'}}>
+                      <div style={modalStyles.cardMeta}>
                         <span>{card.category || 'Uncategorized'}</span>
-                        {card.sub_category && <span> / {card.sub_category}</span>}
-                        <span> • Reviews: {card.reviewCount || 0}</span>
-                        {dueDate && (
-                          <span> • Due: {dueDate.toLocaleDateString()}</span>
-                        )}
+                        {card.sub_category && <span>/ {card.sub_category}</span>}
+                        <span>Reviews: {card.reviewCount || 0}</span>
+                        {dueDate && <span>Due: {dueDate.toLocaleDateString()}</span>}
                       </div>
                     </div>
-                    <div style={{marginLeft: '12px'}}>
-                      <button
-                        onClick={() => onToggleActive(card.id, !isActive)}
-                        style={{
-                          background: isActive ? '#10b981' : '#f59e0b',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '4px 8px',
-                          cursor: 'pointer',
-                          fontSize: '12px'
-                        }}
-                      >
-                        {isActive ? '✅ Active' : '⏸️ Inactive'}
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => onToggleActive(card.id, !isActive)}
+                      style={{
+                        ...modalStyles.toggleBtn,
+                        background: isActive ? '#10b981' : '#f59e0b',
+                        color: 'white'
+                      }}
+                    >
+                      {isActive ? '✓ Active' : '⏸ Inactive'}
+                    </button>
                   </div>
                 );
               })}
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

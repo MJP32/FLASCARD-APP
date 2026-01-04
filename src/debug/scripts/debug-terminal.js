@@ -4,7 +4,6 @@
 // Run with: node debug-terminal.js
 
 const fs = require('fs');
-const path = require('path');
 
 console.log('🔍 AWS Category Debug - Terminal Version');
 console.log('=====================================\n');

@@ -12,7 +12,7 @@ import {
   Unsubscribe 
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
-import { Flashcard, ReviewRating, FilterParams } from '@/types';
+import { Flashcard, FilterParams } from '@/types';
 import { FIREBASE_COLLECTIONS } from '@/config/constants';
 import { RootState } from '../store';
 

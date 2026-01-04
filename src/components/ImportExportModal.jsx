@@ -315,6 +315,7 @@ const ImportExportModal = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPreview, previewCards, editingCardIndex]);
 
   const clearMessages = () => {

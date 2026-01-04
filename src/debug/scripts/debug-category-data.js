@@ -1,19 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
-// Mock Firebase date handling
-function mockFirebaseDate(dateString) {
-  return {
-    toDate: () => new Date(dateString)
-  };
-}
-
 // Read the actual flashcard data from the app
 function getFlashcardDataFromApp() {
   try {
     // Try to find any exported flashcard data or sample data
-    const appJsPath = path.join(__dirname, 'src', 'App.js');
-    const useFlashcardsPath = path.join(__dirname, 'src', 'hooks', 'useFlashcards.js');
+    // (Optional) paths to inspect in local dev tree
     
     // Look for any sample data files
     const sampleDataPaths = [

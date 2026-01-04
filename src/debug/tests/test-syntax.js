@@ -1,7 +1,6 @@
 // Quick syntax test for main files
 try {
   const fs = require('fs');
-  const path = require('path');
   
   // Test key files
   const filesToTest = [

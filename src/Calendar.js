@@ -143,84 +143,89 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
 
   return (
     <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className="modal-content" style={{ 
-        width: '480px', 
-        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', 
-        borderRadius: '8px', 
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', 
-        border: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}` 
+      <div className="modal-content" style={{
+        width: '480px',
+        backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
+        borderRadius: '4px',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+        border: '3px solid #2563eb',
+        overflow: 'hidden'
       }}>
       {/* Header */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        padding: '20px', 
-        borderBottom: `1px solid ${isDarkMode ? '#4b5563' : '#e5e7eb'}`,
-        background: isDarkMode ? 'linear-gradient(to right, rgba(30, 58, 138, 0.3), rgba(67, 56, 202, 0.3))' : 'linear-gradient(to right, #eff6ff, #e0e7ff)',
-        borderTopLeftRadius: '8px',
-        borderTopRightRadius: '8px',
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '16px 20px',
+        background: '#2563eb',
         position: 'relative'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button 
-            style={{
-              padding: '8px',
-              borderRadius: '50%',
-              border: 'none',
-              backgroundColor: 'transparent',
-              cursor: 'pointer',
-              transition: 'background-color 0.2s',
-              fontSize: '24px',
-              fontWeight: 'bold',
-              color: isDarkMode ? '#d1d5db' : '#374151'
-            }}
-            onClick={() => navigateMonth(-1)}
-            onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(55, 65, 81, 0.5)' : 'rgba(255,255,255,0.5)'}
-            onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
-          >
-            ‹
-          </button>
-          
-        </div>
-        
-        <h1 style={{ 
-          fontSize: '24px', 
-          fontWeight: 'bold', 
-          color: isDarkMode ? '#f9fafb' : '#1f2937', 
+        <button
+          style={{
+            padding: '8px 12px',
+            borderRadius: '4px',
+            border: '2px solid rgba(255,255,255,0.3)',
+            backgroundColor: 'rgba(255,255,255,0.1)',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            color: '#ffffff'
+          }}
+          onClick={() => navigateMonth(-1)}
+          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+        >
+          ← Prev
+        </button>
+
+        <h1 style={{
+          fontSize: '20px',
+          fontWeight: 'bold',
+          color: '#ffffff',
           margin: 0,
           letterSpacing: '0.025em'
         }}>
           {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
         </h1>
-        
-        <button 
+
+        <button
           style={{
-            padding: '8px',
-            borderRadius: '50%',
-            border: 'none',
-            backgroundColor: 'transparent',
+            padding: '8px 12px',
+            borderRadius: '4px',
+            border: '2px solid rgba(255,255,255,0.3)',
+            backgroundColor: 'rgba(255,255,255,0.1)',
             cursor: 'pointer',
-            transition: 'background-color 0.2s',
-            fontSize: '24px',
+            transition: 'all 0.2s',
+            fontSize: '18px',
             fontWeight: 'bold',
-            color: isDarkMode ? '#d1d5db' : '#374151'
+            color: '#ffffff'
           }}
           onClick={() => navigateMonth(1)}
-          onMouseOver={(e) => e.target.style.backgroundColor = isDarkMode ? 'rgba(55, 65, 81, 0.5)' : 'rgba(255,255,255,0.5)'}
-          onMouseOut={(e) => e.target.style.backgroundColor = 'transparent'}
+          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
         >
-          ›
+          Next →
         </button>
-        
-        {/* Close button - using same class as other modals */}
-        <button 
-          className="close-btn"
+
+        {/* Close button */}
+        <button
           style={{
-            top: '0.25rem',
-            right: '0.25rem'
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            padding: '4px 10px',
+            borderRadius: '4px',
+            border: 'none',
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            cursor: 'pointer',
+            color: '#ffffff',
+            fontSize: '18px',
+            fontWeight: 'bold'
           }}
           onClick={onClose}
+          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
+          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
           aria-label="Close calendar"
           title="Close Calendar"
         >
@@ -267,10 +272,8 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
             const isSelected = selectedDate === dateKey;
 
             let backgroundColor = isDarkMode ? '#1f2937' : '#ffffff';
-            let borderColor = isDarkMode ? '#4b5563' : '#f3f4f6';
-            let textColor = isDarkMode ? '#d1d5db' : '#374151';
-            let fontWeight = '500';
-            
+            let borderColor = isDarkMode ? '#4b5563' : '#e5e7eb';
+
             // Check if this is a past day with incomplete cards (excluding today)
             const isPastDayWithIncompleteCards = day && date && date < today && !isToday && due && due.cardCount > 0;
 
@@ -278,19 +281,11 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
               backgroundColor = isDarkMode ? '#1f2937' : '#f9fafb';
             } else if (isPastDayWithIncompleteCards) {
               // Light red background for past days with incomplete cards
-              backgroundColor = isDarkMode ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2';
-              borderColor = isDarkMode ? '#ef4444' : '#fca5a5';
-              textColor = isDarkMode ? '#fca5a5' : '#dc2626';
-            } else if (isToday) {
-              backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.3)' : '#dcfce7';
-              borderColor = isDarkMode ? '#22c55e' : '#86efac';
-              textColor = isDarkMode ? '#86efac' : '#15803d';
-              fontWeight = '700';
+              backgroundColor = isDarkMode ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2';
+              borderColor = isDarkMode ? '#ef4444' : '#fecaca';
             } else if (isSelected) {
-              backgroundColor = isDarkMode ? 'rgba(30, 58, 138, 0.2)' : '#eff6ff';
+              backgroundColor = isDarkMode ? 'rgba(37, 99, 235, 0.15)' : '#eff6ff';
               borderColor = isDarkMode ? '#3b82f6' : '#bfdbfe';
-              textColor = isDarkMode ? '#93c5fd' : '#2563eb';
-              fontWeight = '600';
             }
 
             return (
@@ -312,15 +307,13 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                 }}
                 onClick={() => handleDayPress(day)}
                 onMouseOver={(e) => {
-                  if (day && !isToday && !isSelected && !isPastDayWithIncompleteCards) {
-                    e.target.style.backgroundColor = isDarkMode ? '#374151' : '#f9fafb';
-                    e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                  if (day) {
+                    e.currentTarget.style.backgroundColor = isDarkMode ? '#374151' : '#f3f4f6';
                   }
                 }}
                 onMouseOut={(e) => {
-                  if (day && !isToday && !isSelected && !isPastDayWithIncompleteCards) {
-                    e.target.style.backgroundColor = backgroundColor;
-                    e.target.style.boxShadow = 'none';
+                  if (day) {
+                    e.currentTarget.style.backgroundColor = backgroundColor;
                   }
                 }}
               >
@@ -328,51 +321,54 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
                   <>
                     <span style={{
                       fontSize: '14px',
-                      fontWeight: fontWeight,
-                      color: textColor,
-                      lineHeight: 1
+                      fontWeight: '600',
+                      color: isToday ? '#ffffff' : (isDarkMode ? '#e5e7eb' : '#374151'),
+                      lineHeight: 1,
+                      width: '28px',
+                      height: '28px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      backgroundColor: isToday ? '#2563eb' : 'transparent'
                     }}>
                       {day}
                     </span>
-                    {/* Show card count in the box for today */}
-                    {isToday && due && due.cardCount > 0 && (
+                    {/* Show card counts for today */}
+                    {isToday && due && (due.cardCount > 0 || due.completedCount > 0) && (
                       <div style={{
                         position: 'absolute',
                         bottom: '4px',
                         left: '50%',
-                        transform: 'translateX(-50%)'
+                        transform: 'translateX(-50%)',
+                        display: 'flex',
+                        gap: '2px',
+                        alignItems: 'center'
                       }}>
-                        <div style={{
-                          padding: '2px 6px',
-                          borderRadius: '9999px',
-                          backgroundColor: isDarkMode ? '#22c55e' : '#16a34a',
-                          color: '#ffffff',
-                          fontSize: '12px',
-                          fontWeight: '500',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
-                        }}>
-                          {due.cardCount}
-                        </div>
-                      </div>
-                    )}
-                    {/* Show completed count for today with cards due */}
-                    {isToday && due && due.completedCount > 0 && due.cardCount > 0 && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '4px',
-                        right: '4px'
-                      }}>
-                        <div style={{
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.2)' : 'rgba(34, 197, 94, 0.1)',
-                          color: isDarkMode ? '#86efac' : '#16a34a',
-                          fontSize: '10px',
-                          fontWeight: '600',
-                          border: `1px solid ${isDarkMode ? 'rgba(34, 197, 94, 0.3)' : 'rgba(34, 197, 94, 0.2)'}`
-                        }}>
-                          ✓{due.completedCount}
-                        </div>
+                        {due.completedCount > 0 && (
+                          <div style={{
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.8)' : '#16a34a',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600'
+                          }}>
+                            {due.completedCount}
+                          </div>
+                        )}
+                        {due.cardCount > 0 && (
+                          <div style={{
+                            padding: '1px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
+                            color: '#ffffff',
+                            fontSize: '10px',
+                            fontWeight: '600'
+                          }}>
+                            {due.cardCount}
+                          </div>
+                        )}
                       </div>
                     )}
                     {/* Show completed/incomplete breakdown for past days */}
@@ -506,13 +502,18 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
             alignItems: 'center'
           }}>
             <div style={{
-              width: '16px',
-              height: '16px',
-              backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.3)' : '#dcfce7',
-              border: `2px solid ${isDarkMode ? '#22c55e' : '#86efac'}`,
-              borderRadius: '2px',
-              marginRight: '8px'
-            }}></div>
+              width: '20px',
+              height: '20px',
+              backgroundColor: '#2563eb',
+              borderRadius: '50%',
+              marginRight: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              fontSize: '10px',
+              fontWeight: '600'
+            }}>3</div>
             <span style={{
               fontSize: '14px',
               color: isDarkMode ? '#9ca3af' : '#6b7280',
@@ -524,12 +525,14 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
             alignItems: 'center'
           }}>
             <div style={{
-              width: '16px',
-              height: '16px',
+              padding: '2px 6px',
+              borderRadius: '4px',
               backgroundColor: isDarkMode ? '#2563eb' : '#3b82f6',
-              borderRadius: '2px',
+              color: '#ffffff',
+              fontSize: '10px',
+              fontWeight: '600',
               marginRight: '8px'
-            }}></div>
+            }}>5</div>
             <span style={{
               fontSize: '14px',
               color: isDarkMode ? '#9ca3af' : '#6b7280',

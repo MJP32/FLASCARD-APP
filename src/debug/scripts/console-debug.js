@@ -17,9 +17,7 @@
   // Method 2: Try to get from React DevTools
   if (flashcards.length === 0) {
     try {
-      const reactRoot = document.querySelector('#root')._reactInternalInstance || 
-                       document.querySelector('#root')._reactInternals;
-      // This is a simplified attempt - React internals are complex
+      // Attempt to access React state (best-effort). React internals vary by version.
       console.log('🔍 Trying to access React state...');
     } catch (e) {
       console.log('❌ Could not access React state directly');

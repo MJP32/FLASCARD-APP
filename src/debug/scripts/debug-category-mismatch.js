@@ -7,7 +7,7 @@
  * to identify why some categories show up without cards and others don't show up with cards.
  */
 
-const fs = require('fs');
+// (no filesystem access required for this simulation)
 
 console.log('🔍 CATEGORY/COUNT MISMATCH DEBUG SCRIPT');
 console.log('='.repeat(60));

@@ -75,8 +75,7 @@ service cloud.firestore {
     // Test Firestore connectivity with a metadata call
     try {
       console.log('🔗 Testing Firestore connectivity...');
-      const testCollection = collection(db, '__test__');
-      // This won't actually read data but will test connectivity
+      // Connectivity checked via a lightweight query above when reading flashcards
       console.log('✅ Firestore connectivity test passed');
     } catch (error) {
       console.error('❌ Firestore connectivity test failed:', error);

@@ -102,7 +102,7 @@ export const useFlashcards = (firebaseApp, userId) => {
     // })));
     
     return { categoryCards: categoryCards.length, subCategoryCards: subCategoryCards.length, dueCards: dueCards.length };
-  }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, selectedSubCategory, showDueTodayOnly]);
 
   // Wrapper for manual subcategory selection
   const setSelectedSubCategoryManual = useCallback((subCategory) => {
@@ -237,7 +237,8 @@ export const useFlashcards = (firebaseApp, userId) => {
     const subCategoryStats = {};
     
     // First, let's see all cards in this category
-    const cardsInCategory = flashcards.filter(card => card.category === currentCategory && card.active !== false);
+    // eslint-disable-next-line no-unused-vars
+    const _cardsInCategory = flashcards.filter(card => card.category === currentCategory && card.active !== false);
     //     console.log(`🔍 GET-NEXT-SUBCATEGORY: Found ${cardsInCategory.length} active cards in category '${currentCategory}'`);
     
     flashcards.forEach(card => {
@@ -270,7 +271,8 @@ export const useFlashcards = (firebaseApp, userId) => {
     //     console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategory stats in category:', subCategoryStats);
     
     // Show ALL subcategories, not just those with due cards
-    const allSubcategoriesWithCounts = Object.entries(subCategoryStats)
+    // eslint-disable-next-line no-unused-vars
+    const _allSubcategoriesWithCounts = Object.entries(subCategoryStats)
       .sort(([, statsA], [, statsB]) => statsA.due - statsB.due);
     
     //     console.log('🔍 GET-NEXT-SUBCATEGORY: ALL subcategories sorted by due count:', 
@@ -728,6 +730,7 @@ export const useFlashcards = (firebaseApp, userId) => {
         });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flashcards, selectedSubCategory, selectedLevel, showDueTodayOnly, showStarredOnly, categorySortBy, lastManualSubCategoryChange]);
 
 
@@ -820,7 +823,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       const countB = categoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, showDueTodayOnly]);
 
   /**
    * Get available sub-categories from flashcards (filtered by selected category and due date)
@@ -889,7 +892,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       const countB = subCategoryStats[b] || 0;
       return countB - countA; // Sort descending (most to least)
     });
-  }, [flashcards, showDueTodayOnly, showStarredOnly]);
+  }, [flashcards, showDueTodayOnly]);
 
   /**
    * Get ALL sub-category statistics without filtering (for initial stats)
@@ -1071,7 +1074,7 @@ export const useFlashcards = (firebaseApp, userId) => {
       console.log(`🔄 AUTO-MANAGE: Sub-category "${selectedSubCategory}" no longer available, moving to "${nextSubCategory}"`);
       setSelectedSubCategory(nextSubCategory);
     }
-    // Note: Don't include selectedSubCategory in dependencies to prevent overriding manual selections
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getSubCategories]);
 
   // Auto-manage level filter when options change
@@ -1368,11 +1371,11 @@ export const useFlashcards = (firebaseApp, userId) => {
     }
     
     // Default behavior - standard previous in current filtered set
-    setCurrentCardIndex(prev => 
+    setCurrentCardIndex(prev =>
       prev <= 0 ? filteredFlashcards.length - 1 : prev - 1
     );
     setShowAnswer(false);
-  }, [filteredFlashcards, currentCardIndex, navigationHistory, historyPosition]);
+  }, [filteredFlashcards, navigationHistory, historyPosition]);
 
   /**
    * Get current card

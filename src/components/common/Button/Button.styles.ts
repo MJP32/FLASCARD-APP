@@ -1,5 +1,5 @@
 import styled, { css } from 'styled-components';
-import { ButtonProps, ButtonVariant, ButtonSize } from './Button.types';
+import { ButtonVariant, ButtonSize } from './Button.types';
 import { theme } from '@/theme';
 
 const variantStyles = {
