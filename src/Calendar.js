@@ -157,8 +157,7 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: '16px 20px',
-        background: '#2563eb',
-        position: 'relative'
+        background: '#2563eb'
       }}>
         <button
           style={{
@@ -189,48 +188,44 @@ const Calendar = ({ calendarDates = [], onClose, isDarkMode = false, isVisible =
           {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
         </h1>
 
-        <button
-          style={{
-            padding: '8px 12px',
-            borderRadius: '4px',
-            border: '2px solid rgba(255,255,255,0.3)',
-            backgroundColor: 'rgba(255,255,255,0.1)',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            fontSize: '18px',
-            fontWeight: 'bold',
-            color: '#ffffff'
-          }}
-          onClick={() => navigateMonth(1)}
-          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
-          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
-        >
-          Next →
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            style={{
+              padding: '8px 12px',
+              borderRadius: '4px',
+              border: '2px solid rgba(255,255,255,0.3)',
+              backgroundColor: 'rgba(255,255,255,0.1)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              color: '#ffffff'
+            }}
+            onClick={() => navigateMonth(1)}
+            onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
+            onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+          >
+            Next →
+          </button>
 
-        {/* Close button */}
-        <button
-          style={{
-            position: 'absolute',
-            top: '8px',
-            right: '8px',
-            padding: '4px 10px',
-            borderRadius: '4px',
-            border: 'none',
-            backgroundColor: 'rgba(255,255,255,0.2)',
-            cursor: 'pointer',
-            color: '#ffffff',
-            fontSize: '18px',
-            fontWeight: 'bold'
-          }}
-          onClick={onClose}
-          onMouseOver={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.3)'}
-          onMouseOut={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.2)'}
-          aria-label="Close calendar"
-          title="Close Calendar"
-        >
-          ×
-        </button>
+          {/* Close button */}
+          <button
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              fontSize: '28px',
+              cursor: 'pointer',
+              padding: '0 8px',
+              lineHeight: 1
+            }}
+            onClick={onClose}
+            aria-label="Close calendar"
+            title="Close Calendar"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* Calendar Grid */}

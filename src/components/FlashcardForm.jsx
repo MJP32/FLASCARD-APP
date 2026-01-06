@@ -63,7 +63,6 @@ const FlashcardForm = ({
   // Reset checkboxes to checked when modal opens
   useEffect(() => {
     if (showGenerateModal) {
-      console.log('🔍 Modal opened, setting checkboxes to true');
       setSelectedOptions({
         answerQuestion: true,
         keyConcepts: true,
@@ -231,98 +230,6 @@ const FlashcardForm = ({
       setErrors(prev => ({ ...prev, [field]: null }));
     }
   };
-
-  // AI Enhancement Functions
-  // const enhanceAnswer = async () => {
-  //   if (!formData.question.trim() || !formData.answer.trim()) {
-  //     setEnhancementError('Both question and answer are required for enhancement');
-  //     return;
-  //   }
-
-  //   const apiKey = apiKeys[selectedProvider];
-  //   if (!apiKey) {
-  //     setEnhancementError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
-  //     return;
-  //   }
-  // 
-  //   setIsEnhancingAnswer(true);
-  //   setEnhancementError('');
-
-  //   try {
-  //     const prompt = `Please enhance and expand the following flashcard answer by organizing it into a clear list of key concepts with explanations:
-  // 
-  // Question: ${formData.question.replace(/<[^>]*>/g, '')}
-  // Current Answer: ${formData.answer.replace(/<[^>]*>/g, '')}
-  // Category: ${formData.category}
-  // ${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
-  // 
-  // Create an enhanced answer that:
-  // 1. Organizes information into 3-6 key concepts using HTML lists
-  // 2. Each point should cover one main concept with clear explanation
-  // 3. Include relevant examples, details, or clarifications for each concept
-  // 4. Maintain logical flow from basic to advanced concepts
-  // 5. Keep each point focused and informative (1-2 sentences)
-  // 6. Use HTML formatting with proper tags
-  // 
-  // REQUIRED FORMAT - Choose one:
-  // • For general concepts: <ul><li><strong>Concept Name:</strong> Explanation with examples</li></ul>
-  // • For sequential steps: <ol><li><strong>Step Name:</strong> Description and details</li></ol>
-  // 
-  // Example output:
-  // <ul>
-  // <li><strong>Definition:</strong> Clear explanation of what the concept means with context</li>
-  // <li><strong>Key Components:</strong> Main parts or elements that make up the concept</li>
-  // <li><strong>Real-world Application:</strong> How this concept is used in practice with examples</li>
-  // <li><strong>Important Considerations:</strong> Critical points, limitations, or common misconceptions</li>
-  // </ul>
-  // 
-  // IMPORTANT: Start your response directly with <ul> or <ol> tag. Do not include any text before or after the HTML list.`;
-  // 
-  //     const enhancedAnswer = await callAI(prompt, selectedProvider, apiKey);
-  //     
-  //     // Wrap the generated content in a collapsible section
-  //     const collapsibleContent = `
-  // <details class="generated-content-section">
-  //   <summary class="generated-content-header">🧠 Key Concepts</summary>
-  //   <div class="generated-content-body">
-  //     ${enhancedAnswer.trim()}
-  //   </div>
-  // </details>`;
-  // 
-  //     const currentAnswer = formData.answer.trim();
-  //     const newAnswer = currentAnswer ? `${currentAnswer}\n\n${collapsibleContent}` : collapsibleContent;
-  //     handleFieldChange('answer', newAnswer);
-  //   } catch (error) {
-  //     console.error('Enhancement error:', error);
-  //     setEnhancementError('Failed to enhance answer: ' + error.message);
-  //   } finally {
-  //     setIsEnhancingAnswer(false);
-  //   }
-  // };
-
-
-  /**
-   * Generates a code example or practical example based on the flashcard content
-   * Uses AI to intelligently determine if an example would be helpful and what type
-   */
-  // const generateExample = async () => {
-  //   // Validate that both question and answer exist before generating example
-  //   if (!formData.question.trim() || !formData.answer.trim()) {
-  //     setEnhancementError('Both question and answer are required to generate an example');
-  //     return;
-  //   }
-  // 
-  //   // Check if API key is configured for the selected AI provider
-  //   const apiKey = apiKeys[selectedProvider];
-  //   if (!apiKey) {
-  //     setEnhancementError(`Please configure ${selectedProvider.toUpperCase()} API key in settings`);
-  //     return;
-  //   }
-  // 
-  //   // Set loading state and clear any previous errors
-  //   setIsGeneratingExample(true);
-  //   setEnhancementError('');
-  // };
 
   const generateExampleContent = async () => {
     if (!formData.question.trim()) {
@@ -552,8 +459,6 @@ Return ONLY the short summary answer:`;
    * Generates multiple AI responses based on selected options
    */
   const generateBatchContent = async () => {
-    console.log('🔍 generateBatchContent called with selectedOptions:', selectedOptions);
-
     // Validate that at least one option is selected
     const hasSelections = selectedOptions.answerQuestion || selectedOptions.keyConcepts || selectedOptions.example || selectedOptions.customQuestion || selectedOptions.customAi;
     if (!hasSelections) {
@@ -566,7 +471,6 @@ Return ONLY the short summary answer:`;
       setEnhancementError('Please enter a custom question or uncheck the custom question option');
       return;
     }
-
 
     const apiKey = apiKeys[selectedProvider];
     if (!apiKey) {
@@ -690,7 +594,6 @@ Return ONLY the short summary answer:`;
 
 
       // Update the answer field with all generated content
-      console.log('🔍 Updating answer field with content length:', currentAnswer.length);
       handleFieldChange('answer', currentAnswer);
       
       // Show errors if any occurred, but still close modal if some content was generated
@@ -765,44 +668,6 @@ IMPORTANT: Start your response directly with <ul> or <ol> tag. Do not include an
     }
     return result;
   };
-
-// Question: ${formData.question.replace(/<[^>]*>/g, '')}
-  // Current Answer: ${formData.answer.replace(/<[^>]*>/g, '')}
-  // Category: ${formData.category}
-  // ${formData.sub_category ? `Sub-category: ${formData.sub_category}` : ''}
-  // 
-  // User Request: ${customPrompt}
-  // 
-  // Please provide a helpful response based on the context above and the user's request. Format your response with appropriate HTML formatting if needed.`;
-  // 
-  //   const response = await callAI(contextPrompt, selectedProvider, apiKeys[selectedProvider]);
-  //   
-  //   // Generate a summary title for the response
-  //   const summaryPrompt = `Please create a very brief, descriptive title (3-6 words) that summarizes the main topic or purpose of this content:
-  // 
-  // "${response.replace(/<[^>]*>/g, '').substring(0, 200)}..."
-  // 
-  // Respond with ONLY the title, no quotes, no extra text. Examples:
-  // - "Key Programming Concepts"
-  // - "Common Implementation Mistakes" 
-  // - "Practical Usage Examples"
-  // - "Memory Management Tips"`;
-  // 
-  //   let responseTitle = "AI Response";
-  //   try {
-  //     const titleResponse = await callAI(summaryPrompt, selectedProvider, apiKeys[selectedProvider]);
-  //     responseTitle = titleResponse.trim().replace(/['"]/g, ''); // Remove quotes if AI adds them
-  //     // Ensure title isn't too long
-  //     if (responseTitle.length > 50) {
-  //       responseTitle = responseTitle.substring(0, 47) + "...";
-  //     }
-  //   } catch (titleError) {
-  //     console.log('Failed to generate title, using default:', titleError);
-  //     // Keep default title if summary generation fails
-  //   }
-  //   
-  //   return { content: response, title: responseTitle };
-  // };
 
   /**
    * Generates AI response based on user's custom prompt
@@ -975,10 +840,6 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
   };
 
   const callAnthropic = async (prompt, apiKey) => {
-    console.log('🔵 Anthropic API Call (FlashcardForm) - Starting request');
-    console.log('🔵 API Key format:', apiKey ? `${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}` : 'No API key provided');
-    console.log('🔵 Prompt length:', prompt.length);
-
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -997,22 +858,18 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
         })
       });
 
-      console.log('🔵 Anthropic API Response Status:', response.status);
-      console.log('🔵 Anthropic API Response Headers:', Object.fromEntries(response.headers.entries()));
-
       if (!response.ok) {
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
         let errorDetails = '';
-        
+
         try {
           const errorData = await response.json();
-          console.log('🔴 Anthropic API Error Data:', errorData);
-          
+
           if (errorData.error) {
             errorMessage = errorData.error.message || errorMessage;
             errorDetails = errorData.error.type || '';
           }
-          
+
           // Specific error handling for common issues
           if (response.status === 401) {
             throw new Error(`Authentication Failed: Invalid API key. Please check your Anthropic API key in Settings. (${errorMessage})`);
@@ -1028,28 +885,22 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
             throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}${errorDetails ? ` (Type: ${errorDetails})` : ''}`);
           }
         } catch (jsonError) {
-          console.log('🔴 Could not parse error response as JSON:', jsonError);
+          if (jsonError.message.includes('API Error') || jsonError.message.includes('Authentication')) {
+            throw jsonError;
+          }
           throw new Error(`Anthropic API Error [${response.status}]: ${errorMessage}. Response could not be parsed.`);
         }
       }
 
       const data = await response.json();
-      console.log('🔵 Anthropic API Success - Response structure:', {
-        hasContent: !!data.content,
-        contentLength: data.content?.length || 0,
-        firstContentType: data.content?.[0]?.type,
-        hasText: !!data.content?.[0]?.text
-      });
-
       const content = data.content[0]?.text;
-      
+
       if (!content) {
         throw new Error('Anthropic API returned empty content. Please try again.');
       }
 
       return content;
     } catch (networkError) {
-      console.error('🔴 Anthropic API Network Error:', networkError);
       if (networkError.message.includes('fetch')) {
         throw new Error('Network error: Could not connect to Anthropic API. Please check your internet connection and try again.');
       }

@@ -37,8 +37,16 @@ const FlashcardDisplay = ({
     return (
       <div className={`flashcard-container ${isDarkMode ? 'dark' : ''}`}>
         <div className="no-cards-message">
-          <h3>No flashcards available</h3>
-          <p>Create some flashcards or adjust your filters to see cards here.</p>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📚</div>
+          <h3>No flashcards to display</h3>
+          <p style={{ color: '#64748b', marginBottom: '12px' }}>
+            There are no cards matching your current filters.
+          </p>
+          <div style={{ fontSize: '14px', color: '#94a3b8' }}>
+            <p style={{ margin: '4px 0' }}>💡 Try selecting "All" categories</p>
+            <p style={{ margin: '4px 0' }}>💡 Turn off "Due Today" filter</p>
+            <p style={{ margin: '4px 0' }}>💡 Create new cards with the "New Card" button</p>
+          </div>
         </div>
       </div>
     );
@@ -68,7 +76,7 @@ const FlashcardDisplay = ({
         <button
           className="edit-card-btn"
           onClick={() => onEditCard && onEditCard(card)}
-          title="Edit this card"
+          title="Edit this card (E)"
         >
           ✏️ Edit
         </button>
@@ -78,6 +86,7 @@ const FlashcardDisplay = ({
             className="nav-btn"
             onClick={onPreviousCard}
             disabled={totalCards <= 1}
+            title="Previous card (← or P)"
           >
             ← Prev
           </button>
@@ -85,14 +94,17 @@ const FlashcardDisplay = ({
           <button
             className="show-answer-btn"
             onClick={onToggleAnswer || onShowAnswer}
+            title="Toggle answer (Space or Enter)"
           >
             {showAnswer ? "Hide Answer" : "Show Answer"}
+            <span className="shortcut-hint">Space</span>
           </button>
 
           <button
             className="nav-btn"
             onClick={onNextCard}
             disabled={totalCards <= 1}
+            title="Next card (→ or N)"
           >
             Next →
           </button>

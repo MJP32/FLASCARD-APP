@@ -10,6 +10,10 @@ import ImportExportModal from './components/ImportExportModal';
 import GenerateQuestionsModal from './components/GenerateQuestionsModal';
 import ManageCardsModal from './components/ManageCardsModal';
 import Calendar from './Calendar';
+import Header from './components/Header';
+import Footer from './components/Footer';
+import MessageBar from './components/MessageBar';
+import ReviewButtons from './components/ReviewButtons';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -66,34 +70,27 @@ const AutoNavigateToOptimalCards = ({
       const bestCategory = getNextCategoryWithLeastCards(currentCategory);
       
       if (bestCategory) {
-        console.log(`🚀 AUTO-NAVIGATE: Found optimal category: "${bestCategory}"`);
-        
         // Step 2: Within that category, find the subcategory with least total cards that has due cards
         const bestSubCategory = getNextSubCategoryWithLeastCards(bestCategory, 'All');
-        
+
         if (bestSubCategory) {
-          console.log(`🚀 AUTO-NAVIGATE: Found optimal subcategory: "${bestSubCategory}" in category "${bestCategory}"`);
-          
           // Navigate to the optimal category and subcategory
           setSelectedCategory(bestCategory);
           setSelectedSubCategory(bestSubCategory);
           setMessage(`Auto-navigated to "${bestCategory}" → "${bestSubCategory}" (optimal study path)`);
-          
+
           setTimeout(() => setMessage(''), 4000);
         } else {
-          console.log(`🚀 AUTO-NAVIGATE: No subcategories with due cards in "${bestCategory}", showing all subcategories`);
-          
           // Navigate to the category but show all subcategories
           setSelectedCategory(bestCategory);
           setSelectedSubCategory('All');
           setMessage(`Auto-navigated to "${bestCategory}" category (optimal study path)`);
-          
+
           setTimeout(() => setMessage(''), 4000);
         }
-        
+
         setNavigationComplete(true);
       } else {
-        console.log('🚀 AUTO-NAVIGATE: No categories with due cards found');
         setNavigationComplete(true);
       }
       
@@ -248,6 +245,9 @@ function App() {
   // Card transition state to prevent flicker
   const [isCardTransitioning, setIsCardTransitioning] = useState(false);
 
+  // Search state for main view
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Initialize Firebase
   useEffect(() => {
     try {
@@ -306,8 +306,6 @@ function App() {
     setShowDueTodayOnly,
     setShowStarredOnly,
     setCurrentCardIndex,
-    nextCard,
-    prevCard,
     addToNavigationHistory,
     getNextCategoryWithDueCards,
     getNextCategoryWithLeastCards,
@@ -366,10 +364,26 @@ function App() {
     handleApiKeysUpdate(localApiKeys);
     // Update the selected provider
     setSelectedProvider(localSelectedProvider);
+    localStorage.setItem('selected_ai_provider', localSelectedProvider);
     // Close the dropdown
     setShowApiKeyModal(false);
     setMessage('API keys saved successfully!');
   }, [localApiKeys, localSelectedProvider, handleApiKeysUpdate, setSelectedProvider, setMessage]);
+
+  // Sync localApiKeys when API modal opens
+  useEffect(() => {
+    if (showApiKeyModal) {
+      // Reload from localStorage to ensure we have the latest values
+      const freshKeys = {
+        openai: localStorage.getItem('openai_api_key') || '',
+        anthropic: localStorage.getItem('anthropic_api_key') || '',
+        gemini: localStorage.getItem('gemini_api_key') || ''
+      };
+      setLocalApiKeys(freshKeys);
+      setApiKeys(freshKeys);
+      setLocalSelectedProvider(localStorage.getItem('selected_ai_provider') || 'openai');
+    }
+  }, [showApiKeyModal]);
 
   // Get computed values (must be before any useEffect that uses them)
   const categoryStats = getCategoryStats();
@@ -377,14 +391,6 @@ function App() {
   const categories = getCategories();
   const subCategories = getSubCategories(selectedCategory);
   
-  // Debug subcategories when they change
-  React.useEffect(() => {
-    console.log('🔍 App.js subCategories updated:', {
-      selectedCategory,
-      subCategories,
-      subCategoriesLength: subCategories.length
-    });
-  }, [selectedCategory, subCategories]);
   const subCategoryStats = getSubCategoryStats(selectedCategory);
   const levels = getLevels(selectedCategory);
   const levelStats = getLevelStats(selectedCategory);
@@ -477,6 +483,58 @@ function App() {
     
     return filteredCategories;
   }, [displayCategories, flashcards, showDueTodayOnly, showStarredOnly, categories]);
+
+  // Apply search filter to flashcards
+  const searchFilteredFlashcards = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return filteredFlashcards;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return filteredFlashcards.filter(card => {
+      const question = (card.question || '').toLowerCase();
+      const answer = (card.answer || '').toLowerCase();
+      const category = (card.category || '').toLowerCase();
+      const subCategory = (card.sub_category || '').toLowerCase();
+      return question.includes(query) || answer.includes(query) ||
+             category.includes(query) || subCategory.includes(query);
+    });
+  }, [filteredFlashcards, searchQuery]);
+
+  // Get current card from search-filtered list
+  const currentSearchCard = useMemo(() => {
+    if (searchFilteredFlashcards.length === 0) return null;
+    const index = Math.min(currentCardIndex, searchFilteredFlashcards.length - 1);
+    return searchFilteredFlashcards[index];
+  }, [searchFilteredFlashcards, currentCardIndex]);
+
+  // Use search card when searching, otherwise use regular current card
+  const displayedCard = searchQuery.trim() ? currentSearchCard : currentCard;
+  const displayedTotalCards = searchQuery.trim() ? searchFilteredFlashcards.length : filteredFlashcards.length;
+
+  // Search-aware navigation functions
+  const searchNextCard = useCallback(() => {
+    const cards = searchQuery.trim() ? searchFilteredFlashcards : filteredFlashcards;
+    if (cards.length === 0) return;
+    setIsCardTransitioning(true);
+    setTimeout(() => {
+      const newIndex = currentCardIndex >= cards.length - 1 ? 0 : currentCardIndex + 1;
+      setCurrentCardIndex(newIndex);
+      setShowAnswer(false);
+      setIsCardTransitioning(false);
+    }, 150);
+  }, [searchQuery, searchFilteredFlashcards, filteredFlashcards, currentCardIndex, setCurrentCardIndex, setShowAnswer]);
+
+  const searchPrevCard = useCallback(() => {
+    const cards = searchQuery.trim() ? searchFilteredFlashcards : filteredFlashcards;
+    if (cards.length === 0) return;
+    setIsCardTransitioning(true);
+    setTimeout(() => {
+      const newIndex = currentCardIndex <= 0 ? cards.length - 1 : currentCardIndex - 1;
+      setCurrentCardIndex(newIndex);
+      setShowAnswer(false);
+      setIsCardTransitioning(false);
+    }, 150);
+  }, [searchQuery, searchFilteredFlashcards, filteredFlashcards, currentCardIndex, setCurrentCardIndex, setShowAnswer]);
 
   // Initialize debug utilities (development only)
   useEffect(() => {
@@ -851,8 +909,12 @@ function App() {
       setIsCardTransitioning(true);
       setShowAnswer(false);
 
-      // Move to next card immediately, then end transition
-      nextCard();
+      // Move to next card (search-aware navigation)
+      const cards = searchQuery.trim() ? searchFilteredFlashcards : filteredFlashcards;
+      if (cards.length > 0) {
+        const newIndex = currentCardIndex >= cards.length - 1 ? 0 : currentCardIndex + 1;
+        setCurrentCardIndex(newIndex);
+      }
 
       // End transition after a brief delay to allow render
       setTimeout(() => {
@@ -860,14 +922,14 @@ function App() {
       }, 50);
 
       clearMessage();
-      
+
     } catch (error) {
       console.error('❌ Error reviewing card:', error);
       console.error('Card ID:', card.id);
       console.error('Rating:', rating);
       setError(`Failed to update card review: ${error.message}`);
     }
-  }, [getCurrentCard, fsrsParams, addToNavigationHistory, updateFlashcard, setMessage, cardsCompletedToday, setCardsCompletedToday, userId, categoryCompletedCounts, setCategoryCompletedCounts, subCategoryCompletedCounts, setSubCategoryCompletedCounts, setLastCardCompletion, setShowAnswer, nextCard, clearMessage, setError]);
+  }, [getCurrentCard, fsrsParams, addToNavigationHistory, updateFlashcard, setMessage, cardsCompletedToday, setCardsCompletedToday, userId, categoryCompletedCounts, setCategoryCompletedCounts, subCategoryCompletedCounts, setSubCategoryCompletedCounts, setLastCardCompletion, setShowAnswer, searchQuery, searchFilteredFlashcards, filteredFlashcards, currentCardIndex, setCurrentCardIndex, clearMessage, setError]);
 
   const handleUpdateCard = async (cardData, cardId) => {
     try {
@@ -890,27 +952,58 @@ function App() {
       // Store current position for smart navigation
       const currentPosition = currentCardIndex;
       const totalCards = filteredFlashcards.length;
-      
-      console.log(`🗑️ Deleting card at position ${currentPosition} of ${totalCards}`);
-      
+
       await deleteFlashcard(cardId);
-      
+
       // Navigate to next available card
       // The filtering system will handle the actual navigation via useEffect
       // But we can help by adjusting the index if we're at the end
       if (currentPosition >= totalCards - 1 && totalCards > 1) {
         // We're deleting the last card, move to the previous one
         setCurrentCardIndex(Math.max(0, currentPosition - 1));
-        console.log(`🔄 Deleted last card, moving to position ${Math.max(0, currentPosition - 1)}`);
       }
       // For other positions, let the filtering system handle navigation automatically
-      
+
       setMessage(SUCCESS_MESSAGES.CARD_DELETED);
       setIsEditingCard(false);
       setEditCardData(null);
       clearMessage();
     } catch (error) {
       setError(error.message || 'Failed to delete flashcard');
+    }
+  };
+
+  // Bulk delete multiple cards
+  const handleBulkDelete = async (cardIds) => {
+    try {
+      let deletedCount = 0;
+      for (const cardId of cardIds) {
+        await deleteFlashcard(cardId);
+        deletedCount++;
+      }
+      setMessage(`Successfully deleted ${deletedCount} card${deletedCount !== 1 ? 's' : ''}`);
+      clearMessage();
+    } catch (error) {
+      setError(error.message || 'Failed to delete some cards');
+    }
+  };
+
+  // Bulk update category for multiple cards
+  const handleBulkUpdateCategory = async (cardIds, newCategory, newSubCategory) => {
+    try {
+      let updatedCount = 0;
+      for (const cardId of cardIds) {
+        const updateData = { category: newCategory };
+        if (newSubCategory) {
+          updateData.sub_category = newSubCategory;
+        }
+        await updateFlashcard(cardId, updateData);
+        updatedCount++;
+      }
+      setMessage(`Updated category for ${updatedCount} card${updatedCount !== 1 ? 's' : ''}`);
+      clearMessage();
+    } catch (error) {
+      setError(error.message || 'Failed to update some cards');
     }
   };
 
@@ -946,40 +1039,23 @@ function App() {
 
   // Create default flashcards for new users
   const createDefaultFlashcards = async (currentUserId) => {
-    console.log('🔍 createDefaultFlashcards called with:', {
-      currentUserId,
-      hasAddFlashcard: !!addFlashcard,
-      flashcardsLength: flashcards.length
-    });
-
     if (!currentUserId || !addFlashcard) {
-      console.log('❌ Cannot create default cards: missing userId or addFlashcard function', {
-        currentUserId: !!currentUserId,
-        addFlashcard: !!addFlashcard
-      });
       return;
     }
 
     // Check if defaults have already been created for this user
     const defaultsKey = `defaultCards_${currentUserId}`;
     const hasDefaults = localStorage.getItem(defaultsKey);
-    
-    console.log('🔍 Checking localStorage for defaults:', { defaultsKey, hasDefaults });
-    
+
     if (hasDefaults) {
-      console.log('📋 Default cards already created for this user');
       return;
     }
 
     // Check if user already has flashcards
-    console.log('🔍 Checking flashcards length:', flashcards.length);
     if (flashcards.length > 0) {
-      console.log('📋 User already has flashcards, skipping default creation');
       localStorage.setItem(defaultsKey, 'true'); // Mark as having defaults to avoid future checks
       return;
     }
-
-    console.log('📋 Creating default flashcards for new user:', currentUserId);
 
     const defaultCards = [
       {
@@ -1009,8 +1085,6 @@ function App() {
       
       // Mark defaults as created
       localStorage.setItem(defaultsKey, 'true');
-      
-      console.log(`✅ Successfully created ${createdCount} default flashcards`);
       setMessage(`Welcome! We've added ${createdCount} sample cards to get you started.`);
       clearMessage();
       
@@ -1114,24 +1188,17 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       
       // Clean up the response to ensure it's proper HTML
       let cleanResponse = response.trim();
-      
-      console.log('Raw AI response:', response);
-      
+
       // Remove any markdown code block formatting if present
       cleanResponse = cleanResponse.replace(/```html\s*/g, '').replace(/```\s*$/g, '');
       cleanResponse = cleanResponse.replace(/```\s*/g, '').replace(/```\s*$/g, '');
-      
-      console.log('After markdown cleanup:', cleanResponse);
-      
+
       // Extract content from full HTML document structure if present
       if (cleanResponse.includes('<!DOCTYPE') || cleanResponse.includes('<html>') || cleanResponse.includes('<body>')) {
-        console.log('Detected HTML document structure, cleaning...');
-        
         // Try to extract body content first
         const bodyMatch = cleanResponse.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
         if (bodyMatch) {
           cleanResponse = bodyMatch[1].trim();
-          console.log('Extracted from body tags:', cleanResponse);
         } else {
           // More aggressive fallback: remove all document structure
           cleanResponse = cleanResponse
@@ -1142,10 +1209,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             .replace(/<body[^>]*>\s*/gi, '')
             .replace(/<\/body>\s*/gi, '')
             .trim();
-          console.log('After aggressive cleanup:', cleanResponse);
         }
-      } else {
-        console.log('No HTML document structure detected');
       }
       
       // Ensure we have HTML tags, if not wrap in paragraph
@@ -1496,12 +1560,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         case 'ArrowLeft':
         case 'p':
           event.preventDefault();
-          prevCard();
+          searchPrevCard();
           break;
         case 'ArrowRight':
         case 'n':
           event.preventDefault();
-          nextCard();
+          searchNextCard();
           break;
         case '1':
           // Only allow rating when answer is shown
@@ -1581,7 +1645,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showAnswer, nextCard, prevCard, setShowAnswer, handleReviewCard, getCurrentCard, handleEditCard]);
+  }, [showAnswer, searchNextCard, searchPrevCard, setShowAnswer, handleReviewCard, getCurrentCard, handleEditCard]);
 
   // Computed values now declared earlier in the component
 
@@ -2222,128 +2286,31 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
       
       {/* Header */}
-      <header className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}>
-        <div className={`header-layout ${isHeaderCollapsed ? 'hidden' : ''}`}>
-          {/* Left Section - Logo */}
-          <div
-            className="header-logo clickable-logo"
-            onClick={() => {
-              setShowSettingsModal(true);
-              // Toggle interval settings to show FSRS explanation
-              if (!showIntervalSettings) {
-                toggleIntervalSettings();
-              }
-            }}
-            title="Click to learn about FSRS algorithm"
-          >
-            <h1 className="app-logo">FSRS Flashcards</h1>
-            <p className="app-subtitle">AI Learning Platform</p>
-          </div>
-
-          {/* Center Section - Action Buttons */}
-          <div className="header-center">
-            <div className="action-buttons">
-              <button
-                className="header-btn"
-                onClick={() => setShowManageCardsModal(true)}
-                title="Manage cards (M)"
-              >
-                Manage Cards
-              </button>
-
-              <button
-                className="header-btn"
-                onClick={() => setShowCalendarModal(true)}
-                title="View calendar"
-              >
-                Calendar
-              </button>
-
-              <button
-                className="header-btn"
-                onClick={() => setShowApiKeyModal(true)}
-                title="Configure API Keys"
-              >
-                API Keys
-              </button>
-
-              <button
-                className="header-btn"
-                onClick={() => setShowSettingsModal(true)}
-                title="Settings (S)"
-              >
-                Settings
-              </button>
-
-              <button
-                className="header-btn"
-                onClick={() => setShowAccountModal(true)}
-                title="Account Information"
-              >
-                Account
-              </button>
-
-              <button
-                className="header-btn"
-                onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-                aria-label={isHeaderCollapsed ? "Exit focus mode" : "Enter focus mode"}
-                title={isHeaderCollapsed ? "Exit focus mode" : "Enter focus mode"}
-                style={{ background: '#7c3aed' }}
-              >
-                {isHeaderCollapsed ? "Exit Focus" : "Focus Mode"}
-              </button>
-            </div>
-          </div>
-
-          {/* Right Section - Daily Progress */}
-          {((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
-            <div className="header-right-progress">
-              <div className="daily-progress-compact">
-                <span className="progress-label">{cardsCompletedToday}/{cardsCompletedToday + cardsDueToday.length}</span>
-                <div className="progress-bar-mini">
-                  <div
-                    className="progress-bar-fill-mini"
-                    style={{
-                      width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%`
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Show toggle button when in focus mode */}
-        {isHeaderCollapsed && (
-          <div className="focus-mode-controls">
-            <button
-              className="focus-mode-exit-btn"
-              onClick={() => setIsHeaderCollapsed(false)}
-              aria-label="Exit focus mode"
-              title="Exit focus mode"
-            >
-              Exit Focus
-            </button>
-          </div>
-        )}
-      </header>
+      <Header
+        isDarkMode={isDarkMode}
+        isHeaderCollapsed={isHeaderCollapsed}
+        setIsHeaderCollapsed={setIsHeaderCollapsed}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        showIntervalSettings={showIntervalSettings}
+        toggleIntervalSettings={toggleIntervalSettings}
+        cardsCompletedToday={cardsCompletedToday}
+        cardsDueToday={cardsDueToday}
+        onShowSettings={() => setShowSettingsModal(true)}
+        onShowManageCards={() => setShowManageCardsModal(true)}
+        onShowCalendar={() => setShowCalendarModal(true)}
+        onShowApiKeys={() => setShowApiKeyModal(true)}
+        onShowAccount={() => setShowAccountModal(true)}
+      />
 
       {/* Messages */}
-      {(message || error || flashcardsError || settingsError) && (
-        <div className="message-bar">
-          {message && (
-            <div className="success-message">
-              ✅ {message}
-            </div>
-          )}
-          {(error || flashcardsError || settingsError) && (
-            <div className="error-message">
-              ❌ {error || flashcardsError || settingsError}
-              <button className="close-message" onClick={clearError}>×</button>
-            </div>
-          )}
-        </div>
-      )}
+      <MessageBar
+        message={message}
+        error={error}
+        flashcardsError={flashcardsError}
+        settingsError={settingsError}
+        onClearError={clearError}
+      />
 
 
       {/* Main Content */}
@@ -2378,7 +2345,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           </div>
         )}
 
-        {filteredFlashcards.length === 0 ? (
+        {displayedTotalCards === 0 ? (
           <div className="flashcard-area">
             <div className="flashcard-with-notes-container">
               {/* Filters Section - Left panel (same as when cards are available) */}
@@ -2468,6 +2435,21 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     </button>
                   </div>
                 </div>
+              </>
+            ) : searchQuery.trim() ? (
+              // Search returned no results
+              <>
+                <h2>🔍 No cards match "{searchQuery}"</h2>
+                <p>
+                  Try different search terms or clear your search.
+                </p>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setSearchQuery('')}
+                  style={{ marginBottom: '1rem' }}
+                >
+                  ✕ Clear Search
+                </button>
               </>
             ) : (
               // Regular no cards message with auto-navigation
@@ -3003,15 +2985,15 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     }}
                   >
                     <FlashcardDisplay
-                      card={currentCard}
+                      card={displayedCard}
                       showAnswer={showAnswer}
                       onShowAnswer={() => setShowAnswer(true)}
                       onToggleAnswer={() => setShowAnswer(!showAnswer)}
-                      onPreviousCard={prevCard}
-                      onNextCard={nextCard}
+                      onPreviousCard={searchPrevCard}
+                      onNextCard={searchNextCard}
                       onReviewCard={handleReviewCard}
                       currentIndex={currentCardIndex}
-                      totalCards={filteredFlashcards.length}
+                      totalCards={displayedTotalCards}
                       isDarkMode={isDarkMode}
                       onEditCard={handleEditCard}
                       onGenerateQuestions={() => setShowGenerateModal(true)}
@@ -3019,49 +3001,10 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     />
 
                     {/* Review Buttons - Below the card, only when answer is shown and not transitioning */}
-                    {currentCard && showAnswer && !isCardTransitioning && (
-                      <div className="review-buttons-below-card">
-                        <button
-                          className="review-btn again-btn"
-                          onClick={() => handleReviewCard('again')}
-                          title="Completely forgot (1)"
-                        >
-                          <span className="btn-number">1</span>
-                          <span className="btn-emoji">😵</span>
-                          <span className="btn-text">Again</span>
-                        </button>
-
-                        <button
-                          className="review-btn hard-btn"
-                          onClick={() => handleReviewCard('hard')}
-                          title="Hard to remember (2)"
-                        >
-                          <span className="btn-number">2</span>
-                          <span className="btn-emoji">😓</span>
-                          <span className="btn-text">Hard</span>
-                        </button>
-
-                        <button
-                          className="review-btn good-btn"
-                          onClick={() => handleReviewCard('good')}
-                          title="Remembered with effort (3)"
-                        >
-                          <span className="btn-number">3</span>
-                          <span className="btn-emoji">😊</span>
-                          <span className="btn-text">Good</span>
-                        </button>
-
-                        <button
-                          className="review-btn easy-btn"
-                          onClick={() => handleReviewCard('easy')}
-                          title="Easy to remember (4)"
-                        >
-                          <span className="btn-number">4</span>
-                          <span className="btn-emoji">😎</span>
-                          <span className="btn-text">Easy</span>
-                        </button>
-                      </div>
-                    )}
+                    <ReviewButtons
+                      onReviewCard={handleReviewCard}
+                      isVisible={displayedCard && showAnswer && !isCardTransitioning}
+                    />
                   </div>
 
                   {/* Resize Handles - Only show when popouted */}
@@ -3088,25 +3031,15 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       </main>
 
       {/* Footer */}
-      <footer className="app-footer">
-        <div className="footer-stats">
-          <span>Total Cards: {flashcards.length}</span>
-          <span>Filtered: {filteredFlashcards.length}</span>
-          <span>Categories: {categories.length}</span>
-          <span style={{ color: pastDueCards.length > 0 ? '#ff6b6b' : 'inherit' }}>
-            Past Due: {pastDueCards.length}
-          </span>
-          <span style={{ color: cardsDueToday.length > 0 ? '#feca57' : 'inherit' }}>
-            Due Today: {cardsDueToday.length}
-          </span>
-        </div>
-        <div className="footer-shortcuts">
-          <small>
-            Shortcuts: <kbd>Space</kbd> Show Answer | <kbd>←/→</kbd> Navigate | 
-            <kbd>1-4</kbd> Rate Card | <kbd>C</kbd> Create | <kbd>S</kbd> Settings | <kbd>E</kbd> Export | <kbd>M</kbd> Manage
-          </small>
-        </div>
-      </footer>
+      <Footer
+        totalCards={flashcards.length}
+        filteredCount={filteredFlashcards.length}
+        searchCount={searchFilteredFlashcards.length}
+        isSearching={!!searchQuery.trim()}
+        categoriesCount={categories.length}
+        pastDueCount={pastDueCards.length}
+        dueTodayCount={cardsDueToday.length}
+      />
 
       {/* Explain Modal */}
       {showExplainModal && (
@@ -3908,6 +3841,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           setShowManageCardsModal(false);
           setShowImportExportModal(true);
         }}
+        onBulkDelete={handleBulkDelete}
+        onBulkUpdateCategory={handleBulkUpdateCategory}
         isDarkMode={isDarkMode}
       />
 
