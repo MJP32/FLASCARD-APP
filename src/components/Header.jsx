@@ -17,10 +17,15 @@ const Header = ({
   onShowManageCards,
   onShowCalendar,
   onShowApiKeys,
-  onShowAccount
+  onShowAccount,
+  onShowStudyTimer,
+  onShowStudyStats
 }) => {
   return (
-    <header className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}>
+    <header
+      className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}
+      role="banner"
+    >
       <div className={`header-layout ${isHeaderCollapsed ? 'hidden' : ''}`}>
         {/* Left Section - Logo */}
         <div
@@ -32,6 +37,9 @@ const Header = ({
             }
           }}
           title="Click to learn about FSRS algorithm"
+          role="button"
+          tabIndex={0}
+          aria-label="FSRS Flashcards - Click to learn about FSRS algorithm"
         >
           <h1 className="app-logo">FSRS Flashcards</h1>
           <p className="app-subtitle">AI Learning Platform</p>
@@ -40,26 +48,28 @@ const Header = ({
         {/* Center Section - Search and Action Buttons */}
         <div className="header-center">
           {/* Search Input */}
-          <div className="header-search">
+          <div className="header-search" role="search">
             <input
-              type="text"
+              type="search"
               placeholder="Search cards..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="header-search-input"
               title="Search cards by question, answer, or category"
+              aria-label="Search flashcards"
             />
             {searchQuery && (
               <button
                 className="header-search-clear"
                 onClick={() => setSearchQuery('')}
                 title="Clear search"
+                aria-label="Clear search"
               >
                 ×
               </button>
             )}
           </div>
-          <div className="action-buttons">
+          <nav className="action-buttons" role="navigation" aria-label="Main navigation">
             <button
               className="header-btn"
               onClick={onShowManageCards}
@@ -74,6 +84,22 @@ const Header = ({
               title="View calendar"
             >
               Calendar
+            </button>
+
+            <button
+              className="header-btn"
+              onClick={onShowStudyStats}
+              title="View study statistics"
+            >
+              Stats
+            </button>
+
+            <button
+              className="header-btn"
+              onClick={onShowStudyTimer}
+              title="Study session timer"
+            >
+              Timer
             </button>
 
             <button
@@ -109,17 +135,20 @@ const Header = ({
             >
               {isHeaderCollapsed ? "Exit Focus" : "Focus Mode"}
             </button>
-          </div>
+          </nav>
         </div>
 
         {/* Right Section - Daily Progress */}
         {((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
           <div className="header-right-progress">
             <div className="daily-progress-compact">
-              <span className="progress-label">{cardsCompletedToday}/{cardsCompletedToday + cardsDueToday.length}</span>
+              <span className="progress-label">
+                {cardsCompletedToday}/{cardsCompletedToday + cardsDueToday.length}
+                {cardsDueToday.length === 0 && cardsCompletedToday > 0 && ' ✓'}
+              </span>
               <div className="progress-bar-mini">
                 <div
-                  className="progress-bar-fill-mini"
+                  className={`progress-bar-fill-mini${cardsDueToday.length === 0 && cardsCompletedToday > 0 ? ' complete' : ''}`}
                   style={{
                     width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%`
                   }}

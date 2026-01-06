@@ -348,6 +348,119 @@ export const exportToExcel = async (flashcards, preserveFormatting = true, force
 };
 
 /**
+ * Export flashcards to Anki-compatible format
+ * Creates a tab-separated text file that Anki can import directly
+ * Format: Front \t Back \t Tags (category::subcategory)
+ * @param {Array} flashcards - Array of flashcard objects
+ * @param {boolean} includeAdditionalInfo - Whether to append additional_info to the back of card
+ * @returns {void} Triggers download
+ */
+export const exportToAnki = (flashcards, includeAdditionalInfo = true) => {
+  const dateStr = new Date().toISOString().split('T')[0];
+
+  // Convert HTML to plain text for Anki (Anki Basic cards don't support HTML in import)
+  const stripHtml = (html) => {
+    if (!html) return '';
+    // Replace <br> and block elements with newlines
+    let text = html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/?(p|div|h[1-6]|li|tr)[^>]*>/gi, '\n')
+      .replace(/<[^>]*>/g, '') // Remove remaining tags
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
+      .trim();
+    return text;
+  };
+
+  // Escape tab and newline characters for TSV format
+  const escapeTSV = (text) => {
+    if (!text) return '';
+    // Replace tabs with spaces and limit newlines
+    return text
+      .replace(/\t/g, '    ')  // Replace tabs with 4 spaces
+      .replace(/\r\n/g, '<br>')  // Convert Windows newlines to HTML br for Anki
+      .replace(/\n/g, '<br>')    // Convert Unix newlines to HTML br for Anki
+      .trim();
+  };
+
+  // Build Anki content
+  const lines = flashcards.map(card => {
+    // Front of card (question)
+    const front = escapeTSV(stripHtml(card.question));
+
+    // Back of card (answer + optional additional info)
+    let back = stripHtml(card.answer);
+    if (includeAdditionalInfo && card.additional_info) {
+      back += '\n\n---\n\n' + stripHtml(card.additional_info);
+    }
+    back = escapeTSV(back);
+
+    // Tags - use Anki's hierarchical tag format (category::subcategory)
+    const tags = [];
+    if (card.category) {
+      const category = card.category.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+      if (card.sub_category) {
+        const subCategory = card.sub_category.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+        tags.push(`${category}::${subCategory}`);
+      } else {
+        tags.push(category);
+      }
+    }
+
+    // Add level as a tag
+    if (card.level) {
+      tags.push(`level::${card.level}`);
+    }
+
+    // Add starred tag if applicable
+    if (card.starred) {
+      tags.push('starred');
+    }
+
+    return `${front}\t${back}\t${tags.join(' ')}`;
+  });
+
+  // Create file content with optional header comment
+  const header = `# FSRS Flashcards Export for Anki
+# Exported on: ${dateStr}
+# Total cards: ${flashcards.length}
+# Format: Front<tab>Back<tab>Tags
+# Import in Anki: File > Import > Select this file > Choose "Basic" note type
+# Make sure to check "Allow HTML in fields"
+#
+`;
+
+  const content = header + lines.join('\n');
+
+  // Create and trigger download
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', `flashcards_anki_${dateStr}.txt`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+
+  // Safe cleanup
+  setTimeout(() => {
+    try {
+      if (link.parentNode === document.body) {
+        document.body.removeChild(link);
+      }
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.warn('Failed to clean up Anki download link:', error);
+    }
+  }, 100);
+};
+
+/**
  * Download a file blob
  * @param {Blob} blob - File blob to download
  * @param {string} filename - Filename for download

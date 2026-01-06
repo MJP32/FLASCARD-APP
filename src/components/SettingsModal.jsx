@@ -21,6 +21,8 @@ const SettingsModal = ({
   onClose,
   isDarkMode,
   onToggleDarkMode,
+  isHighContrast,
+  onToggleHighContrast,
   fsrsParams,
   onUpdateFsrsParams,
   showIntervalSettings,
@@ -216,6 +218,23 @@ const SettingsModal = ({
                   </button>
                   <span className="theme-label">🌙 Dark</span>
                 </div>
+
+                <div className="theme-toggle-row" style={{ marginTop: '16px' }}>
+                  <span className="theme-label">High Contrast Mode</span>
+                  <button
+                    className={`toggle-switch ${isHighContrast ? 'dark' : 'light'}`}
+                    onClick={onToggleHighContrast}
+                    aria-label={`${isHighContrast ? 'Disable' : 'Enable'} high contrast mode`}
+                  >
+                    <div className="toggle-slider"></div>
+                  </button>
+                  <span className="theme-label" style={{ opacity: isHighContrast ? 1 : 0.5 }}>
+                    {isHighContrast ? 'On' : 'Off'}
+                  </span>
+                </div>
+                <p className="section-description" style={{ marginTop: '8px', fontSize: '12px' }}>
+                  High contrast mode increases color contrast for better accessibility.
+                </p>
               </div>
             )}
           </section>

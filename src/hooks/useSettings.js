@@ -17,6 +17,7 @@ import { DEFAULT_FSRS_PARAMS, STORAGE_KEYS, THEMES } from '../utils/constants';
 export const useSettings = (firebaseApp, userId) => {
   const [db, setDb] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isHighContrast, setIsHighContrast] = useState(false);
   const [fsrsParams, setFsrsParams] = useState(DEFAULT_FSRS_PARAMS);
   const [showIntervalSettings, setShowIntervalSettings] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -35,9 +36,15 @@ export const useSettings = (firebaseApp, userId) => {
     const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME);
     const isDark = savedTheme === THEMES.DARK;
     setIsDarkMode(isDark);
-    
+
     // Apply theme immediately to prevent flash
     applyTheme(isDark);
+
+    // Initialize high contrast from localStorage
+    const savedHighContrast = localStorage.getItem('highContrastMode');
+    const highContrast = savedHighContrast === 'true';
+    setIsHighContrast(highContrast);
+    applyHighContrast(highContrast);
   }, []);
 
   // Load user settings from Firestore when user and db are ready
@@ -115,6 +122,47 @@ export const useSettings = (firebaseApp, userId) => {
       document.documentElement.classList.remove('dark');
       document.body.classList.remove('dark');
       localStorage.setItem(STORAGE_KEYS.THEME, THEMES.LIGHT);
+    }
+  };
+
+  /**
+   * Apply high contrast mode to document
+   * @param {boolean} highContrast - Whether to apply high contrast
+   */
+  const applyHighContrast = (highContrast) => {
+    if (highContrast) {
+      document.documentElement.classList.add('high-contrast');
+      document.body.classList.add('high-contrast');
+      localStorage.setItem('highContrastMode', 'true');
+    } else {
+      document.documentElement.classList.remove('high-contrast');
+      document.body.classList.remove('high-contrast');
+      localStorage.setItem('highContrastMode', 'false');
+    }
+  };
+
+  /**
+   * Toggle high contrast mode
+   */
+  const toggleHighContrast = async () => {
+    const newHighContrast = !isHighContrast;
+    setIsHighContrast(newHighContrast);
+    applyHighContrast(newHighContrast);
+
+    // Save to Firestore
+    if (db && userId) {
+      try {
+        await saveUserSettings({
+          preferences: {
+            isDarkMode,
+            showIntervalSettings,
+            isHighContrast: newHighContrast
+          }
+        });
+      } catch (error) {
+        console.error('Error saving high contrast preference:', error);
+        setError('Failed to save preference');
+      }
     }
   };
 
@@ -253,6 +301,7 @@ export const useSettings = (firebaseApp, userId) => {
   return {
     // State
     isDarkMode,
+    isHighContrast,
     fsrsParams,
     showIntervalSettings,
     settingsLoaded,
@@ -261,6 +310,7 @@ export const useSettings = (firebaseApp, userId) => {
 
     // Actions
     toggleDarkMode,
+    toggleHighContrast,
     updateFsrsParams,
     toggleIntervalSettings,
     resetFsrsParams,
@@ -268,6 +318,7 @@ export const useSettings = (firebaseApp, userId) => {
     clearError,
 
     // Utils
-    applyTheme
+    applyTheme,
+    applyHighContrast
   };
 };

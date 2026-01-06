@@ -53,12 +53,20 @@ const FlashcardDisplay = ({
   }
 
   return (
-    <div className={`flashcard-container ${isDarkMode ? 'dark' : ''}`}>
+    <div
+      className={`flashcard-container ${isDarkMode ? 'dark' : ''}`}
+      role="region"
+      aria-label="Flashcard study area"
+    >
       {/* Question/Answer Content */}
       <div
         className={`flashcard-section ${showAnswer ? 'answer-section' : 'question-section'}`}
         onClick={handleCardClick}
         style={{ opacity: isTransitioning ? 0 : 1 }}
+        role="article"
+        aria-label={showAnswer ? 'Answer' : 'Question'}
+        aria-live="polite"
+        tabIndex={0}
       >
         {!isTransitioning && (
           <div
@@ -72,21 +80,23 @@ const FlashcardDisplay = ({
       </div>
 
       {/* Footer with navigation */}
-      <div className="flashcard-bottom">
+      <div className="flashcard-bottom" role="toolbar" aria-label="Card navigation">
         <button
           className="edit-card-btn"
           onClick={() => onEditCard && onEditCard(card)}
           title="Edit this card (E)"
+          aria-label="Edit this card"
         >
           ✏️ Edit
         </button>
 
-        <div className="navigation-controls">
+        <div className="navigation-controls" role="group" aria-label="Navigation buttons">
           <button
             className="nav-btn"
             onClick={onPreviousCard}
             disabled={totalCards <= 1}
             title="Previous card (← or P)"
+            aria-label="Go to previous card"
           >
             ← Prev
           </button>
@@ -95,9 +105,11 @@ const FlashcardDisplay = ({
             className="show-answer-btn"
             onClick={onToggleAnswer || onShowAnswer}
             title="Toggle answer (Space or Enter)"
+            aria-label={showAnswer ? "Hide answer" : "Show answer"}
+            aria-pressed={showAnswer}
           >
             {showAnswer ? "Hide Answer" : "Show Answer"}
-            <span className="shortcut-hint">Space</span>
+            <span className="shortcut-hint" aria-hidden="true">Space</span>
           </button>
 
           <button
@@ -105,6 +117,7 @@ const FlashcardDisplay = ({
             onClick={onNextCard}
             disabled={totalCards <= 1}
             title="Next card (→ or N)"
+            aria-label="Go to next card"
           >
             Next →
           </button>

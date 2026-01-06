@@ -14,6 +14,8 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import MessageBar from './components/MessageBar';
 import ReviewButtons from './components/ReviewButtons';
+import StudyTimer from './components/StudyTimer';
+import StudyStats from './components/StudyStats';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -164,6 +166,12 @@ function App() {
   const [showManageCardsModal, setShowManageCardsModal] = useState(false);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showStudyTimer, setShowStudyTimer] = useState(false);
+  const [showStudyStats, setShowStudyStats] = useState(false);
+
+  // Undo deletion state
+  const [deletedCards, setDeletedCards] = useState([]);
+  const [showUndoToast, setShowUndoToast] = useState(false);
 
   // Edit card states
   const [isEditingCard, setIsEditingCard] = useState(false);
@@ -324,12 +332,14 @@ function App() {
 
   const {
     isDarkMode,
+    isHighContrast,
     fsrsParams,
     showIntervalSettings,
     settingsLoaded,
     isLoading: settingsLoading,
     error: settingsError,
     toggleDarkMode,
+    toggleHighContrast,
     updateFsrsParams,
     toggleIntervalSettings,
     clearError: clearSettingsError
@@ -943,12 +953,22 @@ function App() {
     }
   };
 
-  const handleDeleteCard = async (cardId) => {
-    if (!window.confirm('Are you sure you want to delete this flashcard?')) {
+  const handleDeleteCard = async (cardId, skipConfirm = false) => {
+    if (!skipConfirm && !window.confirm('Are you sure you want to delete this flashcard?')) {
       return;
     }
 
     try {
+      // Find and store the card data before deletion for undo
+      const cardToDelete = flashcards.find(c => c.id === cardId);
+      if (cardToDelete) {
+        // Store for potential undo - keep last 5 deletions
+        setDeletedCards(prev => [...prev.slice(-4), { ...cardToDelete, deletedAt: Date.now() }]);
+        setShowUndoToast(true);
+        // Auto-hide toast after 10 seconds
+        setTimeout(() => setShowUndoToast(false), 10000);
+      }
+
       // Store current position for smart navigation
       const currentPosition = currentCardIndex;
       const totalCards = filteredFlashcards.length;
@@ -964,12 +984,32 @@ function App() {
       }
       // For other positions, let the filtering system handle navigation automatically
 
-      setMessage(SUCCESS_MESSAGES.CARD_DELETED);
+      setMessage('Card deleted - Click Undo to restore');
       setIsEditingCard(false);
       setEditCardData(null);
-      clearMessage();
     } catch (error) {
       setError(error.message || 'Failed to delete flashcard');
+    }
+  };
+
+  // Undo card deletion
+  const handleUndoDelete = async () => {
+    if (deletedCards.length === 0) return;
+
+    const lastDeleted = deletedCards[deletedCards.length - 1];
+    try {
+      // Remove internal fields before restoring
+      const { id, deletedAt, ...cardData } = lastDeleted;
+      await addFlashcard(cardData);
+
+      setDeletedCards(prev => prev.slice(0, -1));
+      setMessage('Card restored successfully!');
+
+      if (deletedCards.length <= 1) {
+        setShowUndoToast(false);
+      }
+    } catch (error) {
+      setError('Failed to restore card');
     }
   };
 
@@ -2301,6 +2341,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         onShowCalendar={() => setShowCalendarModal(true)}
         onShowApiKeys={() => setShowApiKeyModal(true)}
         onShowAccount={() => setShowAccountModal(true)}
+        onShowStudyTimer={() => setShowStudyTimer(true)}
+        onShowStudyStats={() => setShowStudyStats(true)}
       />
 
       {/* Messages */}
@@ -2312,6 +2354,65 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         onClearError={clearError}
       />
 
+      {/* Undo Toast */}
+      {showUndoToast && deletedCards.length > 0 && (
+        <div
+          className="undo-toast"
+          style={{
+            position: 'fixed',
+            bottom: '100px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: isDarkMode ? '#1e293b' : '#1e293b',
+            color: '#ffffff',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            zIndex: 10000,
+            animation: 'slideUp 0.3s ease-out'
+          }}
+          role="alert"
+        >
+          <span>
+            {deletedCards.length === 1
+              ? 'Card deleted'
+              : `${deletedCards.length} cards deleted`}
+          </span>
+          <button
+            onClick={handleUndoDelete}
+            style={{
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              padding: '6px 16px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '14px'
+            }}
+            aria-label="Undo deletion"
+          >
+            Undo
+          </button>
+          <button
+            onClick={() => setShowUndoToast(false)}
+            style={{
+              background: 'transparent',
+              color: '#94a3b8',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              padding: '0 4px'
+            }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="app-main">
@@ -3218,12 +3319,27 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         onClose={() => setShowSettingsModal(false)}
         isDarkMode={isDarkMode}
         onToggleDarkMode={toggleDarkMode}
+        isHighContrast={isHighContrast}
+        onToggleHighContrast={toggleHighContrast}
         fsrsParams={fsrsParams}
         onUpdateFsrsParams={updateFsrsParams}
         showIntervalSettings={showIntervalSettings}
         onToggleIntervalSettings={toggleIntervalSettings}
         userDisplayName={userDisplayName}
         flashcards={flashcards}
+      />
+
+      <StudyTimer
+        isVisible={showStudyTimer}
+        onClose={() => setShowStudyTimer(false)}
+        isDarkMode={isDarkMode}
+      />
+
+      <StudyStats
+        flashcards={flashcards}
+        isVisible={showStudyStats}
+        onClose={() => setShowStudyStats(false)}
+        isDarkMode={isDarkMode}
       />
 
       <ImportExportModal

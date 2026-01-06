@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { exportToCSV, exportToExcel } from '../services/exportService';
+import { exportToCSV, exportToExcel, exportToAnki } from '../services/exportService';
 import { parseCSV, parseExcel, readFileAsText, readFileAsArrayBuffer } from '../services/fileParser';
 import { SUPPORTED_FILE_TYPES, FILE_SIZE_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/constants';
 
@@ -155,6 +155,8 @@ const ImportExportModal = ({
     try {
       if (exportFormat === 'csv') {
         exportToCSV(flashcards, preserveFormatting);
+      } else if (exportFormat === 'anki') {
+        exportToAnki(flashcards, true); // Include additional info by default
       } else {
         await exportToExcel(flashcards, preserveFormatting, true);
       }
@@ -739,6 +741,16 @@ const ImportExportModal = ({
                     />
                     Excel (categorized with ZIP compression)
                   </label>
+                  <label className="radio-option">
+                    <input
+                      type="radio"
+                      value="anki"
+                      checked={exportFormat === 'anki'}
+                      onChange={(e) => setExportFormat(e.target.value)}
+                      disabled={isExporting}
+                    />
+                    Anki (Tab-separated for import to Anki)
+                  </label>
                 </div>
               </div>
 
@@ -761,6 +773,9 @@ const ImportExportModal = ({
                 <p><strong>Available cards:</strong> {flashcards.length}</p>
                 {exportFormat === 'excel' && (
                   <p><small>Excel export will create separate files by category and compress them into a ZIP file.</small></p>
+                )}
+                {exportFormat === 'anki' && (
+                  <p><small>Creates a text file you can import directly into Anki. Categories become hierarchical tags (category::subcategory).</small></p>
                 )}
               </div>
 
