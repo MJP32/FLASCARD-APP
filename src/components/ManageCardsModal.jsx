@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { FixedSizeList as List } from 'react-window';
 
 /**
  * Modal for managing flashcard active/inactive states with bulk operations
@@ -606,54 +607,126 @@ const ManageCardsModal = ({
             </div>
           ) : (
             <div style={modalStyles.cardsList}>
-              {filteredCards.map(card => {
-                const isActive = card.active !== false;
-                const isSelected = selectedCards.has(card.id);
-                const dueDate = card.dueDate ? (card.dueDate.toDate ? card.dueDate.toDate() : new Date(card.dueDate)) : null;
+              {filteredCards.length > 50 ? (
+                // Virtualized list for large card collections
+                <List
+                  height={400}
+                  itemCount={filteredCards.length}
+                  itemSize={110}
+                  width="100%"
+                  itemData={{
+                    cards: filteredCards,
+                    selectedCards,
+                    toggleCardSelection,
+                    onToggleActive,
+                    stripHtml,
+                    modalStyles
+                  }}
+                >
+                  {({ index, style, data }) => {
+                    const card = data.cards[index];
+                    const isActive = card.active !== false;
+                    const isSelected = data.selectedCards.has(card.id);
+                    const dueDate = card.dueDate ? (card.dueDate.toDate ? card.dueDate.toDate() : new Date(card.dueDate)) : null;
 
-                return (
-                  <div
-                    key={card.id}
-                    style={{
-                      ...modalStyles.cardItem,
-                      borderColor: isSelected ? '#2563eb' : (isActive ? '#e2e8f0' : '#fde047'),
-                      background: isSelected ? '#eff6ff' : (isActive ? '#f8fafc' : '#fffbeb'),
-                      boxShadow: isSelected ? '0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none'
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleCardSelection(card.id)}
-                      style={modalStyles.checkbox}
-                    />
-                    <div style={modalStyles.cardContent}>
-                      <div style={modalStyles.cardQuestion}>
-                        {stripHtml(card.question) || 'No question'}
+                    return (
+                      <div
+                        style={{
+                          ...style,
+                          ...data.modalStyles.cardItem,
+                          borderColor: isSelected ? '#2563eb' : (isActive ? '#e2e8f0' : '#fde047'),
+                          background: isSelected ? '#eff6ff' : (isActive ? '#f8fafc' : '#fffbeb'),
+                          boxShadow: isSelected ? '0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none',
+                          marginBottom: '10px',
+                          height: 'auto',
+                          minHeight: '100px'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => data.toggleCardSelection(card.id)}
+                          style={data.modalStyles.checkbox}
+                        />
+                        <div style={data.modalStyles.cardContent}>
+                          <div style={data.modalStyles.cardQuestion}>
+                            {data.stripHtml(card.question) || 'No question'}
+                          </div>
+                          <div style={data.modalStyles.cardAnswer}>
+                            {data.stripHtml(card.answer) || 'No answer'}
+                          </div>
+                          <div style={data.modalStyles.cardMeta}>
+                            <span>{card.category || 'Uncategorized'}</span>
+                            {card.sub_category && <span>/ {card.sub_category}</span>}
+                            <span>Reviews: {card.reviewCount || 0}</span>
+                            {dueDate && <span>Due: {dueDate.toLocaleDateString()}</span>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => data.onToggleActive(card.id, !isActive)}
+                          style={{
+                            ...data.modalStyles.toggleBtn,
+                            background: isActive ? '#10b981' : '#f59e0b',
+                            color: 'white'
+                          }}
+                        >
+                          {isActive ? '✓ Active' : '⏸ Inactive'}
+                        </button>
                       </div>
-                      <div style={modalStyles.cardAnswer}>
-                        {stripHtml(card.answer) || 'No answer'}
-                      </div>
-                      <div style={modalStyles.cardMeta}>
-                        <span>{card.category || 'Uncategorized'}</span>
-                        {card.sub_category && <span>/ {card.sub_category}</span>}
-                        <span>Reviews: {card.reviewCount || 0}</span>
-                        {dueDate && <span>Due: {dueDate.toLocaleDateString()}</span>}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => onToggleActive(card.id, !isActive)}
+                    );
+                  }}
+                </List>
+              ) : (
+                // Regular rendering for smaller lists
+                filteredCards.map(card => {
+                  const isActive = card.active !== false;
+                  const isSelected = selectedCards.has(card.id);
+                  const dueDate = card.dueDate ? (card.dueDate.toDate ? card.dueDate.toDate() : new Date(card.dueDate)) : null;
+
+                  return (
+                    <div
+                      key={card.id}
                       style={{
-                        ...modalStyles.toggleBtn,
-                        background: isActive ? '#10b981' : '#f59e0b',
-                        color: 'white'
+                        ...modalStyles.cardItem,
+                        borderColor: isSelected ? '#2563eb' : (isActive ? '#e2e8f0' : '#fde047'),
+                        background: isSelected ? '#eff6ff' : (isActive ? '#f8fafc' : '#fffbeb'),
+                        boxShadow: isSelected ? '0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none'
                       }}
                     >
-                      {isActive ? '✓ Active' : '⏸ Inactive'}
-                    </button>
-                  </div>
-                );
-              })}
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleCardSelection(card.id)}
+                        style={modalStyles.checkbox}
+                      />
+                      <div style={modalStyles.cardContent}>
+                        <div style={modalStyles.cardQuestion}>
+                          {stripHtml(card.question) || 'No question'}
+                        </div>
+                        <div style={modalStyles.cardAnswer}>
+                          {stripHtml(card.answer) || 'No answer'}
+                        </div>
+                        <div style={modalStyles.cardMeta}>
+                          <span>{card.category || 'Uncategorized'}</span>
+                          {card.sub_category && <span>/ {card.sub_category}</span>}
+                          <span>Reviews: {card.reviewCount || 0}</span>
+                          {dueDate && <span>Due: {dueDate.toLocaleDateString()}</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onToggleActive(card.id, !isActive)}
+                        style={{
+                          ...modalStyles.toggleBtn,
+                          background: isActive ? '#10b981' : '#f59e0b',
+                          color: 'white'
+                        }}
+                      >
+                        {isActive ? '✓ Active' : '⏸ Inactive'}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
             </div>
           )}
         </div>

@@ -1,21 +1,14 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { initializeApp } from 'firebase/app';
 
-// Components
+// Core Components (loaded immediately)
 import LoginScreen from './LoginScreen.jsx';
 import FlashcardDisplay from './components/FlashcardDisplay';
 import FlashcardForm from './components/FlashcardForm';
-import SettingsModal from './components/SettingsModal';
-import ImportExportModal from './components/ImportExportModal';
-import GenerateQuestionsModal from './components/GenerateQuestionsModal';
-import ManageCardsModal from './components/ManageCardsModal';
-import Calendar from './Calendar';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import MessageBar from './components/MessageBar';
 import ReviewButtons from './components/ReviewButtons';
-import StudyTimer from './components/StudyTimer';
-import StudyStats from './components/StudyStats';
 
 // Hooks
 import { useAuth } from './hooks/useAuth';
@@ -33,6 +26,15 @@ import { debugAmazonLP } from './debug/utils/debugAmazonLP';
 // Styles
 import './App.css';
 import './ai-explanation-dropdown.css';
+
+// Lazy-loaded Modal Components (loaded on demand)
+const SettingsModal = lazy(() => import('./components/SettingsModal'));
+const ImportExportModal = lazy(() => import('./components/ImportExportModal'));
+const GenerateQuestionsModal = lazy(() => import('./components/GenerateQuestionsModal'));
+const ManageCardsModal = lazy(() => import('./components/ManageCardsModal'));
+const Calendar = lazy(() => import('./Calendar'));
+const StudyTimer = lazy(() => import('./components/StudyTimer'));
+const StudyStats = lazy(() => import('./components/StudyStats'));
 
 // Firebase configuration
 const firebaseConfig = {
@@ -3314,48 +3316,69 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         selectedProvider={selectedProvider}
       />
 
-      <SettingsModal
-        isVisible={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={toggleDarkMode}
-        isHighContrast={isHighContrast}
-        onToggleHighContrast={toggleHighContrast}
-        fsrsParams={fsrsParams}
-        onUpdateFsrsParams={updateFsrsParams}
-        showIntervalSettings={showIntervalSettings}
-        onToggleIntervalSettings={toggleIntervalSettings}
-        userDisplayName={userDisplayName}
-        flashcards={flashcards}
-      />
+      {/* Lazy-loaded modals wrapped in Suspense */}
+      <Suspense fallback={null}>
+        {showSettingsModal && (
+          <SettingsModal
+            isVisible={showSettingsModal}
+            onClose={() => setShowSettingsModal(false)}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={toggleDarkMode}
+            isHighContrast={isHighContrast}
+            onToggleHighContrast={toggleHighContrast}
+            fsrsParams={fsrsParams}
+            onUpdateFsrsParams={updateFsrsParams}
+            showIntervalSettings={showIntervalSettings}
+            onToggleIntervalSettings={toggleIntervalSettings}
+            userDisplayName={userDisplayName}
+            flashcards={flashcards}
+          />
+        )}
+      </Suspense>
 
-      <StudyTimer
-        isVisible={showStudyTimer}
-        onClose={() => setShowStudyTimer(false)}
-        isDarkMode={isDarkMode}
-      />
+      <Suspense fallback={null}>
+        {showStudyTimer && (
+          <StudyTimer
+            isVisible={showStudyTimer}
+            onClose={() => setShowStudyTimer(false)}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
 
-      <StudyStats
-        flashcards={flashcards}
-        isVisible={showStudyStats}
-        onClose={() => setShowStudyStats(false)}
-        isDarkMode={isDarkMode}
-      />
+      <Suspense fallback={null}>
+        {showStudyStats && (
+          <StudyStats
+            flashcards={flashcards}
+            isVisible={showStudyStats}
+            onClose={() => setShowStudyStats(false)}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
 
-      <ImportExportModal
-        isVisible={showImportExportModal}
-        onClose={() => setShowImportExportModal(false)}
-        flashcards={flashcards}
-        onImport={handleImport}
-        isDarkMode={isDarkMode}
-      />
+      <Suspense fallback={null}>
+        {showImportExportModal && (
+          <ImportExportModal
+            isVisible={showImportExportModal}
+            onClose={() => setShowImportExportModal(false)}
+            flashcards={flashcards}
+            onImport={handleImport}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
 
-      <Calendar
-        isVisible={showCalendarModal}
-        onClose={() => setShowCalendarModal(false)}
-        calendarDates={calendarDates}
-        isDarkMode={isDarkMode}
-      />
+      <Suspense fallback={null}>
+        {showCalendarModal && (
+          <Calendar
+            isVisible={showCalendarModal}
+            onClose={() => setShowCalendarModal(false)}
+            calendarDates={calendarDates}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
 
       {/* API Key Configuration Modal */}
       {showApiKeyModal && (
@@ -3934,33 +3957,41 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         </div>
       )}
 
-      <GenerateQuestionsModal
-        isVisible={showGenerateModal}
-        onClose={() => setShowGenerateModal(false)}
-        currentCard={currentCard}
-        onGenerateQuestions={handleGenerateQuestions}
-        isDarkMode={isDarkMode}
-        apiKeys={apiKeys}
-        selectedProvider={selectedProvider}
-      />
+      <Suspense fallback={null}>
+        {showGenerateModal && (
+          <GenerateQuestionsModal
+            isVisible={showGenerateModal}
+            onClose={() => setShowGenerateModal(false)}
+            currentCard={currentCard}
+            onGenerateQuestions={handleGenerateQuestions}
+            isDarkMode={isDarkMode}
+            apiKeys={apiKeys}
+            selectedProvider={selectedProvider}
+          />
+        )}
+      </Suspense>
 
-      <ManageCardsModal
-        isVisible={showManageCardsModal}
-        onClose={() => setShowManageCardsModal(false)}
-        flashcards={flashcards}
-        onToggleActive={handleToggleCardActive}
-        onCreateCard={() => {
-          setShowManageCardsModal(false);
-          setShowCreateCardForm(true);
-        }}
-        onImportExport={() => {
-          setShowManageCardsModal(false);
-          setShowImportExportModal(true);
-        }}
-        onBulkDelete={handleBulkDelete}
-        onBulkUpdateCategory={handleBulkUpdateCategory}
-        isDarkMode={isDarkMode}
-      />
+      <Suspense fallback={null}>
+        {showManageCardsModal && (
+          <ManageCardsModal
+            isVisible={showManageCardsModal}
+            onClose={() => setShowManageCardsModal(false)}
+            flashcards={flashcards}
+            onToggleActive={handleToggleCardActive}
+            onCreateCard={() => {
+              setShowManageCardsModal(false);
+              setShowCreateCardForm(true);
+            }}
+            onImportExport={() => {
+              setShowManageCardsModal(false);
+              setShowImportExportModal(true);
+            }}
+            onBulkDelete={handleBulkDelete}
+            onBulkUpdateCategory={handleBulkUpdateCategory}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
 
       {/* Loading Overlay */}
       {(authLoading || flashcardsLoading || settingsLoading) && (
