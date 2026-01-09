@@ -25,6 +25,8 @@ import { debugAmazonLP } from './debug/utils/debugAmazonLP';
 
 // Styles
 import './App.css';
+import './MobileOptimizations.css';
+
 import './ai-explanation-dropdown.css';
 
 // Lazy-loaded Modal Components (loaded on demand)
@@ -69,10 +71,10 @@ const AutoNavigateToOptimalCards = ({
 
     const performAutoNavigation = async () => {
       setIsNavigating(true);
-      
+
       // Step 1: Find the category with the least total cards that has due cards
       const bestCategory = getNextCategoryWithLeastCards(currentCategory);
-      
+
       if (bestCategory) {
         // Step 2: Within that category, find the subcategory with least total cards that has due cards
         const bestSubCategory = getNextSubCategoryWithLeastCards(bestCategory, 'All');
@@ -97,7 +99,7 @@ const AutoNavigateToOptimalCards = ({
       } else {
         setNavigationComplete(true);
       }
-      
+
       setIsNavigating(false);
     };
 
@@ -126,7 +128,7 @@ const AutoNavigateToOptimalCards = ({
           {showDueTodayOnly ? ' that are due today' : ''}.
         </p>
         <p>
-          <strong>Auto-navigation has been attempted.</strong> If you're still seeing this message, 
+          <strong>Auto-navigation has been attempted.</strong> If you're still seeing this message,
           there may be no due cards available in any category/subcategory combination.
         </p>
       </>
@@ -185,9 +187,9 @@ function App() {
   // Window management states
   const [isMaximized, setIsMaximized] = useState(false);
   const [isPopouted, setIsPopouted] = useState(false);
-  const [windowPosition, setWindowPosition] = useState({ 
-    x: Math.max(0, (window.innerWidth - 1400) / 2), 
-    y: Math.max(0, (window.innerHeight - 900) / 2) 
+  const [windowPosition, setWindowPosition] = useState({
+    x: Math.max(0, (window.innerWidth - 1400) / 2),
+    y: Math.max(0, (window.innerHeight - 900) / 2)
   });
   const [windowSize, setWindowSize] = useState({ width: 1400, height: 900 });
   const [isDragging, setIsDragging] = useState(false);
@@ -201,12 +203,24 @@ function App() {
   const [error, setError] = useState('');
 
   // AI Generation states
-  const [apiKeys, setApiKeys] = useState({
-    openai: localStorage.getItem('openai_api_key') || '',
-    anthropic: localStorage.getItem('anthropic_api_key') || '',
-    gemini: localStorage.getItem('gemini_api_key') || ''
+  const [apiKeys, setApiKeys] = useState(() => {
+    const keys = {
+      openai: localStorage.getItem('openai_api_key') || '',
+      anthropic: localStorage.getItem('anthropic_api_key') || '',
+      gemini: localStorage.getItem('gemini_api_key') || ''
+    };
+    console.log('Initial API keys from localStorage:', {
+      openai: keys.openai ? 'SET' : 'NOT SET',
+      anthropic: keys.anthropic ? 'SET' : 'NOT SET',
+      gemini: keys.gemini ? 'SET' : 'NOT SET'
+    });
+    return keys;
   });
-  const [selectedProvider, setSelectedProvider] = useState(localStorage.getItem('selected_ai_provider') || 'openai');
+  const [selectedProvider, setSelectedProvider] = useState(() => {
+    const provider = localStorage.getItem('selected_ai_provider') || 'openai';
+    console.log('Initial selectedProvider:', provider);
+    return provider;
+  });
 
   // Local API key state for the dropdown
   const [localApiKeys, setLocalApiKeys] = useState({
@@ -218,13 +232,13 @@ function App() {
 
   // Streak tracking state
   const [streakDays, setStreakDays] = useState(0);
-  
+
   // Track if we've checked for default cards creation
   const [hasCheckedForDefaults, setHasCheckedForDefaults] = useState(false);
-  
+
   // Track if anonymous warning has been dismissed
   const [isAnonymousWarningDismissed, setIsAnonymousWarningDismissed] = useState(false);
-  
+
   // Track initial due cards count for the day
   const [, setInitialDueCardsCount] = useState(0);
   const [cardsCompletedToday, setCardsCompletedToday] = useState(0);
@@ -239,7 +253,7 @@ function App() {
 
   // Category selection state - managed in App.js to avoid circular dependency
   const [selectedCategory, setSelectedCategory] = useState('All');
-  
+
   // Collapsible sections state - auto-collapse on mobile
   const [isCategoriesCollapsed, setIsCategoriesCollapsed] = useState(window.innerWidth <= 768);
   const [isSubCategoriesCollapsed, setIsSubCategoriesCollapsed] = useState(window.innerWidth <= 768);
@@ -354,11 +368,11 @@ function App() {
       [provider]: value
     }));
   }, []);
-  
+
   const handleProviderChange = useCallback((provider) => {
     setLocalSelectedProvider(provider);
   }, []);
-  
+
   const handleApiKeysUpdate = useCallback((keys) => {
     setApiKeys(keys);
     // Save to localStorage
@@ -370,7 +384,7 @@ function App() {
       }
     });
   }, []);
-  
+
   const handleSaveApiKeys = useCallback(() => {
     // Update the main API keys state
     handleApiKeysUpdate(localApiKeys);
@@ -402,7 +416,7 @@ function App() {
   const currentCard = getCurrentCard();
   const categories = getCategories();
   const subCategories = getSubCategories(selectedCategory);
-  
+
   const subCategoryStats = getSubCategoryStats(selectedCategory);
   const levels = getLevels(selectedCategory);
   const levelStats = getLevelStats(selectedCategory);
@@ -424,7 +438,7 @@ function App() {
       return allCategories;
     }
   }, [categories, showDueTodayOnly, allCategories]);
-  
+
   // Filter displayCategories to only include categories with actual cards using same logic as individual buttons
   const filteredDisplayCategories = useMemo(() => {
     // Create special debug function for AWS category
@@ -434,16 +448,16 @@ function App() {
         const category = (card.category || '').toLowerCase();
         return category === 'aws';
       });
-      
+
       const awsInCategories = (categories || []).includes('AWS');
       const awsInDisplayCategories = (displayCategories || []).includes('AWS');
       const awsInFiltered = (filteredDisplayCategories || []).includes('AWS');
-      
+
       // console.log(`AWS Debug: ${awsCards.length} cards found, visible: ${awsInFiltered}`);
-      
+
       return { awsCards, awsInCategories, awsInDisplayCategories, awsInFiltered };
     };
-    
+
     // Helper function to count cards in a category with current filters
     const getCardCountInCategory = (category) => {
       // Always use real-time counting - this ensures categories with actual due cards show up
@@ -453,12 +467,12 @@ function App() {
         // Match the category
         return (card.category || 'Uncategorized') === category;
       });
-      
+
       // Apply filters based on current mode
       if (showDueTodayOnly && showStarredOnly) {
         // When both filters are on, count actual starred due cards
         categoryCards = categoryCards.filter(card => card.starred === true);
-        
+
         const now = new Date();
         const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
         categoryCards = categoryCards.filter(card => {
@@ -483,18 +497,24 @@ function App() {
         // Filter by starred only
         categoryCards = categoryCards.filter(card => card.starred === true);
       }
-      
+
       return categoryCards.length;
     };
-    
+
     // Filter displayCategories to only include categories with actual cards
     const filteredCategories = displayCategories.filter(category => {
       const cardCount = getCardCountInCategory(category);
       return cardCount > 0;
     });
-    
+
     return filteredCategories;
   }, [displayCategories, flashcards, showDueTodayOnly, showStarredOnly, categories]);
+
+  // Helper function to strip HTML tags for search
+  const stripHtml = useCallback((html) => {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  }, []);
 
   // Apply search filter to flashcards
   const searchFilteredFlashcards = useMemo(() => {
@@ -503,14 +523,15 @@ function App() {
     }
     const query = searchQuery.toLowerCase().trim();
     return filteredFlashcards.filter(card => {
-      const question = (card.question || '').toLowerCase();
-      const answer = (card.answer || '').toLowerCase();
+      // Strip HTML tags before searching to match visible text
+      const question = stripHtml(card.question || '').toLowerCase();
+      const answer = stripHtml(card.answer || '').toLowerCase();
       const category = (card.category || '').toLowerCase();
       const subCategory = (card.sub_category || '').toLowerCase();
       return question.includes(query) || answer.includes(query) ||
-             category.includes(query) || subCategory.includes(query);
+        category.includes(query) || subCategory.includes(query);
     });
-  }, [filteredFlashcards, searchQuery]);
+  }, [filteredFlashcards, searchQuery, stripHtml]);
 
   // Get current card from search-filtered list
   const currentSearchCard = useMemo(() => {
@@ -565,14 +586,14 @@ function App() {
         getSubCategoryStats
       };
       addDebugAutoAdvanceToWindow(flashcardHook);
-      
+
       // Add counting debug utilities
       addDebugCountingToWindow(flashcards, userId, categoryStats, getSubCategoryStats(), selectedCategory);
-      
+
       // Add category debug utility to window (but don't call it automatically)
       window.debugCategories = () => debugCategories(flashcards);
       window.debugAmazonLP = () => debugAmazonLP(flashcards);
-      
+
       // Log category debug info once when flashcards change
       if (flashcards && flashcards.length > 0 && !window._hasLoggedCategories) {
         // console.log('\n🔍 CATEGORY DEBUG - Check terminal for details\n');
@@ -615,18 +636,18 @@ function App() {
     //   flashcardsLength: flashcards.length,
     //   hasCheckedForDefaults
     // });
-    
+
     // Only run when user is authenticated, we have the addFlashcard function, and we haven't checked yet
     if (isAuthReady && userId && addFlashcard && !hasCheckedForDefaults) {
       // console.log('🔍 Conditions met, setting timer for default card creation');
       setHasCheckedForDefaults(true); // Mark that we've checked to prevent multiple runs
-      
+
       // Small delay to ensure Firestore listener has had time to populate flashcards
       const timer = setTimeout(() => {
         // console.log('🔍 Timer fired, calling createDefaultFlashcards');
         createDefaultFlashcards(userId);
       }, 2000); // Increased to 2 seconds
-      
+
       return () => {
         // console.log('🔍 Cleaning up timer');
         clearTimeout(timer);
@@ -665,7 +686,7 @@ function App() {
   const handlePasswordReset = async (resetEmail) => {
     clearAuthError();
     setError('');
-    
+
     try {
       await sendPasswordReset(resetEmail);
       setMessage('Password reset email sent! Check your inbox.');
@@ -715,36 +736,36 @@ function App() {
     try {
       // FSRS algorithm implementation
       const now = new Date();
-      let { 
-        easeFactor = 2.5, 
-        interval = 1, 
-        repetitions = 0, 
-        difficulty = 5, 
+      let {
+        easeFactor = 2.5,
+        interval = 1,
+        repetitions = 0,
+        difficulty = 5,
         stability = 2,
-        lastReviewed 
+        lastReviewed
       } = card;
-      
+
       // Convert rating to numeric value
       const ratingMap = { again: 1, hard: 2, good: 3, easy: 4 };
       const numRating = ratingMap[rating];
-      
+
       // FSRS parameters from settings
-      const { 
+      const {
         maximumInterval = 36500,
         w = DEFAULT_FSRS_PARAMS.w,
         againFactor = 0.5,
         hardFactor = 0.8,
         goodFactor = 1.0,
       } = fsrsParams;
-      
+
       // Calculate elapsed days since last review
       const lastReviewDate = lastReviewed ? (lastReviewed.toDate ? lastReviewed.toDate() : new Date(lastReviewed)) : null;
       const elapsedDays = lastReviewDate ? Math.max(1, Math.round((now - lastReviewDate) / (1000 * 60 * 60 * 24))) : 0;
-      
+
       // FSRS-4.5 algorithm implementation
       if (numRating === 1) { // Again
         repetitions = 0;
-        
+
         // For first review or after a lapse
         if (card.repetitions === 0) {
           interval = 1 / (24 * 60); // Convert minutes to days
@@ -752,19 +773,19 @@ function App() {
           // Use againFactor to reduce the interval
           interval = Math.max(1, Math.round(interval * againFactor));
         }
-        
+
         // Increase difficulty
         difficulty = Math.min(10, difficulty + w[6]);
-        
+
         // Reduce stability significantly
         stability = stability * Math.exp(w[11] * Math.pow(difficulty, w[12]));
         stability = Math.max(0.1, stability);
-        
+
         // Reduce ease factor
         easeFactor = Math.max(1.3, easeFactor - 0.2);
-        
+
       } else if (numRating === 2) { // Hard
-        
+
         if (repetitions === 0) {
           interval = 1 / (24 * 60); // Convert minutes to days
         } else {
@@ -773,21 +794,21 @@ function App() {
           // But also consider the actual elapsed time
           interval = Math.max(elapsedDays + 1, Math.round(newInterval));
         }
-        
+
         repetitions++;
-        
+
         // Slightly increase difficulty
         difficulty = Math.min(10, difficulty + w[5] * 0.5);
-        
+
         // Slightly reduce stability
         const recallProbability = Math.exp(-elapsedDays / stability);
         stability = stability * (1 + Math.exp(w[8]) * (11 - difficulty) * Math.pow(stability, w[9]) * (Math.exp(recallProbability * w[10]) - 1));
-        
+
         // Slightly reduce ease factor
         easeFactor = Math.max(1.3, easeFactor - 0.15);
-        
+
       } else if (numRating === 3) { // Good
-        
+
         if (repetitions === 0) {
           interval = 4;
         } else if (repetitions === 1) {
@@ -797,21 +818,21 @@ function App() {
           const newInterval = interval * easeFactor * goodFactor;
           interval = Math.round(newInterval);
         }
-        
+
         repetitions++;
-        
+
         // Maintain or slightly reduce difficulty
         difficulty = Math.max(1, difficulty - w[6] * 0.3);
-        
+
         // Increase stability based on successful recall
         const recallProbability = Math.exp(-elapsedDays / stability);
         stability = stability * (1 + Math.exp(w[8]) * (11 - difficulty) * Math.pow(stability, w[9]) * (Math.exp(recallProbability * w[10]) - 1));
-        
+
         // Maintain ease factor
         // easeFactor stays the same
-        
+
       } else if (numRating === 4) { // Easy
-        
+
         if (repetitions === 0) {
           interval = 15;
         } else {
@@ -819,34 +840,34 @@ function App() {
           const newInterval = interval * easeFactor;
           interval = Math.round(newInterval);
         }
-        
+
         repetitions++;
-        
+
         // Reduce difficulty
         difficulty = Math.max(1, difficulty - w[7]);
-        
+
         // Increase stability more for easy recall
         const recallProbability = Math.exp(-elapsedDays / stability);
         stability = stability * (1 + Math.exp(w[8]) * (11 - difficulty) * Math.pow(stability, w[9]) * (Math.exp(recallProbability * w[10]) - 1) * 1.3);
-        
+
         // Increase ease factor
         easeFactor = Math.min(2.5, easeFactor + 0.15);
       }
-      
+
       // Apply fuzz factor to prevent cards bunching up
       const fuzzRange = interval * (fsrsParams.fuzzFactor || 0.05);
       const fuzz = (Math.random() - 0.5) * 2 * fuzzRange;
       interval = Math.max(1, Math.round(interval + fuzz));
-      
+
       // Apply maximum interval limit
       interval = Math.min(interval, maximumInterval);
-      
+
       // Calculate next due date
       const dueDate = new Date(now.getTime() + interval * 24 * 60 * 60 * 1000);
-      
+
       // Import Timestamp for proper Firestore format
       const { Timestamp } = await import('firebase/firestore');
-      
+
       const updateData = {
         easeFactor,
         interval,
@@ -858,14 +879,14 @@ function App() {
         reviewCount: (card.reviewCount || 0) + 1,
         level: rating // Store the rating as the level
       };
-      
+
       // console.log('📝 Updating card with data:', updateData);
       // console.log(`📅 Next review: ${interval} days from now (${dueDate.toLocaleDateString()})`);
-      
+
       // Add current card to navigation history before updating it
       // This ensures we can navigate back to this card even if it gets filtered out
       addToNavigationHistory(card);
-      
+
       // Update the card
       await updateFlashcard(card.id, updateData);
 
@@ -889,34 +910,34 @@ function App() {
       if (window.flashcardHook && window.flashcardHook.setLastCardCompletionTime) {
         window.flashcardHook.setLastCardCompletionTime(Date.now());
       }
-      
+
       // Track card completion time for App.js auto-advance logic
       setLastCardCompletion(Date.now());
-      
+
       // Increment category-specific completed count
       const cardCategory = card.category || 'Uncategorized';
       const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
       const subCategoryKey = `${cardCategory}::${cardSubCategory}`;
-      
+
       const newCategoryCompleted = { ...categoryCompletedCounts };
       const newSubCategoryCompleted = { ...subCategoryCompletedCounts };
-      
+
       newCategoryCompleted[cardCategory] = (newCategoryCompleted[cardCategory] || 0) + 1;
       newSubCategoryCompleted[subCategoryKey] = (newSubCategoryCompleted[subCategoryKey] || 0) + 1;
-      
+
       setCategoryCompletedCounts(newCategoryCompleted);
       setSubCategoryCompletedCounts(newSubCategoryCompleted);
 
       // Save updated completion counts to localStorage
       localStorage.setItem(`flashcard_category_completed_${userId}`, JSON.stringify(newCategoryCompleted));
       localStorage.setItem(`flashcard_subcategory_completed_${userId}`, JSON.stringify(newSubCategoryCompleted));
-      
+
       if (userId) {
         localStorage.setItem(`flashcard_completed_today_${userId}`, newCompletedCount.toString());
         localStorage.setItem(`flashcard_category_completed_${userId}`, JSON.stringify(newCategoryCompleted));
         localStorage.setItem(`flashcard_subcategory_completed_${userId}`, JSON.stringify(newSubCategoryCompleted));
       }
-      
+
       // Start transition - hide card content to prevent flicker
       setIsCardTransitioning(true);
       setShowAnswer(false);
@@ -1104,7 +1125,7 @@ function App() {
         question: "What is 2+2?",
         answer: "4",
         category: "Math",
-        sub_category: "Arithmetic", 
+        sub_category: "Arithmetic",
         level: "new",
         additional_info: "Basic addition"
       },
@@ -1113,7 +1134,7 @@ function App() {
         answer: "Paris",
         category: "Geography",
         sub_category: "Europe",
-        level: "easy", 
+        level: "easy",
         additional_info: "Located in Western Europe"
       }
     ];
@@ -1124,12 +1145,12 @@ function App() {
         await addFlashcard(cardData);
         createdCount++;
       }
-      
+
       // Mark defaults as created
       localStorage.setItem(defaultsKey, 'true');
       setMessage(`Welcome! We've added ${createdCount} sample cards to get you started.`);
       clearMessage();
-      
+
     } catch (error) {
       console.error('❌ Error creating default flashcards:', error);
       // Don't show error to user - this is a nice-to-have feature
@@ -1222,12 +1243,12 @@ EXAMPLE FORMAT:
 IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
       const response = await callAI(contextPrompt, selectedProvider, apiKey);
-      
+
       // Check if response is valid
       if (!response || typeof response !== 'string') {
         throw new Error('AI response was empty or invalid');
       }
-      
+
       // Clean up the response to ensure it's proper HTML
       let cleanResponse = response.trim();
 
@@ -1253,18 +1274,18 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             .trim();
         }
       }
-      
+
       // Ensure we have HTML tags, if not wrap in paragraph
       if (!cleanResponse.includes('<') && cleanResponse.length > 0) {
         cleanResponse = `<p>${cleanResponse}</p>`;
       }
-      
+
       // Convert HTML to plain text since notes use a textarea
       const htmlToText = (html) => {
         // Create a temporary div to parse HTML
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = html;
-        
+
         // Convert common HTML elements to text equivalents
         const processNode = (node) => {
           let text = '';
@@ -1310,10 +1331,10 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           }
           return text;
         };
-        
+
         return processNode(tempDiv).trim();
       };
-      
+
       // Create explanation text for the tooltip
       const explanationText = htmlToText(cleanResponse);
 
@@ -1324,18 +1345,18 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       // Add explanation to question as dropdown if checkbox is checked
       if (addExplanationToQuestion && currentCard) {
         // Create a brief version of the explanation for the dropdown
-        
+
         // Simple lightbulb icon with hover tooltip at the beginning of question
         // Limit explanation text for tooltip and escape properly
-        const tooltipText = explanationText.length > 500 
-          ? explanationText.substring(0, 500) + '...' 
+        const tooltipText = explanationText.length > 500
+          ? explanationText.substring(0, 500) + '...'
           : explanationText;
         const escapedTooltip = tooltipText
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;')
           .replace(/\n/g, ' ')
           .replace(/\r/g, '');
-        
+
         const explanationIcon = `<span class="ai-explanation-lightbulb" title="${escapedTooltip}">💡</span> `;
 
         // Prepend to question, not append
@@ -1697,7 +1718,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
   const allDueCards = getAllDueCards();
   const filteredDueCards = getFilteredDueCards();
   const cardsReviewedToday = getCardsReviewedToday();
-  
+
   // Get starred cards
   const starredCards = useMemo(() => {
     if (!flashcards || !Array.isArray(flashcards)) return [];
@@ -1707,7 +1728,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
   // Get starred cards count based on current view mode
   const starredCardsCount = useMemo(() => {
     if (!flashcards || !Array.isArray(flashcards)) return 0;
-    
+
     if (showDueTodayOnly) {
       // Show only starred cards that are also due
       const starredDueCards = filteredDueCards.filter(card => card.starred === true);
@@ -1738,18 +1759,18 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       const storedCategoryCompleted = localStorage.getItem(`flashcard_category_completed_${userId}`);
       const storedSubCategoryStats = localStorage.getItem(`flashcard_initial_subcategory_stats_${userId}`);
       const storedSubCategoryCompleted = localStorage.getItem(`flashcard_subcategory_completed_${userId}`);
-      
+
       // If it's a new day or first time, reset counts
       if (storedDate !== today) {
         const newInitialCount = allDueCards.length;
         const newCategoryStats = categoryStats;
         const newSubCategoryStats = getAllSubCategoryStats();
-        
+
         console.log('🔄 COUNTING-INIT: Setting initial stats for new day');
         console.log('🔄 Initial category stats:', newCategoryStats);
         console.log('🔄 Initial subcategory stats keys:', Object.keys(newSubCategoryStats));
         console.log('🔄 Total due cards:', newInitialCount);
-        
+
         setInitialDueCardsCount(newInitialCount);
         setCardsCompletedToday(0);
         setInitialCategoryStats(newCategoryStats);
@@ -1788,23 +1809,23 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayString = today.toDateString();
-    
+
     // Check if all cards have been completed today
     const allCardsCompleted = allDueCards.length === 0 && flashcards.length > 0;
-    
+
     if (allCardsCompleted) {
       const lastCompletionDate = localStorage.getItem(`lastCompletion_${userId}`);
       const lastStreakUpdate = localStorage.getItem(`lastStreakUpdate_${userId}`);
-      
+
       // Only update streak once per day
       if (lastStreakUpdate !== todayString) {
         let newStreak = streakDays;
-        
+
         if (lastCompletionDate) {
           const lastDate = new Date(lastCompletionDate);
           const yesterday = new Date(today);
           yesterday.setDate(yesterday.getDate() - 1);
-          
+
           // If last completion was yesterday, increment streak
           if (lastDate.toDateString() === yesterday.toDateString()) {
             newStreak = streakDays + 1;
@@ -1819,7 +1840,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           // First completion ever
           newStreak = 1;
         }
-        
+
         setStreakDays(newStreak);
         localStorage.setItem(`streak_${userId}`, newStreak.toString());
         localStorage.setItem(`lastCompletion_${userId}`, todayString);
@@ -1870,7 +1891,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       }
     }
   }, [selectedCategory, showDueTodayOnly, setSelectedCategory, flashcards, lastManualCategoryChange, isManualCategorySelection]);
-  
+
   // Log due cards info on initial load (useful for debugging)
   useEffect(() => {
     console.log('📊 Due Cards Summary:', {
@@ -1882,16 +1903,16 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       showDueTodayOnly: showDueTodayOnly,
       selectedCategory: selectedCategory,
       selectedSubCategory: selectedSubCategory,
-      pastDueCards: pastDueCards.map(card => ({ 
-        question: card.question?.substring(0, 50), 
-        dueDate: card.dueDate 
+      pastDueCards: pastDueCards.map(card => ({
+        question: card.question?.substring(0, 50),
+        dueDate: card.dueDate
       })),
-      cardsDueToday: cardsDueToday.map(card => ({ 
-        question: card.question?.substring(0, 50), 
-        dueDate: card.dueDate 
+      cardsDueToday: cardsDueToday.map(card => ({
+        question: card.question?.substring(0, 50),
+        dueDate: card.dueDate
       }))
     });
-    
+
     // Run detailed debug when due cards are expected but not showing
     if (showDueTodayOnly && filteredFlashcards.length === 0 && allDueCards.length > 0) {
       console.log('⚠️ WARNING: Due cards exist but none are showing!');
@@ -1981,24 +2002,24 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     const timeSinceManualCategoryChange = Date.now() - lastManualCategoryChange;
     const timeSinceManualSubCategoryChange = Date.now() - lastManualSubCategoryChange;
     const timeSinceLastCardCompletion = Date.now() - lastCardCompletion;
-    
+
     // Calculate due cards specifically in the current subcategory from ALL flashcards
     const now = new Date();
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    
+
     const currentSubcategoryDueCards = flashcards.filter(card => {
       // Must be active
       if (card.active === false) return false;
-      
+
       // Must match current category
       if (selectedCategory !== 'All' && card.category !== selectedCategory) return false;
-      
+
       // Must match current subcategory  
       if (selectedSubCategory !== 'All') {
         const cardSubCategory = card.sub_category && card.sub_category.trim() ? card.sub_category : 'Uncategorized';
         if (cardSubCategory !== selectedSubCategory) return false;
       }
-      
+
       // Must be due (if in due cards mode)
       if (showDueTodayOnly) {
         let dueDate = card.dueDate || new Date(0);
@@ -2007,7 +2028,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         }
         return dueDate < endOfToday;
       }
-      
+
       return true;
     });
 
@@ -2015,13 +2036,13 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
     // IMPORTANT: Both filteredFlashcards and currentSubcategoryDueCards must be empty
     // This prevents auto-advance when there are still cards available in the current view
     const shouldTriggerAutoAdvance = (
-      showDueTodayOnly && 
-      selectedCategory !== 'All' && 
+      showDueTodayOnly &&
+      selectedCategory !== 'All' &&
       selectedSubCategory !== 'All' &&
       currentSubcategoryDueCards.length === 0 && // No due cards in current subcategory
       filteredFlashcards.length === 0 && // No cards currently displayed 
       allDueCards.length > 0 && // But due cards exist elsewhere
-      !isManualCategorySelection && 
+      !isManualCategorySelection &&
       timeSinceManualCategoryChange > 5000 && // 5s delay for category changes
       timeSinceManualSubCategoryChange > 3000 && // 3s delay for subcategory changes
       timeSinceLastCardCompletion > 500 && // 0.5s delay after card completion to avoid immediate trigger
@@ -2052,7 +2073,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         filteredFlashcardsLength: filteredFlashcards.length,
         allDueCardsLength: allDueCards.length
       });
-      
+
       // Step 1: Check if there are other subcategories with due cards in the current category
       // This function returns the subcategory with the LEAST TOTAL CARDS (not just due cards)
       const nextSubCategory = getNextSubCategoryWithLeastCards(selectedCategory, selectedSubCategory);
@@ -2088,9 +2109,9 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       // Step 3: Only switch categories if NO subcategories in current category have due cards left
       if (!hasSubcategoriesWithDueCards) {
         console.log(`🔄 CATEGORY AUTO-ADVANCE: No more subcategories with due cards in "${selectedCategory}", looking for next category`);
-        
+
         const nextCategory = getNextCategoryWithDueCards(selectedCategory);
-        
+
         if (nextCategory) {
           console.log(`🔄 CATEGORY AUTO-ADVANCE: Switching from category "${selectedCategory}" to "${nextCategory}" (all subcategories in ${selectedCategory} completed)`);
           setSelectedCategory(nextCategory);
@@ -2098,13 +2119,13 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           // Ensure we stay in due cards mode
           setShowDueTodayOnly(true);
           setMessage(`Category "${selectedCategory}" completed! Switched to "${nextCategory}" category`);
-          
+
           // Clear message after 4 seconds
           setTimeout(() => setMessage(''), 4000);
         } else {
           console.log('🎉 STUDY SESSION COMPLETE: All categories and subcategories completed!');
           setMessage('🎉 Congratulations! All due cards completed across all categories!');
-          
+
           // Keep the completion message visible longer
           setTimeout(() => setMessage(''), 6000);
         }
@@ -2165,21 +2186,21 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       />
     );
   }
-  
+
   // Convert flashcards to calendar dates format
   const getCalendarDates = () => {
     const dateMap = new Map();
     const completionMap = new Map();
     const now = new Date();
     const todayString = now.toDateString();
-    
+
     // First, count all cards that are due now or earlier and group them by date
     flashcards.forEach(card => {
       // Track completion dates
       if (card.lastReviewed && card.active !== false) {
         const lastReviewDate = card.lastReviewed instanceof Date ? card.lastReviewed : card.lastReviewed.toDate();
         const reviewDateKey = lastReviewDate.toDateString();
-        
+
         if (completionMap.has(reviewDateKey)) {
           completionMap.get(reviewDateKey).completedCount++;
         } else {
@@ -2189,13 +2210,13 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
           });
         }
       }
-      
+
       // Only include active cards with due dates
       if (card.dueDate && card.active !== false) {
         const dueDate = card.dueDate instanceof Date ? card.dueDate : card.dueDate.toDate();
         const dateKey = dueDate.toDateString();
         const isPastDate = dueDate < now && dateKey !== todayString;
-        
+
         // For past dates, preserve historical accuracy by showing what was incomplete
         if (isPastDate) {
           // Past date logic: show what was actually incomplete on that day
@@ -2208,7 +2229,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               isPastDate: true
             });
           }
-          
+
           // For past incomplete cards, also count them in today's due cards
           if (dateMap.has(todayString)) {
             if (!dateMap.get(todayString).overdueFromPast) {
@@ -2237,14 +2258,14 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         }
       }
     });
-    
+
     // Merge completion data into calendar dates
     const allDates = Array.from(dateMap.values());
     completionMap.forEach((completion, dateKey) => {
       const existingDate = allDates.find(d => d.date.toDateString() === dateKey);
       if (existingDate) {
         existingDate.completedCount = completion.completedCount;
-        
+
         // For past dates: adjust cardCount to show historical incomplete count
         // This ensures past days show what was actually incomplete, not current state
         if (existingDate.isPastDate) {
@@ -2262,13 +2283,13 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         });
       }
     });
-    
-    
+
+
     return allDates;
   };
-  
+
   const calendarDates = getCalendarDates();
-  
+
   // Calculate card performance statistics
   const getPerformanceStats = () => {
     const stats = {
@@ -2279,18 +2300,18 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       easy: 0,
       total: 0
     };
-    
+
     flashcards.forEach(card => {
       if (card.active === false) return;
-      
+
       stats.total++;
-      
+
       // Check review count to determine if card is new
       if (!card.reviewCount || card.reviewCount === 0) {
         stats.new++;
       } else if (card.level) {
         // Count by last rating level
-        switch(card.level.toLowerCase()) {
+        switch (card.level.toLowerCase()) {
           case 'again':
             stats.again++;
             break;
@@ -2308,25 +2329,25 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         }
       }
     });
-    
+
     // Calculate mastery rate (good + easy) / reviewed cards
     const reviewedCards = stats.again + stats.hard + stats.good + stats.easy;
-    const masteryRate = reviewedCards > 0 
+    const masteryRate = reviewedCards > 0
       ? Math.round(((stats.good + stats.easy) / reviewedCards) * 100)
       : 0;
-    
+
     return {
       ...stats,
       reviewed: reviewedCards,
       masteryRate
     };
   };
-  
+
   const performanceStats = getPerformanceStats();
 
   return (
     <div className={`app ${isDarkMode ? 'dark-mode' : ''}`}>
-      
+
       {/* Header */}
       <Header
         isDarkMode={isDarkMode}
@@ -2334,6 +2355,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         setIsHeaderCollapsed={setIsHeaderCollapsed}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        searchResultCount={searchFilteredFlashcards.length}
+        totalCardCount={filteredFlashcards.length}
         showIntervalSettings={showIntervalSettings}
         toggleIntervalSettings={toggleIntervalSettings}
         cardsCompletedToday={cardsCompletedToday}
@@ -2418,7 +2441,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
       {/* Main Content */}
       <main className="app-main">
-        
+
         {/* Anonymous User Warning */}
         {isAnonymous && !isAnonymousWarningDismissed && (
           <div className="anonymous-warning">
@@ -2429,14 +2452,14 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                 <p>You're using anonymous mode. Your flashcards and progress will not be saved permanently. Consider creating an account to save your progress.</p>
               </div>
               <div className="warning-actions">
-                <button 
+                <button
                   className="warning-dismiss-btn"
                   onClick={() => setShowLoginScreen(true)}
                   title="Switch to account login"
                 >
                   Sign In
                 </button>
-                <button 
+                <button
                   className="warning-close-btn"
                   onClick={() => setIsAnonymousWarningDismissed(true)}
                   title="Close this warning"
@@ -2494,131 +2517,131 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                   </div>
                 </div>
               </div>
-              
+
               {/* No Cards Content */}
               <div className="no-cards-state">
                 {showDueTodayOnly && flashcards.length > 0 && allDueCards.length === 0 ? (
-              // All cards completed for today!
-              <>
-                <div className="completion-celebration">
-                  <div style={{ fontSize: '5rem', marginBottom: '1rem', animation: 'bounce 1s ease-in-out' }}>
-                    😊
-                  </div>
-                  <h2 style={{ color: 'var(--success-color, #4caf50)', marginBottom: '0.5rem' }}>
-                    🎉 Congratulations! 🎉
-                  </h2>
-                  <h3>All cards completed for today!</h3>
-                  <p style={{ fontSize: '1.1rem', margin: '1rem 0' }}>
-                    You've successfully reviewed all your due cards. 
-                    Great work on staying consistent! 💪
-                  </p>
-                  <div className="completion-stats" style={{ 
-                    margin: '1.5rem 0',
-                    padding: '1rem',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: '4px'
-                  }}>
-                    <p>📊 Today's Stats:</p>
-                    <p>✅ Cards reviewed today: {cardsReviewedToday.length}</p>
-                    <p>📖 Total cards: {flashcards.length}</p>
-                    <p>🎯 Streak maintained!</p>
-                  </div>
-                  <div className="no-cards-actions">
-                    <button 
-                      className="btn btn-secondary"
-                      onClick={() => setShowDueTodayOnly(false)}
-                    >
-                      View All Cards
-                    </button>
-                    <button 
-                      className="btn btn-primary"
-                      onClick={() => setShowCreateCardForm(true)}
-                    >
-                      Create New Card
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : searchQuery.trim() ? (
-              // Search returned no results
-              <>
-                <h2>🔍 No cards match "{searchQuery}"</h2>
-                <p>
-                  Try different search terms or clear your search.
-                </p>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => setSearchQuery('')}
-                  style={{ marginBottom: '1rem' }}
-                >
-                  ✕ Clear Search
-                </button>
-              </>
-            ) : (
-              // Regular no cards message with auto-navigation
-              <>
-                {selectedCategory === 'All' ? (
-                  // When "All" categories selected and no cards
+                  // All cards completed for today!
                   <>
-                    <h2>No flashcards available for the current filters.</h2>
+                    <div className="completion-celebration">
+                      <div style={{ fontSize: '5rem', marginBottom: '1rem', animation: 'bounce 1s ease-in-out' }}>
+                        😊
+                      </div>
+                      <h2 style={{ color: 'var(--success-color, #4caf50)', marginBottom: '0.5rem' }}>
+                        🎉 Congratulations! 🎉
+                      </h2>
+                      <h3>All cards completed for today!</h3>
+                      <p style={{ fontSize: '1.1rem', margin: '1rem 0' }}>
+                        You've successfully reviewed all your due cards.
+                        Great work on staying consistent! 💪
+                      </p>
+                      <div className="completion-stats" style={{
+                        margin: '1.5rem 0',
+                        padding: '1rem',
+                        backgroundColor: 'var(--bg-secondary)',
+                        borderRadius: '4px'
+                      }}>
+                        <p>📊 Today's Stats:</p>
+                        <p>✅ Cards reviewed today: {cardsReviewedToday.length}</p>
+                        <p>📖 Total cards: {flashcards.length}</p>
+                        <p>🎯 Streak maintained!</p>
+                      </div>
+                      <div className="no-cards-actions">
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => setShowDueTodayOnly(false)}
+                        >
+                          View All Cards
+                        </button>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => setShowCreateCardForm(true)}
+                        >
+                          Create New Card
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : searchQuery.trim() ? (
+                  // Search returned no results
+                  <>
+                    <h2>🔍 No cards match "{searchQuery}"</h2>
                     <p>
-                      Try adjusting your filters or reset them to see all cards.
+                      Try different search terms or clear your search.
                     </p>
                     <button
                       className="btn btn-primary"
-                      onClick={() => {
-                        setShowDueTodayOnly(false);
-                        setShowStarredOnly(false);
-                        setSelectedCategory('All');
-                        setSelectedSubCategory('All');
-                        setSelectedLevel('All');
-                        setMessage('Filters reset - showing all cards');
-                        setTimeout(() => setMessage(''), 3000);
-                      }}
+                      onClick={() => setSearchQuery('')}
                       style={{ marginBottom: '1rem' }}
                     >
-                      🔄 Reset All Filters
+                      ✕ Clear Search
                     </button>
                   </>
                 ) : (
-                  // When specific category selected but no cards - auto-navigate to optimal category/subcategory
-                  <AutoNavigateToOptimalCards 
-                    currentCategory={selectedCategory}
-                    currentSubCategory={selectedSubCategory}
-                    showDueTodayOnly={showDueTodayOnly}
-                    getNextCategoryWithLeastCards={getNextCategoryWithLeastCards}
-                    getNextSubCategoryWithLeastCards={getNextSubCategoryWithLeastCards}
-                    setSelectedCategory={setSelectedCategory}
-                    setSelectedSubCategory={setSelectedSubCategory}
-                    setMessage={setMessage}
-                  />
-                )}
-                <div className="no-cards-actions">
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setShowDueTodayOnly(false);
-                      setShowStarredOnly(false);
-                      setSelectedCategory('All');
-                      setSelectedSubCategory('All');
-                      setSelectedLevel('All');
-                      setMessage('Filters reset - showing all cards');
-                      setTimeout(() => setMessage(''), 3000);
-                    }}
-                  >
-                    🔄 Reset All Filters
-                  </button>
+                  // Regular no cards message with auto-navigation
+                  <>
+                    {selectedCategory === 'All' ? (
+                      // When "All" categories selected and no cards
+                      <>
+                        <h2>No flashcards available for the current filters.</h2>
+                        <p>
+                          Try adjusting your filters or reset them to see all cards.
+                        </p>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => {
+                            setShowDueTodayOnly(false);
+                            setShowStarredOnly(false);
+                            setSelectedCategory('All');
+                            setSelectedSubCategory('All');
+                            setSelectedLevel('All');
+                            setMessage('Filters reset - showing all cards');
+                            setTimeout(() => setMessage(''), 3000);
+                          }}
+                          style={{ marginBottom: '1rem' }}
+                        >
+                          🔄 Reset All Filters
+                        </button>
+                      </>
+                    ) : (
+                      // When specific category selected but no cards - auto-navigate to optimal category/subcategory
+                      <AutoNavigateToOptimalCards
+                        currentCategory={selectedCategory}
+                        currentSubCategory={selectedSubCategory}
+                        showDueTodayOnly={showDueTodayOnly}
+                        getNextCategoryWithLeastCards={getNextCategoryWithLeastCards}
+                        getNextSubCategoryWithLeastCards={getNextSubCategoryWithLeastCards}
+                        setSelectedCategory={setSelectedCategory}
+                        setSelectedSubCategory={setSelectedSubCategory}
+                        setMessage={setMessage}
+                      />
+                    )}
+                    <div className="no-cards-actions">
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                          setShowDueTodayOnly(false);
+                          setShowStarredOnly(false);
+                          setSelectedCategory('All');
+                          setSelectedSubCategory('All');
+                          setSelectedLevel('All');
+                          setMessage('Filters reset - showing all cards');
+                          setTimeout(() => setMessage(''), 3000);
+                        }}
+                      >
+                        🔄 Reset All Filters
+                      </button>
 
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setShowManageCardsModal(true)}
-                  >
-                    📋 Manage Cards
-                  </button>
-                </div>
-              </>
-            )}
-            </div>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => setShowManageCardsModal(true)}
+                      >
+                        📋 Manage Cards
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -2703,12 +2726,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
                                 // Calculate count based on showDueTodayOnly and showStarredOnly
                                 let actualCardsInCategory;
-                                
+
                                 if (showDueTodayOnly && showStarredOnly) {
                                   // When both filters are on, count actual starred due cards
                                   // Apply starred filter
                                   categoryCards = categoryCards.filter(card => card.starred === true);
-                                  
+
                                   // Apply due date filter
                                   const now = new Date();
                                   const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -2719,7 +2742,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                                     }
                                     return dueDate < endOfToday;
                                   });
-                                  
+
                                   actualCardsInCategory = categoryCards.length;
                                 } else if (showDueTodayOnly) {
                                   // Use real-time counting for "All" button
@@ -2747,7 +2770,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                                   totalCount += actualCardsInCategory;
                                 }
                               });
-                              
+
                               console.log(`All category TOTAL (corrected): ${totalCount}`);
                               return totalCount;
                             })()})
@@ -2767,12 +2790,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
                               // Calculate count based on showDueTodayOnly and showStarredOnly
                               let actualCardsInCategory;
-                              
+
                               if (showDueTodayOnly && showStarredOnly) {
                                 // When both filters are on, count actual starred due cards
                                 // Apply starred filter
                                 categoryCards = categoryCards.filter(card => card.starred === true);
-                                
+
                                 // Apply due date filter
                                 const now = new Date();
                                 const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -2783,7 +2806,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                                   }
                                   return dueDate < endOfToday;
                                 });
-                                
+
                                 actualCardsInCategory = categoryCards.length;
                               } else if (showDueTodayOnly) {
                                 // Use real-time counting for categories
@@ -2808,12 +2831,12 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
                               // Debug logging
                               // console.log(`Individual category DEBUG - ${category}: ${actualCardsInCategory} cards`);
-                              
+
                               // Skip categories with no actual cards
                               if (actualCardsInCategory === 0) {
                                 return null;
                               }
-                              
+
                               return (
                                 <button
                                   key={category}
@@ -2876,7 +2899,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                               subCategories: subCategories,
                               subCategoriesLength: subCategories.length
                             });
-                            
+
                             // Use filtered subcategories from getSubCategories()
                             return subCategories.map(subCategory => {
                               // Count actual cards in this subcategory from ALL flashcards (not filtered)
@@ -2915,7 +2938,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                               if (actualCardsInSubCategory === 0) {
                                 return null;
                               }
-                              
+
                               return (
                                 <button
                                   key={subCategory}
@@ -2983,7 +3006,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               <div className={`flashcard-main-content ${isMaximized || isPopouted ? 'windowed' : ''}`}>
                 {/* Overlay for popout mode */}
                 {isPopouted && !isMaximized && (
-                  <div 
+                  <div
                     className="popout-overlay"
                     style={{
                       position: 'fixed',
@@ -2997,8 +3020,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                     onClick={handleClosePopout}
                   />
                 )}
-                
-                <div 
+
+                <div
                   className={`flashcard-window${isMaximized ? ' maximized' : ''}${isPopouted && !isMaximized ? ' popout' : ''}`}
                   style={isMaximized ? {
                     backgroundColor: isDarkMode ? '#1f2937' : '#ffffff',
@@ -3032,7 +3055,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                 >
                   {/* Drag Handle - Only for popout windows */}
                   {isPopouted && !isMaximized && (
-                    <div 
+                    <div
                       className="drag-handle"
                       onMouseDown={handleMouseDown}
                       style={{
@@ -3057,7 +3080,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       ⋮⋮⋮
                     </div>
                   )}
-                  
+
                   {/* Window Control Buttons - Top Right - Hide when API dropdown is open */}
                   {!showApiKeyModal && currentCard && (
                     <div className="window-controls">
@@ -3070,7 +3093,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       </button>
                     </div>
                   )}
-                  
+
                   {/* Flashcard Content */}
                   <div
                     className="flashcard-content"
@@ -3101,6 +3124,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       onEditCard={handleEditCard}
                       onGenerateQuestions={() => setShowGenerateModal(true)}
                       isTransitioning={isCardTransitioning}
+                      searchQuery={searchQuery}
                     />
 
                     {/* Review Buttons - Below the card, only when answer is shown and not transitioning */}
@@ -3118,7 +3142,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
                       <div className="resize-handle resize-ne" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
                       <div className="resize-handle resize-sw" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
                       <div className="resize-handle resize-se" onMouseDown={(e) => handleResizeStart(e, 'se')} />
-                      
+
                       {/* Edge handles */}
                       <div className="resize-handle resize-n" onMouseDown={(e) => handleResizeStart(e, 'n')} />
                       <div className="resize-handle resize-s" onMouseDown={(e) => handleResizeStart(e, 's')} />
@@ -3147,15 +3171,15 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
       {/* Explain Modal */}
       {showExplainModal && (
         <div className="modal-overlay">
-          <div className="modal-content explain-modal" style={{ 
-            backgroundColor: isDarkMode ? '#1e293b' : 'white', 
+          <div className="modal-content explain-modal" style={{
+            backgroundColor: isDarkMode ? '#1e293b' : 'white',
             color: isDarkMode ? '#f1f5f9' : '#1f2937',
             maxWidth: '600px',
             width: '90%'
           }}>
             <div className="modal-header">
               <h2>💡 Generate Explanation</h2>
-              <button 
+              <button
                 className="close-btn"
                 onClick={handleCloseExplain}
                 aria-label="Close modal"
@@ -3166,11 +3190,11 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
             <div className="explain-content" style={{ padding: '1.5rem' }}>
               <div style={{ marginBottom: '1rem' }}>
-                <label 
-                  htmlFor="explain-prompt" 
-                  style={{ 
-                    display: 'block', 
-                    marginBottom: '0.5rem', 
+                <label
+                  htmlFor="explain-prompt"
+                  style={{
+                    display: 'block',
+                    marginBottom: '0.5rem',
                     fontWeight: '600',
                     color: isDarkMode ? '#f1f5f9' : '#374151'
                   }}
@@ -3201,9 +3225,9 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
               {/* Checkbox to add explanation to question */}
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
                   gap: '0.5rem',
                   cursor: 'pointer',
                   fontSize: '0.95rem',
@@ -3239,14 +3263,14 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
 
             </div>
 
-            <div className="modal-actions" style={{ 
-              padding: '1rem 1.5rem', 
+            <div className="modal-actions" style={{
+              padding: '1rem 1.5rem',
               borderTop: `1px solid ${isDarkMode ? '#475569' : '#e5e7eb'}`,
               display: 'flex',
               gap: '0.75rem',
               justifyContent: 'flex-end'
             }}>
-              <button 
+              <button
                 className="btn btn-secondary"
                 onClick={handleCloseExplain}
                 disabled={isGeneratingExplanation}
@@ -3261,7 +3285,7 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               >
                 Cancel
               </button>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={handleGenerateExplanation}
                 disabled={isGeneratingExplanation || !explainPrompt.trim()}

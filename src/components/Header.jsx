@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 
 /**
  * Application header with logo, search, action buttons, and progress indicator
@@ -9,6 +9,8 @@ const Header = ({
   setIsHeaderCollapsed,
   searchQuery,
   setSearchQuery,
+  searchResultCount,
+  totalCardCount,
   showIntervalSettings,
   toggleIntervalSettings,
   cardsCompletedToday,
@@ -21,6 +23,28 @@ const Header = ({
   onShowStudyTimer,
   onShowStudyStats
 }) => {
+  const searchInputRef = useRef(null);
+
+  // Keyboard shortcut: Ctrl+F or Cmd+F to focus search
+  const handleGlobalKeyDown = useCallback((e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      searchInputRef.current?.focus();
+    }
+  }, []);
+
+  // Handle search input keyboard events
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      setSearchQuery('');
+      searchInputRef.current?.blur();
+    }
+  };
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [handleGlobalKeyDown]);
   return (
     <header
       className={`app-header ${isHeaderCollapsed ? 'collapsed' : ''}`}
@@ -50,23 +74,35 @@ const Header = ({
           {/* Search Input */}
           <div className="header-search" role="search">
             <input
+              ref={searchInputRef}
               type="search"
-              placeholder="Search cards..."
+              placeholder="Search cards... (Ctrl+F)"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="header-search-input"
-              title="Search cards by question, answer, or category"
+              onKeyDown={handleSearchKeyDown}
+              className={`header-search-input ${searchQuery && searchResultCount === 0 ? 'no-results' : ''}`}
+              title="Search cards by question, answer, or category (Ctrl+F to focus, Escape to clear)"
               aria-label="Search flashcards"
+              aria-describedby={searchQuery ? "search-results-count" : undefined}
             />
             {searchQuery && (
-              <button
-                className="header-search-clear"
-                onClick={() => setSearchQuery('')}
-                title="Clear search"
-                aria-label="Clear search"
-              >
-                ×
-              </button>
+              <>
+                <span
+                  id="search-results-count"
+                  className={`header-search-count ${searchResultCount === 0 ? 'no-results' : ''}`}
+                  aria-live="polite"
+                >
+                  {searchResultCount}/{totalCardCount}
+                </span>
+                <button
+                  className="header-search-clear"
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search (Escape)"
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              </>
             )}
           </div>
           <nav className="action-buttons" role="navigation" aria-label="Main navigation">

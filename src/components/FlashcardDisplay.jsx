@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 
 /**
  * Component for displaying flashcard content
@@ -13,8 +13,35 @@ const FlashcardDisplay = ({
   totalCards,
   isDarkMode,
   onEditCard,
-  isTransitioning = false
+  isTransitioning = false,
+  searchQuery = ''
 }) => {
+  // Highlight search terms in HTML content
+  const highlightSearchTerms = useMemo(() => {
+    return (html) => {
+      if (!html || !searchQuery.trim()) return html;
+
+      const query = searchQuery.trim();
+      if (query.length < 2) return html; // Don't highlight very short queries
+
+      // Escape special regex characters in the query
+      const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // Create a regex that matches the query (case-insensitive)
+      const regex = new RegExp(`(${escapedQuery})`, 'gi');
+
+      // Split HTML into tags and text, only highlight text portions
+      const parts = html.split(/(<[^>]*>)/);
+      const highlighted = parts.map(part => {
+        // Skip HTML tags
+        if (part.startsWith('<')) return part;
+        // Highlight matches in text
+        return part.replace(regex, '<mark class="search-highlight">$1</mark>');
+      }).join('');
+
+      return highlighted;
+    };
+  }, [searchQuery]);
 
   const handleCardClick = (e) => {
     // Ignore clicks on buttons, dropdowns, details/summary elements, and links
@@ -71,9 +98,11 @@ const FlashcardDisplay = ({
         {!isTransitioning && (
           <div
             dangerouslySetInnerHTML={{
-              __html: showAnswer
-                ? (card.answer || 'No answer provided')
-                : (card.question || 'No question provided')
+              __html: highlightSearchTerms(
+                showAnswer
+                  ? (card.answer || 'No answer provided')
+                  : (card.question || 'No question provided')
+              )
             }}
           />
         )}
