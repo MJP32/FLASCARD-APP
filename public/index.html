@@ -2,43 +2,139 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+
+    <!-- Preconnect to external resources for performance -->
+    <link rel="preconnect" href="https://firebaseio.com" />
+    <link rel="preconnect" href="https://googleapis.com" />
+    <link rel="dns-prefetch" href="https://api.openai.com" />
+    <link rel="dns-prefetch" href="https://api.anthropic.com" />
+    <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
+
     <link rel="icon" href="%PUBLIC_URL%/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#4f46e5" />
+
+    <!-- Primary Meta Tags -->
+    <title>FSRS Flashcards - Smart Spaced Repetition Learning App</title>
+    <meta name="title" content="FSRS Flashcards - Smart Spaced Repetition Learning App" />
     <meta
       name="description"
-      content="Smart flashcard app with spaced repetition using FSRS algorithm for optimal learning"
+      content="Master any subject with our intelligent flashcard app. Uses the FSRS algorithm for scientifically-optimized spaced repetition, AI-powered question generation, and progress tracking."
     />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
+    <meta name="keywords" content="flashcards, spaced repetition, FSRS, learning app, study app, memorization, education, AI flashcards, smart learning, free spaced repetition scheduler" />
+    <meta name="author" content="FSRS Flashcards" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
 
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>Flashcard App - Smart Spaced Repetition</title>
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="%PUBLIC_URL%/" />
+    <meta property="og:title" content="FSRS Flashcards - Smart Spaced Repetition Learning App" />
+    <meta property="og:description" content="Master any subject with our intelligent flashcard app. Uses the FSRS algorithm for scientifically-optimized spaced repetition and AI-powered question generation." />
+    <meta property="og:image" content="https://www.eggyeggs.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="FSRS Flashcards" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="%PUBLIC_URL%/" />
+    <meta name="twitter:title" content="FSRS Flashcards - Smart Spaced Repetition Learning App" />
+    <meta name="twitter:description" content="Master any subject with our intelligent flashcard app. Uses the FSRS algorithm for scientifically-optimized spaced repetition and AI-powered question generation." />
+    <meta name="twitter:image" content="https://www.eggyeggs.com/og-image.png" />
+
+    <!-- Additional SEO -->
+    <link rel="canonical" href="%PUBLIC_URL%/" />
+    <meta name="application-name" content="FSRS Flashcards" />
+    <meta name="apple-mobile-web-app-title" content="FSRS Flashcards" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Structured Data - Educational Application -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "FSRS Flashcards",
+      "description": "Smart flashcard application using FSRS algorithm for optimal spaced repetition learning",
+      "url": "%PUBLIC_URL%/",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Any",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "FSRS spaced repetition algorithm",
+        "AI-powered question generation",
+        "Rich text editing with code highlighting",
+        "Progress tracking and streaks",
+        "CSV/Excel import and export",
+        "Dark mode support",
+        "Offline capable"
+      ],
+      "screenshot": "%PUBLIC_URL%/og-image.png",
+      "softwareVersion": "1.0.0"
+    }
+    </script>
+
+    <!-- Structured Data - FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is FSRS?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "FSRS (Free Spaced Repetition Scheduler) is a modern, scientifically-optimized algorithm for scheduling flashcard reviews. It adapts to your learning patterns to show cards at the optimal time for long-term retention."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does spaced repetition work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Spaced repetition is a learning technique that shows you flashcards at increasing intervals based on how well you remember them. Cards you struggle with appear more frequently, while cards you know well appear less often."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use AI to generate flashcards?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes! FSRS Flashcards supports AI-powered question generation using OpenAI, Anthropic Claude, or Google Gemini. Simply provide your API key and the AI will help create diverse study questions from your content."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is FSRS Flashcards free to use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, the app is completely free to use. You only need to provide your own API keys if you want to use the AI question generation features."
+          }
+        }
+      ]
+    }
+    </script>
+
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      <h1>FSRS Flashcards - Smart Spaced Repetition Learning App</h1>
+      <p>Master any subject with our intelligent flashcard app featuring the FSRS algorithm for scientifically-optimized spaced repetition learning.</p>
+      <p>Features include: AI-powered question generation, rich text editing, progress tracking, study streaks, and more.</p>
+      <p>Please enable JavaScript to use this application.</p>
+    </noscript>
     <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
   </body>
 </html>
