@@ -1036,18 +1036,46 @@ function App() {
     }
   };
 
-  // Bulk delete multiple cards
+  // Bulk delete multiple cards with parallel batching
   const handleBulkDelete = async (cardIds) => {
-    try {
-      let deletedCount = 0;
-      for (const cardId of cardIds) {
-        await deleteFlashcard(cardId);
-        deletedCount++;
+    if (!cardIds || cardIds.length === 0) return;
+
+    const BATCH_SIZE = 10; // Process 10 deletions in parallel
+    const allResults = [];
+
+    // Process in batches to avoid overwhelming the database
+    for (let i = 0; i < cardIds.length; i += BATCH_SIZE) {
+      const batch = cardIds.slice(i, i + BATCH_SIZE);
+
+      const batchResults = await Promise.allSettled(
+        batch.map(cardId => deleteFlashcard(cardId))
+      );
+
+      allResults.push(...batchResults.map((result, index) => ({
+        cardId: batch[index],
+        success: result.status === 'fulfilled',
+        error: result.status === 'rejected' ? result.reason : null
+      })));
+
+      // Yield to main thread between batches to keep UI responsive
+      if (i + BATCH_SIZE < cardIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
-      setMessage(`Successfully deleted ${deletedCount} card${deletedCount !== 1 ? 's' : ''}`);
+    }
+
+    // Count results after all batches complete
+    const deletedCount = allResults.filter(r => r.success).length;
+    const errors = allResults.filter(r => !r.success);
+
+    errors.forEach(e => console.error(`Error deleting card ${e.cardId}:`, e.error));
+
+    if (deletedCount > 0) {
+      setMessage(`Successfully deleted ${deletedCount} card${deletedCount !== 1 ? 's' : ''}${errors.length > 0 ? ` (${errors.length} failed)` : ''}`);
       clearMessage();
-    } catch (error) {
-      setError(error.message || 'Failed to delete some cards');
+    }
+
+    if (errors.length > 0 && deletedCount === 0) {
+      setError('Failed to delete cards');
     }
   };
 

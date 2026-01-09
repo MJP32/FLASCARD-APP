@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { FixedSizeList as List } from 'react-window';
+import { processDuplicates } from '../utils/deduplication';
 
 /**
  * Modal for managing flashcard active/inactive states with bulk operations
@@ -24,6 +25,13 @@ const ManageCardsModal = ({
   const [showBulkCategoryModal, setShowBulkCategoryModal] = useState(false);
   const [bulkTargetCategory, setBulkTargetCategory] = useState('');
   const [bulkTargetSubCategory, setBulkTargetSubCategory] = useState('');
+
+  // Deduplication state
+  const [isDeduplicating, setIsDeduplicating] = useState(false);
+  const [dedupeProgress, setDedupeProgress] = useState(0);
+  const [dedupeResults, setDedupeResults] = useState(null);
+  const [showDedupeModal, setShowDedupeModal] = useState(false);
+  const [isDeletingDupes, setIsDeletingDupes] = useState(false);
 
   // Get unique categories
   const categories = ['All', ...new Set(flashcards.map(card => card.category || 'Uncategorized'))];
@@ -162,6 +170,54 @@ const ManageCardsModal = ({
     selectedCards.forEach(cardId => onToggleActive(cardId, false));
     setSelectedCards(new Set());
   };
+
+  // Deduplication handler (async with progress tracking)
+  const handleFindDuplicates = useCallback(async () => {
+    setIsDeduplicating(true);
+    setDedupeProgress(0);
+    setDedupeResults(null);
+
+    try {
+      const results = await processDuplicates(flashcards, 0.7, (progress) => {
+        setDedupeProgress(progress);
+      });
+      setDedupeResults(results);
+      setShowDedupeModal(true);
+    } catch (error) {
+      console.error('Deduplication error:', error);
+      alert('Error finding duplicates: ' + error.message);
+    } finally {
+      setIsDeduplicating(false);
+      setDedupeProgress(0);
+    }
+  }, [flashcards]);
+
+  const handleDeleteDuplicates = useCallback(async () => {
+    if (!dedupeResults || dedupeResults.toDelete.length === 0) return;
+
+    const count = dedupeResults.toDelete.length;
+    if (window.confirm(`Delete ${count} duplicate card(s)? This keeps the best version of each duplicate group.`)) {
+      const idsToDelete = dedupeResults.toDelete.map(card => card.id);
+      setIsDeletingDupes(true);
+
+      if (onBulkDelete) {
+        try {
+          await onBulkDelete(idsToDelete);
+          setShowDedupeModal(false);
+          setDedupeResults(null);
+        } catch (error) {
+          console.error('Error deleting duplicates:', error);
+          alert('Error deleting some cards: ' + error.message);
+        } finally {
+          setIsDeletingDupes(false);
+        }
+      } else {
+        setShowDedupeModal(false);
+        setDedupeResults(null);
+        setIsDeletingDupes(false);
+      }
+    }
+  }, [dedupeResults, onBulkDelete]);
 
   // Strip HTML tags for display
   const stripHtml = (html) => {
@@ -474,6 +530,15 @@ const ManageCardsModal = ({
               disabled={filteredCards.length === 0}
             >
               Deactivate Filtered
+            </button>
+            <button
+              style={{...modalStyles.actionBtn, background: '#dc2626', color: 'white'}}
+              onClick={handleFindDuplicates}
+              disabled={isDeduplicating || flashcards.length < 2}
+            >
+              {isDeduplicating
+                ? `Finding... ${Math.round(dedupeProgress * 100)}%`
+                : 'Remove Duplicates'}
             </button>
           </div>
 
@@ -791,6 +856,119 @@ const ManageCardsModal = ({
                 Apply Changes
               </button>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* Deduplication Results Modal */}
+      {showDedupeModal && dedupeResults && (
+        <>
+          <div style={modalStyles.bulkModalOverlay} onClick={() => setShowDedupeModal(false)} />
+          <div style={{...modalStyles.bulkModal, maxWidth: '600px', maxHeight: '80vh', overflow: 'auto'}}>
+            <h3 style={{margin: '0 0 16px 0', fontSize: '18px', color: '#1e293b'}}>
+              Duplicate Cards Found
+            </h3>
+
+            {dedupeResults.toDelete.length === 0 ? (
+              <div style={{padding: '20px', textAlign: 'center', color: '#64748b'}}>
+                <div style={{fontSize: '48px', marginBottom: '12px'}}>✓</div>
+                <p>No duplicate cards found!</p>
+                <p style={{fontSize: '14px'}}>All your cards are unique.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{
+                  padding: '12px',
+                  background: '#fef2f2',
+                  borderRadius: '8px',
+                  marginBottom: '16px',
+                  border: '1px solid #fecaca'
+                }}>
+                  <p style={{margin: 0, color: '#dc2626', fontWeight: '600'}}>
+                    Found {dedupeResults.groups.length} duplicate group(s) with {dedupeResults.toDelete.length} card(s) to remove
+                  </p>
+                  <p style={{margin: '8px 0 0 0', fontSize: '14px', color: '#7f1d1d'}}>
+                    The best version of each duplicate will be kept.
+                  </p>
+                </div>
+
+                <div style={{maxHeight: '300px', overflowY: 'auto', marginBottom: '16px'}}>
+                  {dedupeResults.groups.map((group, groupIdx) => (
+                    <div key={groupIdx} style={{
+                      padding: '12px',
+                      background: '#f8fafc',
+                      borderRadius: '8px',
+                      marginBottom: '8px',
+                      border: '1px solid #e2e8f0'
+                    }}>
+                      <div style={{fontWeight: '600', marginBottom: '8px', color: '#1e293b'}}>
+                        Group {groupIdx + 1} ({group.length} similar cards)
+                      </div>
+                      {group.map((card, cardIdx) => {
+                        const isKeep = dedupeResults.toKeep.some(k => k.id === card.id);
+                        return (
+                          <div key={card.id} style={{
+                            padding: '8px',
+                            background: isKeep ? '#dcfce7' : '#fee2e2',
+                            borderRadius: '4px',
+                            marginBottom: '4px',
+                            fontSize: '13px'
+                          }}>
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: '4px'
+                            }}>
+                              <span style={{
+                                fontWeight: '600',
+                                color: isKeep ? '#16a34a' : '#dc2626'
+                              }}>
+                                {isKeep ? '✓ Keep' : '✗ Delete'}
+                              </span>
+                              <span style={{fontSize: '11px', color: '#64748b'}}>
+                                {card.category || 'Uncategorized'}
+                              </span>
+                            </div>
+                            <div style={{color: '#374151'}}>
+                              Q: {stripHtml(card.question).substring(0, 100)}
+                              {stripHtml(card.question).length > 100 ? '...' : ''}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{display: 'flex', gap: '8px', justifyContent: 'flex-end'}}>
+                  <button
+                    onClick={() => {
+                      setShowDedupeModal(false);
+                      setDedupeResults(null);
+                    }}
+                    style={{...modalStyles.actionBtn, background: '#e2e8f0', color: '#475569'}}
+                    disabled={isDeletingDupes}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteDuplicates}
+                    disabled={isDeletingDupes}
+                    style={{
+                      ...modalStyles.actionBtn,
+                      background: isDeletingDupes ? '#9ca3af' : '#dc2626',
+                      color: 'white',
+                      cursor: isDeletingDupes ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {isDeletingDupes
+                      ? 'Deleting...'
+                      : `Delete ${dedupeResults.toDelete.length} Duplicate(s)`}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}
