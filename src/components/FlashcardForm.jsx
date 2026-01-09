@@ -1021,9 +1021,14 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
           {/* Question Field */}
           <div className="form-group">
             <label htmlFor="question">Question *</label>
-            <div
-              className="content-preview"
-              dangerouslySetInnerHTML={{ __html: formData.question || '<span class="placeholder-text">No question content</span>' }}
+            <textarea
+              id="question"
+              value={formData.question}
+              onChange={(e) => handleFieldChange('question', e.target.value)}
+              placeholder="Enter your question here..."
+              className={`form-textarea ${errors.question ? 'error' : ''}`}
+              disabled={isSubmitting}
+              rows="4"
             />
             {errors.question && <span className="error-message">{errors.question}</span>}
           </div>
@@ -1031,9 +1036,14 @@ Respond with ONLY the title, no quotes, no extra text. Examples:
           {/* Answer Field */}
           <div className="form-group">
             <label htmlFor="answer">Answer *</label>
-            <div
-              className="content-preview"
-              dangerouslySetInnerHTML={{ __html: formData.answer || '<span class="placeholder-text">No answer content</span>' }}
+            <textarea
+              id="answer"
+              value={formData.answer}
+              onChange={(e) => handleFieldChange('answer', e.target.value)}
+              placeholder="Enter your answer here..."
+              className={`form-textarea ${errors.answer ? 'error' : ''}`}
+              disabled={isSubmitting}
+              rows="6"
             />
             {errors.answer && <span className="error-message">{errors.answer}</span>}
             
