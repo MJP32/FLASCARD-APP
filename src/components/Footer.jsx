@@ -10,7 +10,9 @@ const Footer = ({
   isSearching,
   categoriesCount,
   pastDueCount,
-  dueTodayCount
+  dueTodayCount,
+  sessionCards = 0,
+  onEndSession
 }) => {
   return (
     <footer className="app-footer">
@@ -24,6 +26,29 @@ const Footer = ({
         <span style={{ color: dueTodayCount > 0 ? '#feca57' : 'inherit' }}>
           Due Today: {dueTodayCount}
         </span>
+        {sessionCards > 0 && onEndSession && (
+          <button
+            className="end-session-btn"
+            onClick={onEndSession}
+            title="View session summary"
+            style={{
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+              color: 'white',
+              border: 'none',
+              padding: '4px 12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              marginLeft: '8px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            End Session ({sessionCards})
+          </button>
+        )}
       </div>
       <div className="footer-shortcuts">
         <small>

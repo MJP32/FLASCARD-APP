@@ -779,7 +779,9 @@ p {
 }
 
 .header-right-progress {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: visible;
 }
 
 .header-left {

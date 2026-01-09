@@ -14,6 +14,7 @@ import ReviewButtons from './components/ReviewButtons';
 import { useAuth } from './hooks/useAuth';
 import { useFlashcards } from './hooks/useFlashcards';
 import { useSettings } from './hooks/useSettings';
+import { useGamification } from './hooks/useGamification';
 
 // Utils and Constants
 import { SUCCESS_MESSAGES, DEFAULT_FSRS_PARAMS } from './utils/constants';
@@ -29,6 +30,9 @@ import './MobileOptimizations.css';
 
 import './ai-explanation-dropdown.css';
 
+// Non-lazy components for immediate display
+import AchievementToast from './components/AchievementToast';
+
 // Lazy-loaded Modal Components (loaded on demand)
 const SettingsModal = lazy(() => import('./components/SettingsModal'));
 const ImportExportModal = lazy(() => import('./components/ImportExportModal'));
@@ -37,6 +41,9 @@ const ManageCardsModal = lazy(() => import('./components/ManageCardsModal'));
 const Calendar = lazy(() => import('./Calendar'));
 const StudyTimer = lazy(() => import('./components/StudyTimer'));
 const StudyStats = lazy(() => import('./components/StudyStats'));
+const AchievementsModal = lazy(() => import('./components/AchievementsModal'));
+const SessionSummary = lazy(() => import('./components/SessionSummary'));
+const HeatMapCalendar = lazy(() => import('./components/HeatMapCalendar'));
 
 // Firebase configuration
 const firebaseConfig = {
@@ -360,6 +367,47 @@ function App() {
     toggleIntervalSettings,
     clearError: clearSettingsError
   } = useSettings(firebaseApp, userId);
+
+  // Gamification hook
+  const {
+    dailyProgress,
+    currentStreak,
+    longestStreak,
+    todayXP,
+    totalXP,
+    totalReviews,
+    cardsCreated,
+    easyStreak,
+    dailyGoalStreak,
+    achievements,
+    activityHistory,
+    levelInfo,
+    newAchievements,
+    sessionCards,
+    recordReview: recordGamificationReview,
+    recordCardCreated,
+    clearNewAchievements,
+    getSessionSummary,
+    resetSession
+  } = useGamification(firebaseApp, userId);
+
+  // Achievements modal state
+  const [showAchievementsModal, setShowAchievementsModal] = useState(false);
+  const [showSessionSummary, setShowSessionSummary] = useState(false);
+  const [sessionAchievements, setSessionAchievements] = useState([]);
+  const [showHeatMapCalendar, setShowHeatMapCalendar] = useState(false);
+
+  // Accumulate achievements unlocked during the session
+  useEffect(() => {
+    if (newAchievements && newAchievements.length > 0) {
+      setSessionAchievements(prev => {
+        // Avoid duplicates by checking achievement IDs
+        const existingIds = new Set(prev.map(a => a.id));
+        const newOnes = newAchievements.filter(a => !existingIds.has(a.id));
+        return [...prev, ...newOnes];
+      });
+    }
+  }, [newAchievements]);
 
   // API Key dropdown handlers
   const handleApiKeyChange = useCallback((provider, value) => {
@@ -717,6 +765,10 @@ function App() {
       await addFlashcard(cardData);
       setMessage(SUCCESS_MESSAGES.CARD_CREATED);
       setShowCreateCardForm(false);
+      // Record card creation for gamification achievements
+      if (recordCardCreated) {
+        recordCardCreated();
+      }
       clearMessage();
     } catch (error) {
       setError(error.message || 'Failed to create flashcard');
@@ -898,6 +950,11 @@ function App() {
 
       setMessage(`Card reviewed as ${rating.toUpperCase()}! Next review in ${interval} day${interval !== 1 ? 's' : ''}.`);
 
+      // Record gamification stats (XP, streak, achievements)
+      if (recordGamificationReview) {
+        recordGamificationReview(rating);
+      }
+
       // Increment completed cards count
       const newCompletedCount = cardsCompletedToday + 1;
       setCardsCompletedToday(newCompletedCount);
@@ -962,7 +1019,7 @@ function App() {
       console.error('Rating:', rating);
       setError(`Failed to update card review: ${error.message}`);
     }
-  }, [getCurrentCard, fsrsParams, addToNavigationHistory, updateFlashcard, setMessage, cardsCompletedToday, setCardsCompletedToday, userId, categoryCompletedCounts, setCategoryCompletedCounts, subCategoryCompletedCounts, setSubCategoryCompletedCounts, setLastCardCompletion, setShowAnswer, searchQuery, searchFilteredFlashcards, filteredFlashcards, currentCardIndex, setCurrentCardIndex, clearMessage, setError]);
+  }, [getCurrentCard, fsrsParams, addToNavigationHistory, updateFlashcard, setMessage, cardsCompletedToday, setCardsCompletedToday, userId, categoryCompletedCounts, setCategoryCompletedCounts, subCategoryCompletedCounts, setSubCategoryCompletedCounts, setLastCardCompletion, setShowAnswer, searchQuery, searchFilteredFlashcards, filteredFlashcards, currentCardIndex, setCurrentCardIndex, clearMessage, setError, recordGamificationReview]);
 
   const handleUpdateCard = async (cardData, cardId) => {
     try {
@@ -1127,6 +1184,15 @@ function App() {
       setError(error.message || 'Failed to update card status');
     }
   };
+
+  // Handle ending a study session
+  const handleEndSession = useCallback(() => {
+    const sessionData = getSessionSummary ? getSessionSummary() : {};
+    // Only show summary if user has reviewed at least 1 card
+    if (sessionData.cardsReviewed > 0) {
+      setShowSessionSummary(true);
+    }
+  }, [getSessionSummary]);
 
   // Create default flashcards for new users
   const createDefaultFlashcards = async (currentUserId) => {
@@ -2396,6 +2462,14 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         onShowAccount={() => setShowAccountModal(true)}
         onShowStudyTimer={() => setShowStudyTimer(true)}
         onShowStudyStats={() => setShowStudyStats(true)}
+        // Gamification props
+        gamificationEnabled={true}
+        dailyProgress={dailyProgress}
+        currentStreak={currentStreak}
+        todayXP={todayXP}
+        levelInfo={levelInfo}
+        onShowAchievements={() => setShowAchievementsModal(true)}
+        onShowHeatMap={() => setShowHeatMapCalendar(true)}
       />
 
       {/* Messages */}
@@ -3194,6 +3268,8 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
         categoriesCount={categories.length}
         pastDueCount={pastDueCards.length}
         dueTodayCount={cardsDueToday.length}
+        sessionCards={sessionCards}
+        onEndSession={handleEndSession}
       />
 
       {/* Explain Modal */}
@@ -3404,6 +3480,70 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             flashcards={flashcards}
             isVisible={showStudyStats}
             onClose={() => setShowStudyStats(false)}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
+
+      {/* Achievements Modal */}
+      <Suspense fallback={null}>
+        {showAchievementsModal && (
+          <AchievementsModal
+            isVisible={showAchievementsModal}
+            onClose={() => setShowAchievementsModal(false)}
+            unlockedAchievements={achievements || []}
+            currentStats={{
+              totalReviews: totalReviews || 0,
+              currentStreak: currentStreak || 0,
+              totalXP: totalXP || 0,
+              cardsCreated: cardsCreated || 0,
+              easyStreak: easyStreak || 0,
+              dailyGoalStreak: dailyGoalStreak || 0
+            }}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
+
+      {/* Achievement Unlock Toast */}
+      {newAchievements && newAchievements.length > 0 && (
+        <AchievementToast
+          achievements={newAchievements}
+          onDismiss={clearNewAchievements}
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* Heat Map Calendar */}
+      <Suspense fallback={null}>
+        {showHeatMapCalendar && (
+          <HeatMapCalendar
+            isVisible={showHeatMapCalendar}
+            onClose={() => setShowHeatMapCalendar(false)}
+            activityData={Object.entries(activityHistory || {}).map(([date, count]) => ({
+              date: new Date(date),
+              cardsReviewed: count
+            }))}
+            currentStreak={currentStreak || 0}
+            longestStreak={longestStreak || 0}
+            totalReviews={totalReviews || 0}
+            isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
+
+      {/* Session Summary Modal */}
+      <Suspense fallback={null}>
+        {showSessionSummary && (
+          <SessionSummary
+            isVisible={showSessionSummary}
+            onClose={() => {
+              setShowSessionSummary(false);
+              setSessionAchievements([]);
+              if (resetSession) resetSession();
+            }}
+            sessionData={getSessionSummary ? getSessionSummary() : {}}
+            unlockedAchievements={sessionAchievements}
             isDarkMode={isDarkMode}
           />
         )}

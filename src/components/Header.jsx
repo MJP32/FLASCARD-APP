@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import DailyGoalProgress from './DailyGoalProgress';
 
 /**
  * Application header with logo, search, action buttons, and progress indicator
@@ -21,7 +22,15 @@ const Header = ({
   onShowApiKeys,
   onShowAccount,
   onShowStudyTimer,
-  onShowStudyStats
+  onShowStudyStats,
+  // Gamification props
+  gamificationEnabled = true,
+  dailyProgress,
+  currentStreak,
+  todayXP,
+  levelInfo,
+  onShowAchievements,
+  onShowHeatMap
 }) => {
   const searchInputRef = useRef(null);
 
@@ -174,25 +183,37 @@ const Header = ({
           </nav>
         </div>
 
-        {/* Right Section - Daily Progress */}
-        {((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
-          <div className="header-right-progress">
-            <div className="daily-progress-compact">
-              <span className="progress-label">
-                {cardsCompletedToday}/{cardsCompletedToday + cardsDueToday.length}
-                {cardsDueToday.length === 0 && cardsCompletedToday > 0 && ' ✓'}
-              </span>
-              <div className="progress-bar-mini">
-                <div
-                  className={`progress-bar-fill-mini${cardsDueToday.length === 0 && cardsCompletedToday > 0 ? ' complete' : ''}`}
-                  style={{
-                    width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%`
-                  }}
-                />
+        {/* Right Section - Gamification Progress */}
+        <div className="header-right-progress">
+          {gamificationEnabled && dailyProgress ? (
+            <DailyGoalProgress
+              dailyProgress={dailyProgress}
+              currentStreak={currentStreak || 0}
+              todayXP={todayXP || 0}
+              levelInfo={levelInfo || { level: 1, title: 'Beginner' }}
+              isDarkMode={isDarkMode}
+              onOpenStats={onShowAchievements || onShowStudyStats}
+              onShowHeatMap={onShowHeatMap}
+            />
+          ) : (
+            ((cardsCompletedToday + cardsDueToday.length) > 0 || cardsCompletedToday > 0) && (
+              <div className="daily-progress-compact">
+                <span className="progress-label">
+                  {cardsCompletedToday}/{cardsCompletedToday + cardsDueToday.length}
+                  {cardsDueToday.length === 0 && cardsCompletedToday > 0 && ' ✓'}
+                </span>
+                <div className="progress-bar-mini">
+                  <div
+                    className={`progress-bar-fill-mini${cardsDueToday.length === 0 && cardsCompletedToday > 0 ? ' complete' : ''}`}
+                    style={{
+                      width: `${Math.min(100, (cardsCompletedToday / (cardsCompletedToday + cardsDueToday.length)) * 100)}%`
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            )
+          )}
+        </div>
       </div>
 
       {/* Show toggle button when in focus mode */}

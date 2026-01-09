@@ -225,3 +225,203 @@ export const PROGRESS_CONFIG = {
   WEEKLY_GOAL: 100,    // Cards per week
   RETENTION_CALCULATION_DAYS: 30
 };
+
+/**
+ * Gamification configuration
+ */
+export const GAMIFICATION_CONFIG = {
+  // XP awarded per review response
+  XP_AMOUNTS: {
+    AGAIN: 10,
+    HARD: 25,
+    GOOD: 50,
+    EASY: 100
+  },
+  // Daily goal settings
+  DAILY_GOALS: {
+    MIN: 5,
+    DEFAULT: 20,
+    MAX: 100,
+    STEP: 5
+  },
+  // Streak bonuses
+  STREAK_BONUSES: {
+    DAY_3: { days: 3, xpBonus: 50, name: '3-Day Streak' },
+    DAY_7: { days: 7, xpBonus: 200, name: 'Week Warrior' },
+    DAY_14: { days: 14, xpBonus: 500, name: 'Two Week Champion' },
+    DAY_30: { days: 30, xpBonus: 1000, name: 'Monthly Master' },
+    DAY_100: { days: 100, xpBonus: 5000, name: 'Century Club' }
+  },
+  // Level thresholds (XP required for each level)
+  LEVELS: [
+    { level: 1, xpRequired: 0, title: 'Beginner' },
+    { level: 2, xpRequired: 100, title: 'Novice' },
+    { level: 3, xpRequired: 300, title: 'Apprentice' },
+    { level: 4, xpRequired: 600, title: 'Student' },
+    { level: 5, xpRequired: 1000, title: 'Learner' },
+    { level: 6, xpRequired: 1500, title: 'Scholar' },
+    { level: 7, xpRequired: 2500, title: 'Academic' },
+    { level: 8, xpRequired: 4000, title: 'Expert' },
+    { level: 9, xpRequired: 6000, title: 'Master' },
+    { level: 10, xpRequired: 10000, title: 'Grandmaster' }
+  ]
+};
+
+/**
+ * Achievement definitions
+ */
+export const ACHIEVEMENTS = {
+  // Review milestones
+  FIRST_STEPS: {
+    id: 'first_steps',
+    name: 'First Steps',
+    description: 'Complete your first review',
+    icon: '👶',
+    condition: { type: 'totalReviews', value: 1 }
+  },
+  GETTING_STARTED: {
+    id: 'getting_started',
+    name: 'Getting Started',
+    description: 'Review 10 cards',
+    icon: '🚀',
+    condition: { type: 'totalReviews', value: 10 }
+  },
+  CENTURION: {
+    id: 'centurion',
+    name: 'Centurion',
+    description: 'Review 100 cards',
+    icon: '💯',
+    condition: { type: 'totalReviews', value: 100 }
+  },
+  FIVE_HUNDRED_CLUB: {
+    id: 'five_hundred_club',
+    name: '500 Club',
+    description: 'Review 500 cards',
+    icon: '🏆',
+    condition: { type: 'totalReviews', value: 500 }
+  },
+  THOUSAND_REVIEWS: {
+    id: 'thousand_reviews',
+    name: 'Millennium',
+    description: 'Review 1000 cards',
+    icon: '👑',
+    condition: { type: 'totalReviews', value: 1000 }
+  },
+
+  // Streak achievements
+  DEDICATED: {
+    id: 'dedicated',
+    name: 'Dedicated',
+    description: 'Maintain a 3-day streak',
+    icon: '🔥',
+    condition: { type: 'streak', value: 3 }
+  },
+  WEEK_WARRIOR: {
+    id: 'week_warrior',
+    name: 'Week Warrior',
+    description: 'Maintain a 7-day streak',
+    icon: '⚔️',
+    condition: { type: 'streak', value: 7 }
+  },
+  FORTNIGHT_FIGHTER: {
+    id: 'fortnight_fighter',
+    name: 'Fortnight Fighter',
+    description: 'Maintain a 14-day streak',
+    icon: '🛡️',
+    condition: { type: 'streak', value: 14 }
+  },
+  MONTHLY_MASTER: {
+    id: 'monthly_master',
+    name: 'Monthly Master',
+    description: 'Maintain a 30-day streak',
+    icon: '🏅',
+    condition: { type: 'streak', value: 30 }
+  },
+
+  // Daily goal achievements
+  GOAL_GETTER: {
+    id: 'goal_getter',
+    name: 'Goal Getter',
+    description: 'Complete your daily goal',
+    icon: '🎯',
+    condition: { type: 'dailyGoalComplete', value: 1 }
+  },
+  CONSISTENT: {
+    id: 'consistent',
+    name: 'Consistent',
+    description: 'Complete daily goal 7 days in a row',
+    icon: '📈',
+    condition: { type: 'dailyGoalStreak', value: 7 }
+  },
+  OVERACHIEVER: {
+    id: 'overachiever',
+    name: 'Overachiever',
+    description: 'Review 2x your daily goal in one day',
+    icon: '🌟',
+    condition: { type: 'dailyGoalMultiplier', value: 2 }
+  },
+
+  // Performance achievements
+  PERFECT_TEN: {
+    id: 'perfect_ten',
+    name: 'Perfect Ten',
+    description: 'Get 10 "Easy" ratings in a row',
+    icon: '✨',
+    condition: { type: 'easyStreak', value: 10 }
+  },
+  SHARP_MIND: {
+    id: 'sharp_mind',
+    name: 'Sharp Mind',
+    description: 'Achieve 90% accuracy in a session (min 20 cards)',
+    icon: '🧠',
+    condition: { type: 'sessionAccuracy', value: 90, minCards: 20 }
+  },
+
+  // Time-based achievements
+  EARLY_BIRD: {
+    id: 'early_bird',
+    name: 'Early Bird',
+    description: 'Study before 7 AM',
+    icon: '🌅',
+    condition: { type: 'studyTime', value: 'early' }
+  },
+  NIGHT_OWL: {
+    id: 'night_owl',
+    name: 'Night Owl',
+    description: 'Study after 10 PM',
+    icon: '🦉',
+    condition: { type: 'studyTime', value: 'night' }
+  },
+
+  // Card creation achievements
+  CREATOR: {
+    id: 'creator',
+    name: 'Creator',
+    description: 'Create 10 flashcards',
+    icon: '✏️',
+    condition: { type: 'cardsCreated', value: 10 }
+  },
+  PROLIFIC: {
+    id: 'prolific',
+    name: 'Prolific',
+    description: 'Create 100 flashcards',
+    icon: '📚',
+    condition: { type: 'cardsCreated', value: 100 }
+  },
+
+  // XP achievements
+  XP_COLLECTOR: {
+    id: 'xp_collector',
+    name: 'XP Collector',
+    description: 'Earn 1000 XP',
+    icon: '💎',
+    condition: { type: 'totalXP', value: 1000 }
+  },
+  XP_MASTER: {
+    id: 'xp_master',
+    name: 'XP Master',
+    description: 'Earn 10000 XP',
+    icon: '💰',
+    condition: { type: 'totalXP', value: 10000 }
+  }
+};
