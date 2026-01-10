@@ -91,28 +91,6 @@ const ManageCardsModal = ({
       }
     });
 
-  // Stats
-  const activeCount = flashcards.filter(card => card.active !== false).length;
-  const inactiveCount = flashcards.filter(card => card.active === false).length;
-
-  // Extended stats
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueToday = flashcards.filter(card => {
-    if (card.active === false) return false;
-    const dueDate = card.dueDate ? (card.dueDate.toDate ? card.dueDate.toDate() : new Date(card.dueDate)) : null;
-    if (!dueDate) return true; // New cards are due
-    const dueDateOnly = new Date(dueDate);
-    dueDateOnly.setHours(0, 0, 0, 0);
-    return dueDateOnly <= today;
-  }).length;
-
-  const starredCount = flashcards.filter(card => card.starred).length;
-  const avgReviews = flashcards.length > 0
-    ? Math.round(flashcards.reduce((sum, card) => sum + (card.reviewCount || 0), 0) / flashcards.length)
-    : 0;
-  const categoryCount = new Set(flashcards.map(card => card.category || 'Uncategorized')).size;
-
   // All categories for bulk category change (without 'All' option)
   const allCategories = useMemo(() =>
     [...new Set(flashcards.map(card => card.category || 'Uncategorized'))].sort(),
@@ -481,108 +459,87 @@ const ManageCardsModal = ({
 
         {/* Body */}
         <div style={modalStyles.body}>
-          {/* Stats Row - Primary */}
-          <div style={modalStyles.statsRow}>
-            <div style={{...modalStyles.statCard, background: '#eff6ff', border: '2px solid #bfdbfe'}}>
-              <div style={{fontSize: '28px', fontWeight: '700', color: '#2563eb'}}>{flashcards.length}</div>
-              <div style={{fontSize: '13px', color: '#3b82f6', fontWeight: '600'}}>Total Cards</div>
+          {/* Action Buttons - Grouped */}
+          <div style={{display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px'}}>
+            {/* Row 1: Create & Import */}
+            <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center'}}>
+              <span style={{fontSize: '12px', fontWeight: '600', color: '#64748b', minWidth: '50px'}}>Create</span>
+              <button
+                style={{...modalStyles.actionBtn, background: '#2563eb', color: 'white'}}
+                onClick={onCreateCard}
+              >
+                + New Card
+              </button>
+              <button
+                style={{...modalStyles.actionBtn, background: '#06b6d4', color: 'white'}}
+                onClick={onCreateCardsAI}
+                title="Use AI to create multiple flashcards at once"
+              >
+                AI Create
+              </button>
+              <div style={{width: '1px', height: '24px', background: '#e2e8f0', margin: '0 8px'}} />
+              <button
+                style={{...modalStyles.actionBtn, background: '#7c3aed', color: 'white'}}
+                onClick={onImportExport}
+              >
+                Import/Export
+              </button>
             </div>
-            <div style={{...modalStyles.statCard, background: '#f0fdf4', border: '2px solid #bbf7d0'}}>
-              <div style={{fontSize: '28px', fontWeight: '700', color: '#16a34a'}}>{activeCount}</div>
-              <div style={{fontSize: '13px', color: '#22c55e', fontWeight: '600'}}>Active</div>
-            </div>
-            <div style={{...modalStyles.statCard, background: '#fef3c7', border: '2px solid #fcd34d'}}>
-              <div style={{fontSize: '28px', fontWeight: '700', color: '#d97706'}}>{dueToday}</div>
-              <div style={{fontSize: '13px', color: '#f59e0b', fontWeight: '600'}}>Due Today</div>
-            </div>
-          </div>
 
-          {/* Stats Row - Secondary */}
-          <div style={{...modalStyles.statsRow, marginBottom: '16px'}}>
-            <div style={{...modalStyles.statCard, background: '#fef2f2', border: '2px solid #fecaca', padding: '12px'}}>
-              <div style={{fontSize: '20px', fontWeight: '700', color: '#dc2626'}}>{inactiveCount}</div>
-              <div style={{fontSize: '11px', color: '#ef4444', fontWeight: '600'}}>Inactive</div>
+            {/* Row 2: Bulk Status */}
+            <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center'}}>
+              <span style={{fontSize: '12px', fontWeight: '600', color: '#64748b', minWidth: '50px'}}>Status</span>
+              <button
+                style={{...modalStyles.actionBtn, background: '#10b981', color: 'white'}}
+                onClick={() => {
+                  if (window.confirm(`Activate all ${filteredCards.length} filtered cards?`)) {
+                    filteredCards.forEach(card => {
+                      if (card.active === false) onToggleActive(card.id, true);
+                    });
+                  }
+                }}
+                disabled={filteredCards.length === 0}
+              >
+                Activate Filtered
+              </button>
+              <button
+                style={{...modalStyles.actionBtn, background: '#f59e0b', color: 'white'}}
+                onClick={() => {
+                  if (window.confirm(`Deactivate all ${filteredCards.length} filtered cards?`)) {
+                    filteredCards.forEach(card => {
+                      if (card.active !== false) onToggleActive(card.id, false);
+                    });
+                  }
+                }}
+                disabled={filteredCards.length === 0}
+              >
+                Deactivate Filtered
+              </button>
             </div>
-            <div style={{...modalStyles.statCard, background: '#fdf4ff', border: '2px solid #f0abfc', padding: '12px'}}>
-              <div style={{fontSize: '20px', fontWeight: '700', color: '#a855f7'}}>{starredCount}</div>
-              <div style={{fontSize: '11px', color: '#c084fc', fontWeight: '600'}}>Starred</div>
-            </div>
-            <div style={{...modalStyles.statCard, background: '#ecfeff', border: '2px solid #a5f3fc', padding: '12px'}}>
-              <div style={{fontSize: '20px', fontWeight: '700', color: '#0891b2'}}>{categoryCount}</div>
-              <div style={{fontSize: '11px', color: '#06b6d4', fontWeight: '600'}}>Categories</div>
-            </div>
-            <div style={{...modalStyles.statCard, background: '#f0fdf4', border: '2px solid #bbf7d0', padding: '12px'}}>
-              <div style={{fontSize: '20px', fontWeight: '700', color: '#16a34a'}}>{avgReviews}</div>
-              <div style={{fontSize: '11px', color: '#22c55e', fontWeight: '600'}}>Avg Reviews</div>
-            </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div style={modalStyles.actionsRow}>
-            <button
-              style={{...modalStyles.actionBtn, background: '#2563eb', color: 'white'}}
-              onClick={onCreateCard}
-            >
-              + New Card
-            </button>
-            <button
-              style={{...modalStyles.actionBtn, background: '#7c3aed', color: 'white'}}
-              onClick={onImportExport}
-            >
-              Import/Export
-            </button>
-            <button
-              style={{...modalStyles.actionBtn, background: '#10b981', color: 'white'}}
-              onClick={() => {
-                if (window.confirm(`Activate all ${filteredCards.length} filtered cards?`)) {
-                  filteredCards.forEach(card => {
-                    if (card.active === false) onToggleActive(card.id, true);
-                  });
-                }
-              }}
-              disabled={filteredCards.length === 0}
-            >
-              Activate Filtered
-            </button>
-            <button
-              style={{...modalStyles.actionBtn, background: '#f59e0b', color: 'white'}}
-              onClick={() => {
-                if (window.confirm(`Deactivate all ${filteredCards.length} filtered cards?`)) {
-                  filteredCards.forEach(card => {
-                    if (card.active !== false) onToggleActive(card.id, false);
-                  });
-                }
-              }}
-              disabled={filteredCards.length === 0}
-            >
-              Deactivate Filtered
-            </button>
-            <button
-              style={{...modalStyles.actionBtn, background: '#dc2626', color: 'white'}}
-              onClick={handleFindDuplicates}
-              disabled={isDeduplicating || flashcards.length < 2}
-            >
-              {isDeduplicating && dedupeMode === 'text'
-                ? `Finding... ${Math.round(dedupeProgress * 100)}%`
-                : 'Remove Duplicates'}
-            </button>
-            <button
-              style={{...modalStyles.actionBtn, background: '#9333ea', color: 'white'}}
-              onClick={handleFindSimilarConcepts}
-              disabled={isDeduplicating || flashcards.length < 2}
-              title="Find cards testing the same concept even if worded differently"
-            >
-              {isDeduplicating && dedupeMode === 'concept'
-                ? `Finding... ${Math.round(dedupeProgress * 100)}%`
-                : 'Similar Concepts'}
-            </button>
-            <button
-              style={{...modalStyles.actionBtn, background: '#06b6d4', color: 'white'}}
-              onClick={onCreateCardsAI}
-              title="Use AI to create multiple flashcards at once"
-            >
-              AI Create
-            </button>
+            {/* Row 3: Cleanup */}
+            <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center'}}>
+              <span style={{fontSize: '12px', fontWeight: '600', color: '#64748b', minWidth: '50px'}}>Cleanup</span>
+              <button
+                style={{...modalStyles.actionBtn, background: '#dc2626', color: 'white'}}
+                onClick={handleFindDuplicates}
+                disabled={isDeduplicating || flashcards.length < 2}
+              >
+                {isDeduplicating && dedupeMode === 'text'
+                  ? `Finding... ${Math.round(dedupeProgress * 100)}%`
+                  : 'Remove Duplicates'}
+              </button>
+              <button
+                style={{...modalStyles.actionBtn, background: '#9333ea', color: 'white'}}
+                onClick={handleFindSimilarConcepts}
+                disabled={isDeduplicating || flashcards.length < 2}
+                title="Find cards testing the same concept even if worded differently"
+              >
+                {isDeduplicating && dedupeMode === 'concept'
+                  ? `Finding... ${Math.round(dedupeProgress * 100)}%`
+                  : 'Similar Concepts'}
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
