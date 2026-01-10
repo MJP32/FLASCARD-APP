@@ -3,16 +3,6 @@ import { exportToCSV, exportToExcel, exportToAnki } from '../services/exportServ
 import { parseCSV, parseExcel, readFileAsText, readFileAsArrayBuffer } from '../services/fileParser';
 import { SUPPORTED_FILE_TYPES, FILE_SIZE_LIMITS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../utils/constants';
 
-/**
- * Modal component for import and export operations
- * @param {Object} props - Component props
- * @param {boolean} props.isVisible - Whether the modal is visible
- * @param {Function} props.onClose - Callback to close the modal
- * @param {Array} props.flashcards - Available flashcards for export
- * @param {Function} props.onImport - Callback for successful import
- * @param {boolean} props.isDarkMode - Dark mode state
- * @returns {JSX.Element} Import/Export modal component
- */
 const ImportExportModal = ({
   isVisible,
   onClose,
@@ -30,14 +20,348 @@ const ImportExportModal = ({
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [csvText, setCsvText] = useState('');
   const [isPastingCsv, setIsPastingCsv] = useState(false);
-  
-  // Preview mode states
   const [showPreview, setShowPreview] = useState(false);
   const [previewCards, setPreviewCards] = useState([]);
   const [editingCardIndex, setEditingCardIndex] = useState(null);
   const [editingCard, setEditingCard] = useState(null);
-  
+
   const fileInputRef = useRef(null);
+
+  const styles = {
+    overlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 200001,
+      padding: '20px'
+    },
+    modal: {
+      background: isDarkMode ? '#1e293b' : '#ffffff',
+      borderRadius: '16px',
+      width: '100%',
+      maxWidth: '600px',
+      maxHeight: '90vh',
+      display: 'flex',
+      flexDirection: 'column',
+      boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+      overflow: 'hidden'
+    },
+    header: {
+      background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+      color: 'white',
+      padding: '20px 24px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    title: {
+      margin: 0,
+      fontSize: '20px',
+      fontWeight: '600',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px'
+    },
+    closeBtn: {
+      background: 'rgba(255,255,255,0.2)',
+      border: 'none',
+      color: 'white',
+      width: '32px',
+      height: '32px',
+      borderRadius: '50%',
+      cursor: 'pointer',
+      fontSize: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'background 0.2s'
+    },
+    tabs: {
+      display: 'flex',
+      borderBottom: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      background: isDarkMode ? '#0f172a' : '#f8fafc'
+    },
+    tab: {
+      flex: 1,
+      padding: '14px 20px',
+      border: 'none',
+      background: 'transparent',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: '600',
+      color: isDarkMode ? '#94a3b8' : '#64748b',
+      transition: 'all 0.2s',
+      position: 'relative'
+    },
+    tabActive: {
+      color: '#7c3aed',
+      background: isDarkMode ? '#1e293b' : '#ffffff'
+    },
+    tabIndicator: {
+      position: 'absolute',
+      bottom: '-1px',
+      left: 0,
+      right: 0,
+      height: '3px',
+      background: '#7c3aed',
+      borderRadius: '3px 3px 0 0'
+    },
+    body: {
+      padding: '24px',
+      overflowY: 'auto',
+      flex: 1
+    },
+    section: {
+      marginBottom: '24px'
+    },
+    sectionTitle: {
+      fontSize: '16px',
+      fontWeight: '600',
+      color: isDarkMode ? '#e2e8f0' : '#1e293b',
+      marginBottom: '16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    },
+    formatGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3, 1fr)',
+      gap: '12px',
+      marginBottom: '20px'
+    },
+    formatCard: {
+      padding: '16px',
+      borderRadius: '12px',
+      border: `2px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      textAlign: 'center',
+      background: isDarkMode ? '#0f172a' : '#ffffff'
+    },
+    formatCardActive: {
+      borderColor: '#7c3aed',
+      background: isDarkMode ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)'
+    },
+    formatIcon: {
+      fontSize: '28px',
+      marginBottom: '8px'
+    },
+    formatName: {
+      fontSize: '14px',
+      fontWeight: '600',
+      color: isDarkMode ? '#e2e8f0' : '#1e293b',
+      marginBottom: '4px'
+    },
+    formatDesc: {
+      fontSize: '11px',
+      color: isDarkMode ? '#94a3b8' : '#64748b'
+    },
+    checkbox: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '12px 16px',
+      background: isDarkMode ? '#0f172a' : '#f8fafc',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      marginBottom: '16px'
+    },
+    checkboxLabel: {
+      fontSize: '14px',
+      color: isDarkMode ? '#e2e8f0' : '#374151'
+    },
+    statsBar: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '12px 16px',
+      background: isDarkMode ? '#0f172a' : '#f0fdf4',
+      borderRadius: '8px',
+      marginBottom: '16px'
+    },
+    statLabel: {
+      fontSize: '14px',
+      color: isDarkMode ? '#94a3b8' : '#166534'
+    },
+    statValue: {
+      fontSize: '18px',
+      fontWeight: '700',
+      color: isDarkMode ? '#4ade80' : '#16a34a'
+    },
+    button: {
+      width: '100%',
+      padding: '14px 24px',
+      borderRadius: '10px',
+      border: 'none',
+      fontWeight: '600',
+      fontSize: '15px',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px'
+    },
+    primaryBtn: {
+      background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+      color: 'white'
+    },
+    secondaryBtn: {
+      background: isDarkMode ? '#334155' : '#e2e8f0',
+      color: isDarkMode ? '#e2e8f0' : '#374151'
+    },
+    divider: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '16px',
+      margin: '24px 0',
+      color: isDarkMode ? '#64748b' : '#94a3b8'
+    },
+    dividerLine: {
+      flex: 1,
+      height: '1px',
+      background: isDarkMode ? '#334155' : '#e2e8f0'
+    },
+    textarea: {
+      width: '100%',
+      minHeight: '150px',
+      padding: '14px',
+      borderRadius: '10px',
+      border: `1px solid ${isDarkMode ? '#334155' : '#d1d5db'}`,
+      background: isDarkMode ? '#0f172a' : '#ffffff',
+      color: isDarkMode ? '#e2e8f0' : '#1e293b',
+      fontSize: '13px',
+      fontFamily: 'monospace',
+      resize: 'vertical',
+      marginBottom: '12px'
+    },
+    fileDropZone: {
+      border: `2px dashed ${isDarkMode ? '#475569' : '#d1d5db'}`,
+      borderRadius: '12px',
+      padding: '32px',
+      textAlign: 'center',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      background: isDarkMode ? '#0f172a' : '#f8fafc',
+      marginBottom: '16px'
+    },
+    fileIcon: {
+      fontSize: '40px',
+      marginBottom: '12px'
+    },
+    fileText: {
+      fontSize: '14px',
+      color: isDarkMode ? '#94a3b8' : '#64748b',
+      marginBottom: '8px'
+    },
+    fileHint: {
+      fontSize: '12px',
+      color: isDarkMode ? '#64748b' : '#94a3b8'
+    },
+    selectedFile: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '12px 16px',
+      background: isDarkMode ? '#0f172a' : '#f0f9ff',
+      borderRadius: '8px',
+      marginBottom: '8px'
+    },
+    fileName: {
+      fontSize: '14px',
+      fontWeight: '500',
+      color: isDarkMode ? '#e2e8f0' : '#0369a1'
+    },
+    fileSize: {
+      fontSize: '12px',
+      color: isDarkMode ? '#94a3b8' : '#64748b'
+    },
+    message: {
+      padding: '12px 16px',
+      borderRadius: '8px',
+      marginTop: '16px',
+      fontSize: '14px'
+    },
+    successMessage: {
+      background: isDarkMode ? 'rgba(34, 197, 94, 0.1)' : '#f0fdf4',
+      color: isDarkMode ? '#4ade80' : '#166534',
+      border: `1px solid ${isDarkMode ? '#166534' : '#bbf7d0'}`
+    },
+    errorMessage: {
+      background: isDarkMode ? 'rgba(239, 68, 68, 0.1)' : '#fef2f2',
+      color: isDarkMode ? '#f87171' : '#dc2626',
+      border: `1px solid ${isDarkMode ? '#7f1d1d' : '#fecaca'}`
+    },
+    previewModal: {
+      maxWidth: '800px'
+    },
+    previewCard: {
+      background: isDarkMode ? '#0f172a' : '#f8fafc',
+      border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      borderRadius: '12px',
+      padding: '16px',
+      marginBottom: '12px'
+    },
+    previewQuestion: {
+      fontSize: '15px',
+      fontWeight: '600',
+      color: isDarkMode ? '#e2e8f0' : '#1e293b',
+      marginBottom: '8px'
+    },
+    previewAnswer: {
+      fontSize: '14px',
+      color: isDarkMode ? '#94a3b8' : '#64748b',
+      marginBottom: '12px'
+    },
+    previewMeta: {
+      display: 'flex',
+      gap: '8px',
+      flexWrap: 'wrap'
+    },
+    previewTag: {
+      fontSize: '11px',
+      padding: '4px 8px',
+      borderRadius: '4px',
+      background: isDarkMode ? '#334155' : '#e0e7ff',
+      color: isDarkMode ? '#94a3b8' : '#4f46e5'
+    },
+    previewActions: {
+      display: 'flex',
+      gap: '8px',
+      marginTop: '12px',
+      paddingTop: '12px',
+      borderTop: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`
+    },
+    smallBtn: {
+      padding: '6px 12px',
+      borderRadius: '6px',
+      border: 'none',
+      fontSize: '12px',
+      fontWeight: '500',
+      cursor: 'pointer'
+    },
+    editBtn: {
+      background: '#3b82f6',
+      color: 'white'
+    },
+    deleteBtn: {
+      background: '#ef4444',
+      color: 'white'
+    },
+    footer: {
+      padding: '16px 24px',
+      borderTop: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+      display: 'flex',
+      gap: '12px',
+      justifyContent: 'flex-end'
+    }
+  };
 
   const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
@@ -47,20 +371,15 @@ const ImportExportModal = ({
   };
 
   const validateFile = (file) => {
-    // Check file size
     if (file.size > FILE_SIZE_LIMITS.IMPORT_MAX_SIZE) {
       throw new Error(ERROR_MESSAGES.IMPORT.FILE_TOO_LARGE);
     }
-
-    // Check file type
     const fileName = file.name.toLowerCase();
     const isCSV = fileName.endsWith('.csv');
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
-    
     if (!isCSV && !isExcel) {
       throw new Error(ERROR_MESSAGES.IMPORT.INVALID_FILE);
     }
-
     return { isCSV, isExcel };
   };
 
@@ -69,30 +388,17 @@ const ImportExportModal = ({
       setImportError('Please paste CSV data before importing');
       return;
     }
-
     setIsPastingCsv(true);
     setImportError('');
     setImportMessage('');
-
     try {
-      console.log(`Processing CSV with ${csvText.length} characters`);
-      
-      // Parse the CSV text directly
       const cards = parseCSV(csvText);
-
       if (cards.length === 0) {
-        throw new Error('No valid cards found in the pasted CSV data. Please check the format.');
+        throw new Error('No valid cards found in the pasted CSV data.');
       }
-
-      console.log(`Successfully parsed ${cards.length} cards`);
-
-      // Show preview instead of directly importing
-      const previewCardsWithIds = cards.map((card, index) => ({ ...card, id: `preview-${index}` }));
-      setPreviewCards(previewCardsWithIds);
+      setPreviewCards(cards.map((card, index) => ({ ...card, id: `preview-${index}` })));
       setShowPreview(true);
-      
     } catch (error) {
-      console.error('CSV paste import error:', error);
       setImportError(error.message || ERROR_MESSAGES.IMPORT.GENERIC_ERROR);
     } finally {
       setIsPastingCsv(false);
@@ -104,18 +410,14 @@ const ImportExportModal = ({
       setImportError('Please select a file to import');
       return;
     }
-
     setIsImporting(true);
     setImportError('');
     setImportMessage('');
-
     try {
       let allCards = [];
-
       for (const file of selectedFiles) {
         const { isCSV, isExcel } = validateFile(file);
         let cards = [];
-
         if (isCSV) {
           const content = await readFileAsText(file);
           cards = parseCSV(content);
@@ -123,20 +425,14 @@ const ImportExportModal = ({
           const buffer = await readFileAsArrayBuffer(file);
           cards = parseExcel(buffer, file.name);
         }
-
         allCards = [...allCards, ...cards];
       }
-
       if (allCards.length === 0) {
         throw new Error(ERROR_MESSAGES.IMPORT.NO_VALID_CARDS);
       }
-
-      // Show preview instead of directly importing
       setPreviewCards(allCards.map((card, index) => ({ ...card, id: `preview-${index}` })));
       setShowPreview(true);
-
     } catch (error) {
-      console.error('Import error:', error);
       setImportError(error.message || ERROR_MESSAGES.IMPORT.PARSE_ERROR);
     } finally {
       setIsImporting(false);
@@ -148,35 +444,25 @@ const ImportExportModal = ({
       setImportError(ERROR_MESSAGES.EXPORT.NO_CARDS);
       return;
     }
-
     setIsExporting(true);
     setImportError('');
-
     try {
       if (exportFormat === 'csv') {
         exportToCSV(flashcards, preserveFormatting);
       } else if (exportFormat === 'anki') {
-        exportToAnki(flashcards, true); // Include additional info by default
+        exportToAnki(flashcards, true);
       } else {
         await exportToExcel(flashcards, preserveFormatting, true);
       }
-      
       setImportMessage(SUCCESS_MESSAGES.EXPORT_SUCCESS);
-      
-      // Close modal after successful export
-      setTimeout(() => {
-        onClose();
-      }, 1500);
-
+      setTimeout(() => onClose(), 1500);
     } catch (error) {
-      console.error('Export error:', error);
       setImportError(error.message || ERROR_MESSAGES.EXPORT.EXPORT_FAILED);
     } finally {
       setIsExporting(false);
     }
   };
 
-  // Preview mode functions
   const handleEditCard = (index) => {
     setEditingCardIndex(index);
     setEditingCard({ ...previewCards[index] });
@@ -192,761 +478,293 @@ const ImportExportModal = ({
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingCardIndex(null);
-    setEditingCard(null);
-  };
-
   const handleDeleteCard = (index) => {
-    if (window.confirm('Are you sure you want to delete this card?')) {
-      const updatedCards = previewCards.filter((_, i) => i !== index);
-      setPreviewCards(updatedCards);
-      
-      // If we're editing this card, cancel the edit
-      if (editingCardIndex === index) {
-        setEditingCardIndex(null);
-        setEditingCard(null);
-      } else if (editingCardIndex !== null && editingCardIndex > index) {
-        // Adjust editing index if we deleted a card before it
-        setEditingCardIndex(editingCardIndex - 1);
-      }
+    setPreviewCards(cards => cards.filter((_, i) => i !== index));
+    if (editingCardIndex === index) {
+      setEditingCardIndex(null);
+      setEditingCard(null);
     }
-  };
-
-  const handleAddCard = () => {
-    const newCard = {
-      id: `preview-${Date.now()}`,
-      question: '',
-      answer: '',
-      category: '',
-      sub_category: '',
-      additional_info: ''
-    };
-    setPreviewCards([...previewCards, newCard]);
-    setEditingCardIndex(previewCards.length);
-    setEditingCard(newCard);
   };
 
   const handleConfirmImport = async () => {
-    if (previewCards.length === 0) {
-      setImportError('No cards to import');
-      return;
-    }
-
+    if (previewCards.length === 0) return;
     setIsImporting(true);
-    setImportError('');
-    
     try {
-      // Remove the preview IDs before importing
-      const cardsToImport = previewCards.map(card => {
-        const { id, ...cardWithoutId } = card;
-        return cardWithoutId;
-      });
-
+      const cardsToImport = previewCards.map(({ id, ...card }) => card);
       await onImport(cardsToImport);
-      
-      setImportMessage(`${SUCCESS_MESSAGES.IMPORT_SUCCESS}: ${cardsToImport.length} cards imported`);
+      setImportMessage(`Successfully imported ${cardsToImport.length} cards!`);
       setShowPreview(false);
       setPreviewCards([]);
       setCsvText('');
       setSelectedFiles([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-
-      // Close modal after successful import
-      setTimeout(() => {
-        handleClose();
-      }, 2000);
-
+      setTimeout(() => onClose(), 2000);
     } catch (error) {
-      console.error('Import error:', error);
-      setImportError(error.message || ERROR_MESSAGES.IMPORT.PARSE_ERROR);
+      setImportError(error.message);
     } finally {
       setIsImporting(false);
     }
   };
 
-  const handleCancelPreview = () => {
-    setShowPreview(false);
-    setPreviewCards([]);
-    setEditingCardIndex(null);
-    setEditingCard(null);
-  };
-
-  // Add keyboard shortcuts for preview screen
-  useEffect(() => {
-    if (!showPreview) return;
-
-    const handleKeyDown = (event) => {
-      // Don't trigger shortcuts if user is typing in input/textarea
-      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-        return;
-      }
-
-      switch (event.key.toLowerCase()) {
-        case 'd':
-          event.preventDefault();
-          if (editingCardIndex !== null) {
-            // In edit mode - delete the card being edited
-            handleDeleteCard(editingCardIndex);
-          }
-          break;
-        case 'u':
-          event.preventDefault();
-          if (editingCardIndex !== null) {
-            // In edit mode - save/update the current edit
-            handleSaveEdit();
-          }
-          break;
-        case 'escape':
-          // Cancel current edit or close preview
-          event.preventDefault();
-          if (editingCardIndex !== null) {
-            handleCancelEdit();
-          } else {
-            handleCancelPreview();
-          }
-          break;
-        default:
-          break;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPreview, previewCards, editingCardIndex]);
-
-  const clearMessages = () => {
+  const handleClose = () => {
     setImportMessage('');
     setImportError('');
-  };
-
-  const handleClose = () => {
-    clearMessages();
     setSelectedFiles([]);
     setCsvText('');
     setShowPreview(false);
     setPreviewCards([]);
     setEditingCardIndex(null);
     setEditingCard(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
     onClose();
   };
 
-  if (!isVisible) {
-    return null;
-  }
+  useEffect(() => {
+    if (!showPreview) return;
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (editingCardIndex !== null) {
+          setEditingCardIndex(null);
+          setEditingCard(null);
+        } else {
+          setShowPreview(false);
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [showPreview, editingCardIndex]);
 
-  // Render preview screen if in preview mode
+  if (!isVisible) return null;
+
+  // Preview Screen
   if (showPreview) {
     return (
-      <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-        <div className={`modal-content import-preview-modal ${isDarkMode ? 'dark' : ''}`}>
-          <div className="modal-header">
-            <h2>📋 Import Preview ({previewCards.length} cards)</h2>
-            <button 
-              className="close-btn"
-              onClick={handleClose}
-              disabled={isImporting}
-              aria-label="Close preview"
+      <div style={styles.overlay} onClick={handleClose}>
+        <div style={{ ...styles.modal, ...styles.previewModal }} onClick={e => e.stopPropagation()}>
+          <div style={styles.header}>
+            <h2 style={styles.title}>Preview Import ({previewCards.length} cards)</h2>
+            <button style={styles.closeBtn} onClick={handleClose}>×</button>
+          </div>
+
+          <div style={styles.body}>
+            {previewCards.map((card, index) => (
+              <div key={card.id} style={styles.previewCard}>
+                {editingCardIndex === index ? (
+                  <div>
+                    <textarea
+                      style={{ ...styles.textarea, minHeight: '60px', marginBottom: '8px' }}
+                      value={editingCard?.question || ''}
+                      onChange={(e) => setEditingCard({ ...editingCard, question: e.target.value })}
+                      placeholder="Question"
+                    />
+                    <textarea
+                      style={{ ...styles.textarea, minHeight: '60px', marginBottom: '8px' }}
+                      value={editingCard?.answer || ''}
+                      onChange={(e) => setEditingCard({ ...editingCard, answer: e.target.value })}
+                      placeholder="Answer"
+                    />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        style={{ ...styles.smallBtn, ...styles.secondaryBtn }}
+                        onClick={() => { setEditingCardIndex(null); setEditingCard(null); }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        style={{ ...styles.smallBtn, ...styles.editBtn }}
+                        onClick={handleSaveEdit}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={styles.previewQuestion}>Q: {card.question}</div>
+                    <div style={styles.previewAnswer}>A: {card.answer}</div>
+                    <div style={styles.previewMeta}>
+                      {card.category && <span style={styles.previewTag}>{card.category}</span>}
+                      {card.sub_category && <span style={styles.previewTag}>{card.sub_category}</span>}
+                    </div>
+                    <div style={styles.previewActions}>
+                      <button style={{ ...styles.smallBtn, ...styles.editBtn }} onClick={() => handleEditCard(index)}>
+                        Edit
+                      </button>
+                      <button style={{ ...styles.smallBtn, ...styles.deleteBtn }} onClick={() => handleDeleteCard(index)}>
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div style={styles.footer}>
+            <button style={{ ...styles.button, ...styles.secondaryBtn, width: 'auto' }} onClick={() => setShowPreview(false)}>
+              Back
+            </button>
+            <button
+              style={{ ...styles.button, ...styles.primaryBtn, width: 'auto', opacity: isImporting ? 0.7 : 1 }}
+              onClick={handleConfirmImport}
+              disabled={isImporting || previewCards.length === 0}
             >
-              ×
+              {isImporting ? 'Importing...' : `Import ${previewCards.length} Cards`}
             </button>
           </div>
-
-          <div className="preview-content">
-            <div className="preview-header">
-              <p>Review your cards before importing. You can edit, delete, or add new cards.</p>
-              <div className="keyboard-shortcuts-hint">
-                <small>
-                  <strong>Keyboard shortcuts (when editing):</strong> 
-                  <kbd>U</kbd> save/update • 
-                  <kbd>D</kbd> delete card • 
-                  <kbd>Esc</kbd> cancel edit
-                </small>
-              </div>
-              <div className="preview-actions">
-                <button 
-                  className="btn btn-secondary"
-                  onClick={handleAddCard}
-                  disabled={isImporting}
-                >
-                  ➕ Add New Card
-                </button>
-                <div className="preview-buttons">
-                  <button 
-                    className="btn btn-outline"
-                    onClick={handleCancelPreview}
-                    disabled={isImporting}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    className="btn btn-primary"
-                    onClick={handleConfirmImport}
-                    disabled={isImporting || previewCards.length === 0}
-                  >
-                    {isImporting ? 'Importing...' : `Import ${previewCards.length} Cards`}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="preview-cards-list">
-              {previewCards.map((card, index) => {
-                return (
-                  <div key={card.id} style={{
-                    border: '1px solid #ccc',
-                    borderRadius: '12px',
-                    background: '#f9f9f9',
-                    marginBottom: '15px !important',
-                    height: '800px !important',
-                    minHeight: '800px !important',
-                    maxHeight: '800px !important',
-                    padding: '25px',
-                    overflowY: 'scroll !important',
-                    scrollbarWidth: 'thin',
-                    scrollbarColor: '#999 #f1f1f1'
-                  }}>
-                  {editingCardIndex === index ? (
-                    // Edit mode
-                    <div className="card-edit-form">
-                      <div className="form-row">
-                        <label>Question:</label>
-                        <textarea
-                          value={editingCard?.question || ''}
-                          onChange={(e) => setEditingCard({...editingCard, question: e.target.value})}
-                          placeholder="Enter question"
-                          rows="2"
-                        />
-                      </div>
-                      <div className="form-row">
-                        <label>Answer:</label>
-                        <textarea
-                          value={editingCard?.answer || ''}
-                          onChange={(e) => setEditingCard({...editingCard, answer: e.target.value})}
-                          placeholder="Enter answer"
-                          rows="2"
-                        />
-                      </div>
-                      <div className="form-row-inline">
-                        <div className="form-col">
-                          <label>Category:</label>
-                          <input
-                            type="text"
-                            value={editingCard?.category || ''}
-                            onChange={(e) => setEditingCard({...editingCard, category: e.target.value})}
-                            placeholder="Category"
-                          />
-                        </div>
-                        <div className="form-col">
-                          <label>Sub-category:</label>
-                          <input
-                            type="text"
-                            value={editingCard?.sub_category || ''}
-                            onChange={(e) => setEditingCard({...editingCard, sub_category: e.target.value})}
-                            placeholder="Sub-category"
-                          />
-                        </div>
-                      </div>
-                      <div className="form-row">
-                        <label>Additional Info:</label>
-                        <textarea
-                          value={editingCard?.additional_info || ''}
-                          onChange={(e) => setEditingCard({...editingCard, additional_info: e.target.value})}
-                          placeholder="Additional information (optional)"
-                          rows="2"
-                        />
-                      </div>
-                      <div className="card-edit-actions">
-                        <button 
-                          className="btn btn-outline"
-                          onClick={handleCancelEdit}
-                        >
-                          Cancel
-                        </button>
-                        <button 
-                          className="btn btn-primary"
-                          onClick={handleSaveEdit}
-                          disabled={!editingCard?.question?.trim() || !editingCard?.answer?.trim()}
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    // Display mode
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'stretch',
-                      gap: '30px',
-                      height: '100%'
-                    }}>
-                      <div style={{
-                        background: 'white',
-                        padding: '30px',
-                        flex: 1,
-                        borderRadius: '10px',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                        overflow: 'visible'
-                      }}>
-                        <div style={{
-                          marginBottom: '25px',
-                          fontSize: '18px',
-                          lineHeight: '1.6',
-                          minHeight: '70px'
-                        }}>
-                          <strong style={{color: '#4f46e5', display: 'block', marginBottom: '5px'}}>Question:</strong>
-                          <div style={{
-                            maxHeight: '200px',
-                            overflowY: 'auto',
-                            overflowX: 'auto',
-                            padding: '20px',
-                            border: '1px solid #ddd',
-                            borderRadius: '8px',
-                            backgroundColor: '#ffffff',
-                            wordBreak: 'break-word',
-                            whiteSpace: 'pre-wrap',
-                            fontSize: '16px',
-                            lineHeight: '1.6',
-                            color: '#333333',
-                            minHeight: '80px'
-                          }}>
-                            {card.question || 'No question'}
-                          </div>
-                        </div>
-                        <div style={{
-                          marginBottom: '25px',
-                          fontSize: '18px',
-                          lineHeight: '1.6',
-                          minHeight: '70px'
-                        }}>
-                          <strong style={{color: '#4f46e5', display: 'block', marginBottom: '5px'}}>Answer:</strong>
-                          <div style={{
-                            maxHeight: '200px',
-                            overflowY: 'auto',
-                            overflowX: 'auto',
-                            padding: '20px',
-                            border: '1px solid #ddd',
-                            borderRadius: '8px',
-                            backgroundColor: '#ffffff',
-                            wordBreak: 'break-word',
-                            whiteSpace: 'pre-wrap',
-                            fontSize: '16px',
-                            lineHeight: '1.6',
-                            color: '#333333',
-                            minHeight: '80px'
-                          }}>
-                            {card.answer || 'No answer'}
-                          </div>
-                        </div>
-                        
-                        {/* Category and Sub-category */}
-                        <div style={{
-                          marginBottom: '12px',
-                          fontSize: '14px',
-                          color: '#666'
-                        }}>
-                          <strong style={{color: '#4f46e5', marginRight: '8px'}}>Category:</strong>
-                          <span style={{
-                            background: '#e0e7ff',
-                            color: '#4f46e5',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            marginRight: '8px'
-                          }}>
-                            {card.category || 'Uncategorized'}
-                          </span>
-                          {card.sub_category && card.sub_category.trim() !== '' && (
-                            <>
-                              <span style={{margin: '0 4px', color: '#999'}}>/</span>
-                              <span style={{
-                                background: '#f0f9ff',
-                                color: '#0ea5e9',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '12px'
-                              }}>
-                                {card.sub_category}
-                              </span>
-                            </>
-                          )}
-                        </div>
-
-
-                        {/* Additional Info */}
-                        {card.additional_info && (
-                          <div style={{
-                            marginBottom: '25px',
-                            fontSize: '16px'
-                          }}>
-                            <strong style={{color: '#4f46e5', display: 'block', marginBottom: '8px'}}>Additional Info:</strong>
-                            <div style={{
-                              padding: '16px',
-                              border: '1px solid #ddd',
-                              borderRadius: '8px',
-                              backgroundColor: '#f9f9f9',
-                              fontSize: '14px',
-                              color: '#666',
-                              fontStyle: 'italic',
-                              lineHeight: '1.6',
-                              minHeight: '60px'
-                            }}>
-                              {card.additional_info}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Add some bottom padding to ensure scrolling */}
-                        <div style={{ height: '50px' }}></div>
-                      </div>
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        minWidth: '100px'
-                      }}>
-                        <button 
-                          onClick={() => handleEditCard(index)}
-                          style={{
-                            background: '#4f46e5',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '8px 12px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteCard(index)}
-                          style={{
-                            background: '#ef4444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '8px 12px',
-                            cursor: 'pointer',
-                            fontSize: '12px'
-                          }}
-                        >
-                          🗑️ Delete
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Messages */}
-          {(importMessage || importError) && (
-            <div className="message-section">
-              {importMessage && (
-                <div className="success-message">
-                  ✅ {importMessage}
-                </div>
-              )}
-              {importError && (
-                <div className="error-message">
-                  ❌ {importError}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Loading Indicator */}
-          {isImporting && (
-            <div className="loading-overlay">
-              <div className="loading-spinner"></div>
-              <p>Importing flashcards...</p>
-            </div>
-          )}
         </div>
       </div>
     );
   }
 
+  // Main Modal
   return (
-    <div className={`modal-overlay ${isDarkMode ? 'dark' : ''}`}>
-      <div className={`modal-content import-export-modal ${isDarkMode ? 'dark' : ''}`}>
-        <div className="modal-header">
-          <h2>Import & Export Flashcards</h2>
-          <button 
-            className="close-btn"
-            onClick={handleClose}
-            disabled={isImporting || isExporting || isPastingCsv}
-            aria-label="Close import/export modal"
-          >
-            ×
-          </button>
+    <div style={styles.overlay} onClick={handleClose}>
+      <div style={styles.modal} onClick={e => e.stopPropagation()}>
+        <div style={styles.header}>
+          <h2 style={styles.title}>Import & Export</h2>
+          <button style={styles.closeBtn} onClick={handleClose}>×</button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="tab-navigation">
-          <button 
-            className={`tab-btn ${activeTab === 'export' ? 'active' : ''}`}
+        <div style={styles.tabs}>
+          <button
+            style={{ ...styles.tab, ...(activeTab === 'export' ? styles.tabActive : {}) }}
             onClick={() => setActiveTab('export')}
-            disabled={isImporting || isExporting || isPastingCsv}
           >
             Export
+            {activeTab === 'export' && <div style={styles.tabIndicator} />}
           </button>
-          <button 
-            className={`tab-btn ${activeTab === 'import' ? 'active' : ''}`}
+          <button
+            style={{ ...styles.tab, ...(activeTab === 'import' ? styles.tabActive : {}) }}
             onClick={() => setActiveTab('import')}
-            disabled={isImporting || isExporting || isPastingCsv}
           >
             Import
+            {activeTab === 'import' && <div style={styles.tabIndicator} />}
           </button>
         </div>
 
-        {/* Export Tab */}
-        {activeTab === 'export' && (
-          <div className="tab-content export-tab">
-            <div className="section">
-              <h3>Export Options</h3>
-              
-              <div className="option-group">
-                <label>Export Format:</label>
-                <div className="radio-group">
-                  <label className="radio-option">
-                    <input
-                      type="radio"
-                      value="csv"
-                      checked={exportFormat === 'csv'}
-                      onChange={(e) => setExportFormat(e.target.value)}
-                      disabled={isExporting}
-                    />
-                    CSV (Comma-separated values)
-                  </label>
-                  <label className="radio-option">
-                    <input
-                      type="radio"
-                      value="excel"
-                      checked={exportFormat === 'excel'}
-                      onChange={(e) => setExportFormat(e.target.value)}
-                      disabled={isExporting}
-                    />
-                    Excel (categorized with ZIP compression)
-                  </label>
-                  <label className="radio-option">
-                    <input
-                      type="radio"
-                      value="anki"
-                      checked={exportFormat === 'anki'}
-                      onChange={(e) => setExportFormat(e.target.value)}
-                      disabled={isExporting}
-                    />
-                    Anki (Tab-separated for import to Anki)
-                  </label>
+        <div style={styles.body}>
+          {activeTab === 'export' && (
+            <>
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Choose Format</div>
+                <div style={styles.formatGrid}>
+                  {[
+                    { id: 'csv', icon: '📄', name: 'CSV', desc: 'Universal format' },
+                    { id: 'excel', icon: '📊', name: 'Excel', desc: 'Organized by category' },
+                    { id: 'anki', icon: '🎴', name: 'Anki', desc: 'Flashcard app' }
+                  ].map(format => (
+                    <div
+                      key={format.id}
+                      style={{ ...styles.formatCard, ...(exportFormat === format.id ? styles.formatCardActive : {}) }}
+                      onClick={() => setExportFormat(format.id)}
+                    >
+                      <div style={styles.formatIcon}>{format.icon}</div>
+                      <div style={styles.formatName}>{format.name}</div>
+                      <div style={styles.formatDesc}>{format.desc}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="option-group">
-                <label className="checkbox-option">
-                  <input
-                    type="checkbox"
-                    checked={preserveFormatting}
-                    onChange={(e) => setPreserveFormatting(e.target.checked)}
-                    disabled={isExporting}
-                  />
-                  Preserve rich text formatting
-                </label>
-                <small className="option-description">
-                  When enabled, formatting like bold, italic, colors, and images will be preserved as markdown.
-                </small>
+              <label style={styles.checkbox}>
+                <input
+                  type="checkbox"
+                  checked={preserveFormatting}
+                  onChange={(e) => setPreserveFormatting(e.target.checked)}
+                />
+                <span style={styles.checkboxLabel}>Preserve rich text formatting</span>
+              </label>
+
+              <div style={styles.statsBar}>
+                <span style={styles.statLabel}>Cards to export</span>
+                <span style={styles.statValue}>{flashcards.length}</span>
               </div>
 
-              <div className="export-info">
-                <p><strong>Available cards:</strong> {flashcards.length}</p>
-                {exportFormat === 'excel' && (
-                  <p><small>Excel export will create separate files by category and compress them into a ZIP file.</small></p>
-                )}
-                {exportFormat === 'anki' && (
-                  <p><small>Creates a text file you can import directly into Anki. Categories become hierarchical tags (category::subcategory).</small></p>
-                )}
-              </div>
-
-              <button 
-                className="btn btn-primary export-btn"
+              <button
+                style={{ ...styles.button, ...styles.primaryBtn, opacity: isExporting ? 0.7 : 1 }}
                 onClick={handleExport}
                 disabled={isExporting || flashcards.length === 0}
               >
                 {isExporting ? 'Exporting...' : `Export as ${exportFormat.toUpperCase()}`}
               </button>
-            </div>
-          </div>
-        )}
+            </>
+          )}
 
-        {/* Import Tab */}
-        {activeTab === 'import' && (
-          <div className="tab-content import-tab">
-            {/* CSV Paste Section */}
-            <div className="section csv-paste-section">
-              <h3>📋 Paste CSV Data</h3>
-              <p className="section-description">
-                Quickly create flashcards by pasting CSV-formatted data directly below.
-              </p>
-              
-              <div className="csv-input-area">
-                <label htmlFor="csv-text">Paste your CSV data here:</label>
+          {activeTab === 'import' && (
+            <>
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Paste CSV Data</div>
                 <textarea
-                  id="csv-text"
-                  className="csv-textarea"
-                  placeholder={`Headers are optional! Default column order: question, answer, category, sub_category, level, additional_info
-
-With headers:
-question,answer,category,sub_category,level,additional_info
-"What is React?","A JavaScript library for building user interfaces","Programming","JavaScript","new","Created by Facebook"
-
-Without headers (same result):
-"What is React?","A JavaScript library for building user interfaces","Programming","JavaScript","new","Created by Facebook"
-"Capital of France?","Paris","Geography","Europe","new","Located in Western Europe"
-
-Note: Level can be: new, again, hard, good, easy, beginner, intermediate, or advanced.`}
+                  style={styles.textarea}
                   value={csvText}
-                  onChange={(e) => {
-                    console.log(`CSV text updated: ${e.target.value.length} characters`);
-                    setCsvText(e.target.value);
-                  }}
-                  disabled={isPastingCsv || isImporting}
-                  rows="12"
-                  style={{ minHeight: '300px' }}
+                  onChange={(e) => setCsvText(e.target.value)}
+                  placeholder={`question,answer,category
+"What is React?","A JavaScript library","Programming"
+"Capital of France?","Paris","Geography"`}
                 />
-                <div className="csv-char-count">
-                  {csvText.length} characters • {csvText.split('\n').length} lines
-                </div>
-                
-                <button 
-                  className="btn btn-primary csv-import-btn"
+                <button
+                  style={{ ...styles.button, ...styles.primaryBtn, opacity: isPastingCsv ? 0.7 : 1 }}
                   onClick={handleCsvPaste}
-                  disabled={isPastingCsv || isImporting || !csvText.trim()}
+                  disabled={isPastingCsv || !csvText.trim()}
                 >
-                  {isPastingCsv ? (
-                    <>
-                      <span className="loading-spinner-small"></span>
-                      Processing CSV...
-                    </>
-                  ) : (
-                    <>
-                      📋 Import from Pasted CSV
-                    </>
-                  )}
+                  {isPastingCsv ? 'Processing...' : 'Import from CSV Text'}
                 </button>
-                
-                <div className="csv-format-info">
-                  <h4>CSV Format Requirements:</h4>
-                  <ul>
-                    <li><strong>Required:</strong> question, answer</li>
-                    <li><strong>Optional:</strong> category, sub_category, additional_info</li>
-                    <li>Use quotes around text containing commas</li>
-                    <li>First row should contain column headers</li>
-                  </ul>
-                </div>
               </div>
-            </div>
 
-            <div className="section-divider">
-              <span>OR</span>
-            </div>
+              <div style={styles.divider}>
+                <div style={styles.dividerLine} />
+                <span>OR</span>
+                <div style={styles.dividerLine} />
+              </div>
 
-            {/* File Import Section */}
-            <div className="section">
-              <h3>📁 Import from Files</h3>
-              
-              <div className="file-input-section">
-                <label htmlFor="import-files">Select Files:</label>
+              <div style={styles.section}>
+                <div style={styles.sectionTitle}>Upload File</div>
+                <div
+                  style={styles.fileDropZone}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <div style={styles.fileIcon}>📁</div>
+                  <div style={styles.fileText}>Click to select files</div>
+                  <div style={styles.fileHint}>CSV or Excel files (max 10MB)</div>
+                </div>
                 <input
                   ref={fileInputRef}
-                  id="import-files"
                   type="file"
                   multiple
                   accept={`${SUPPORTED_FILE_TYPES.CSV},${SUPPORTED_FILE_TYPES.EXCEL}`}
                   onChange={handleFileSelect}
-                  disabled={isImporting}
-                  className="file-input"
+                  style={{ display: 'none' }}
                 />
-                <small className="file-help">
-                  Supported formats: CSV (.csv), Excel (.xlsx, .xls). Maximum size: {FILE_SIZE_LIMITS.IMPORT_MAX_SIZE / (1024 * 1024)}MB per file.
-                </small>
+
+                {selectedFiles.map((file, i) => (
+                  <div key={i} style={styles.selectedFile}>
+                    <span style={styles.fileName}>{file.name}</span>
+                    <span style={styles.fileSize}>{(file.size / 1024).toFixed(1)} KB</span>
+                  </div>
+                ))}
+
+                {selectedFiles.length > 0 && (
+                  <button
+                    style={{ ...styles.button, ...styles.primaryBtn, marginTop: '12px', opacity: isImporting ? 0.7 : 1 }}
+                    onClick={handleImport}
+                    disabled={isImporting}
+                  >
+                    {isImporting ? 'Processing...' : `Import ${selectedFiles.length} File(s)`}
+                  </button>
+                )}
               </div>
+            </>
+          )}
 
-              {selectedFiles.length > 0 && (
-                <div className="selected-files">
-                  <h4>Selected Files:</h4>
-                  <ul>
-                    {selectedFiles.map((file, index) => (
-                      <li key={index} className="file-item">
-                        <span className="file-name">{file.name}</span>
-                        <span className="file-size">({(file.size / 1024).toFixed(1)} KB)</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="import-info">
-                <h4>Expected Format:</h4>
-                <p>Your file should have these columns (with or without ID column):</p>
-                <ul>
-                  <li><strong>Question:</strong> The flashcard question</li>
-                  <li><strong>Answer:</strong> The flashcard answer</li>
-                  <li><strong>Category:</strong> Card category (optional, defaults to "Uncategorized")</li>
-                  <li><strong>Additional Info:</strong> Extra information (optional)</li>
-                </ul>
-                <small>The import will automatically detect the column structure and handle formatted content.</small>
-              </div>
-
-              <button 
-                className="btn btn-primary import-btn"
-                onClick={handleImport}
-                disabled={isImporting || isPastingCsv || selectedFiles.length === 0}
-              >
-                {isImporting ? 'Importing...' : `Import ${selectedFiles.length} file(s)`}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Messages */}
-        {(importMessage || importError) && (
-          <div className="message-section">
-            {importMessage && (
-              <div className="success-message">
-                ✅ {importMessage}
-              </div>
-            )}
-            {importError && (
-              <div className="error-message">
-                ❌ {importError}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Loading Indicator */}
-        {(isImporting || isExporting || isPastingCsv) && (
-          <div className="loading-overlay">
-            <div className="loading-spinner"></div>
-            <p>
-              {isPastingCsv ? 'Processing CSV data...' : 
-               isImporting ? 'Importing flashcards...' : 
-               'Exporting flashcards...'}
-            </p>
-          </div>
-        )}
+          {importMessage && (
+            <div style={{ ...styles.message, ...styles.successMessage }}>{importMessage}</div>
+          )}
+          {importError && (
+            <div style={{ ...styles.message, ...styles.errorMessage }}>{importError}</div>
+          )}
+        </div>
       </div>
     </div>
   );

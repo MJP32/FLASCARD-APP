@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { FixedSizeList as List } from 'react-window';
-import { processDuplicates } from '../utils/deduplication';
+import { processDuplicates, findSimilarConcepts } from '../utils/deduplication';
 
 /**
  * Modal for managing flashcard active/inactive states with bulk operations
@@ -11,6 +11,7 @@ const ManageCardsModal = ({
   flashcards,
   onToggleActive,
   onCreateCard,
+  onCreateCardsAI,
   onImportExport,
   onBulkDelete,
   onBulkUpdateCategory,
@@ -32,6 +33,7 @@ const ManageCardsModal = ({
   const [dedupeResults, setDedupeResults] = useState(null);
   const [showDedupeModal, setShowDedupeModal] = useState(false);
   const [isDeletingDupes, setIsDeletingDupes] = useState(false);
+  const [dedupeMode, setDedupeMode] = useState('text'); // 'text' or 'concept'
 
   // Get unique categories
   const categories = ['All', ...new Set(flashcards.map(card => card.category || 'Uncategorized'))];
@@ -176,6 +178,7 @@ const ManageCardsModal = ({
     setIsDeduplicating(true);
     setDedupeProgress(0);
     setDedupeResults(null);
+    setDedupeMode('text');
 
     try {
       const results = await processDuplicates(flashcards, 0.7, (progress) => {
@@ -186,6 +189,29 @@ const ManageCardsModal = ({
     } catch (error) {
       console.error('Deduplication error:', error);
       alert('Error finding duplicates: ' + error.message);
+    } finally {
+      setIsDeduplicating(false);
+      setDedupeProgress(0);
+    }
+  }, [flashcards]);
+
+  // Find similar concepts handler (semantic matching)
+  const handleFindSimilarConcepts = useCallback(async () => {
+    setIsDeduplicating(true);
+    setDedupeProgress(0);
+    setDedupeResults(null);
+    setDedupeMode('concept');
+
+    try {
+      // Use 0.25 threshold to catch cards testing similar concepts
+      const results = await findSimilarConcepts(flashcards, 0.25, (progress) => {
+        setDedupeProgress(progress);
+      });
+      setDedupeResults(results);
+      setShowDedupeModal(true);
+    } catch (error) {
+      console.error('Similar concepts error:', error);
+      alert('Error finding similar concepts: ' + error.message);
     } finally {
       setIsDeduplicating(false);
       setDedupeProgress(0);
@@ -536,9 +562,26 @@ const ManageCardsModal = ({
               onClick={handleFindDuplicates}
               disabled={isDeduplicating || flashcards.length < 2}
             >
-              {isDeduplicating
+              {isDeduplicating && dedupeMode === 'text'
                 ? `Finding... ${Math.round(dedupeProgress * 100)}%`
                 : 'Remove Duplicates'}
+            </button>
+            <button
+              style={{...modalStyles.actionBtn, background: '#9333ea', color: 'white'}}
+              onClick={handleFindSimilarConcepts}
+              disabled={isDeduplicating || flashcards.length < 2}
+              title="Find cards testing the same concept even if worded differently"
+            >
+              {isDeduplicating && dedupeMode === 'concept'
+                ? `Finding... ${Math.round(dedupeProgress * 100)}%`
+                : 'Similar Concepts'}
+            </button>
+            <button
+              style={{...modalStyles.actionBtn, background: '#06b6d4', color: 'white'}}
+              onClick={onCreateCardsAI}
+              title="Use AI to create multiple flashcards at once"
+            >
+              AI Create
             </button>
           </div>
 
@@ -866,29 +909,35 @@ const ManageCardsModal = ({
           <div style={modalStyles.bulkModalOverlay} onClick={() => setShowDedupeModal(false)} />
           <div style={{...modalStyles.bulkModal, maxWidth: '600px', maxHeight: '80vh', overflow: 'auto'}}>
             <h3 style={{margin: '0 0 16px 0', fontSize: '18px', color: '#1e293b'}}>
-              Duplicate Cards Found
+              {dedupeMode === 'concept' ? 'Similar Concept Cards Found' : 'Duplicate Cards Found'}
             </h3>
 
             {dedupeResults.toDelete.length === 0 ? (
               <div style={{padding: '20px', textAlign: 'center', color: '#64748b'}}>
                 <div style={{fontSize: '48px', marginBottom: '12px'}}>✓</div>
-                <p>No duplicate cards found!</p>
-                <p style={{fontSize: '14px'}}>All your cards are unique.</p>
+                <p>No {dedupeMode === 'concept' ? 'similar concept cards' : 'duplicate cards'} found!</p>
+                <p style={{fontSize: '14px'}}>
+                  Scanned {flashcards.length} cards. {dedupeMode === 'concept'
+                    ? 'All your cards test different concepts.'
+                    : 'All your cards are unique.'}
+                </p>
               </div>
             ) : (
               <>
                 <div style={{
                   padding: '12px',
-                  background: '#fef2f2',
+                  background: dedupeMode === 'concept' ? '#f3e8ff' : '#fef2f2',
                   borderRadius: '8px',
                   marginBottom: '16px',
-                  border: '1px solid #fecaca'
+                  border: `1px solid ${dedupeMode === 'concept' ? '#d8b4fe' : '#fecaca'}`
                 }}>
-                  <p style={{margin: 0, color: '#dc2626', fontWeight: '600'}}>
-                    Found {dedupeResults.groups.length} duplicate group(s) with {dedupeResults.toDelete.length} card(s) to remove
+                  <p style={{margin: 0, color: dedupeMode === 'concept' ? '#7c3aed' : '#dc2626', fontWeight: '600'}}>
+                    Found {dedupeResults.groups.length} {dedupeMode === 'concept' ? 'concept group(s)' : 'duplicate group(s)'} with {dedupeResults.toDelete.length} card(s) to remove
                   </p>
-                  <p style={{margin: '8px 0 0 0', fontSize: '14px', color: '#7f1d1d'}}>
-                    The best version of each duplicate will be kept.
+                  <p style={{margin: '8px 0 0 0', fontSize: '14px', color: dedupeMode === 'concept' ? '#5b21b6' : '#7f1d1d'}}>
+                    {dedupeMode === 'concept'
+                      ? 'These cards test similar concepts. The most complete version will be kept.'
+                      : 'The best version of each duplicate will be kept.'}
                   </p>
                 </div>
 
@@ -902,10 +951,11 @@ const ManageCardsModal = ({
                       border: '1px solid #e2e8f0'
                     }}>
                       <div style={{fontWeight: '600', marginBottom: '8px', color: '#1e293b'}}>
-                        Group {groupIdx + 1} ({group.length} similar cards)
+                        {dedupeMode === 'concept' ? 'Concept' : 'Group'} {groupIdx + 1} ({group.length} similar cards)
                       </div>
                       {group.map((card, cardIdx) => {
                         const isKeep = dedupeResults.toKeep.some(k => k.id === card.id);
+                        const similarity = card._similarity;
                         return (
                           <div key={card.id} style={{
                             padding: '8px',
@@ -925,6 +975,11 @@ const ManageCardsModal = ({
                                 color: isKeep ? '#16a34a' : '#dc2626'
                               }}>
                                 {isKeep ? '✓ Keep' : '✗ Delete'}
+                                {similarity && !isKeep && (
+                                  <span style={{fontWeight: '400', marginLeft: '8px', fontSize: '11px', color: '#6b7280'}}>
+                                    ({Math.round(similarity * 100)}% match)
+                                  </span>
+                                )}
                               </span>
                               <span style={{fontSize: '11px', color: '#64748b'}}>
                                 {card.category || 'Uncategorized'}
@@ -957,14 +1012,14 @@ const ManageCardsModal = ({
                     disabled={isDeletingDupes}
                     style={{
                       ...modalStyles.actionBtn,
-                      background: isDeletingDupes ? '#9ca3af' : '#dc2626',
+                      background: isDeletingDupes ? '#9ca3af' : (dedupeMode === 'concept' ? '#7c3aed' : '#dc2626'),
                       color: 'white',
                       cursor: isDeletingDupes ? 'not-allowed' : 'pointer'
                     }}
                   >
                     {isDeletingDupes
                       ? 'Deleting...'
-                      : `Delete ${dedupeResults.toDelete.length} Duplicate(s)`}
+                      : `Delete ${dedupeResults.toDelete.length} ${dedupeMode === 'concept' ? 'Similar Card(s)' : 'Duplicate(s)'}`}
                   </button>
                 </div>
               </>

@@ -249,3 +249,157 @@ export const suggestCategoryGroupings = (flashcards) => {
 
   return existingGroups;
 };
+
+/**
+ * Extract key subject terms from text
+ * Focuses on nouns and technical terms that identify the concept
+ */
+const extractSubjectTerms = (text) => {
+  const normalized = normalizeText(text);
+
+  // Very broad stop words - common verbs, prepositions, articles, pronouns
+  const stopWords = new Set([
+    'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'must', 'can', 'to', 'of', 'in', 'for', 'on',
+    'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before',
+    'after', 'between', 'under', 'again', 'then', 'here', 'there', 'when',
+    'where', 'why', 'how', 'all', 'each', 'more', 'most', 'other', 'some',
+    'no', 'not', 'only', 'same', 'so', 'than', 'too', 'very', 'just', 'and',
+    'but', 'if', 'or', 'because', 'what', 'which', 'who', 'this', 'that',
+    'these', 'those', 'it', 'its', 'they', 'them', 'their', 'we', 'us',
+    'our', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'me', 'my',
+    'about', 'also', 'any', 'both', 'get', 'got', 'like', 'make', 'made',
+    'use', 'using', 'used', 'one', 'two', 'first', 'second', 'example',
+    'define', 'explain', 'describe', 'list', 'name', 'identify', 'compare',
+    'difference', 'mean', 'means', 'called', 'known', 'refers', 'refer'
+  ]);
+
+  const words = normalized.split(/\s+/);
+  const terms = new Set();
+
+  words.forEach(word => {
+    const clean = word.replace(/[^a-z0-9]/g, '');
+    if (clean.length >= 3 && !stopWords.has(clean)) {
+      terms.add(clean);
+    }
+  });
+
+  return terms;
+};
+
+/**
+ * Calculate concept-based similarity between two cards
+ * Cards test the same concept if they share the main subject term
+ */
+export const calculateConceptSimilarity = (card1, card2) => {
+  // Get subject terms from questions
+  const qTerms1 = extractSubjectTerms(card1.question);
+  const qTerms2 = extractSubjectTerms(card2.question);
+
+  // Get subject terms from answers
+  const aTerms1 = extractSubjectTerms(card1.answer);
+  const aTerms2 = extractSubjectTerms(card2.answer);
+
+  // Combine question and answer terms for full concept representation
+  const allTerms1 = new Set([...qTerms1, ...aTerms1]);
+  const allTerms2 = new Set([...qTerms2, ...aTerms2]);
+
+  if (allTerms1.size === 0 || allTerms2.size === 0) return 0;
+
+  // Calculate overlap
+  const intersection = [...allTerms1].filter(x => allTerms2.has(x));
+  const intersectionCount = intersection.length;
+
+  if (intersectionCount === 0) return 0;
+
+  // Use Jaccard similarity
+  const union = new Set([...allTerms1, ...allTerms2]);
+  const jaccardScore = intersectionCount / union.size;
+
+  // Bonus: if question terms specifically overlap, it's more likely same concept
+  const qIntersection = [...qTerms1].filter(x => qTerms2.has(x)).length;
+  const questionBonus = qTerms1.size > 0 && qTerms2.size > 0
+    ? (qIntersection / Math.min(qTerms1.size, qTerms2.size)) * 0.3
+    : 0;
+
+  return Math.min(1, jaccardScore + questionBonus);
+};
+
+/**
+ * Find cards testing similar concepts (async with progress)
+ * Uses concept extraction for semantic matching
+ * @param {Array} flashcards - Array of flashcard objects
+ * @param {number} threshold - Similarity threshold (0-1), default 0.25
+ * @param {Function} onProgress - Optional callback for progress updates
+ * @returns {Promise<Object>} { toKeep: [], toDelete: [], groups: [] }
+ */
+export const findSimilarConcepts = async (flashcards, threshold = 0.25, onProgress = null) => {
+  const duplicateGroups = [];
+  const processed = new Set();
+  const totalCards = flashcards.length;
+
+  // Update progress immediately
+  if (onProgress) onProgress(0.01);
+  await yieldToMain();
+
+  for (let i = 0; i < flashcards.length; i++) {
+    const card1 = flashcards[i];
+    if (!card1 || !card1.id || processed.has(card1.id)) continue;
+
+    const group = [{ card: card1, similarity: 1 }];
+    processed.add(card1.id);
+
+    for (let j = i + 1; j < flashcards.length; j++) {
+      const card2 = flashcards[j];
+      if (!card2 || !card2.id || processed.has(card2.id)) continue;
+
+      try {
+        // Use concept similarity only
+        const similarity = calculateConceptSimilarity(card1, card2);
+
+        if (similarity >= threshold) {
+          group.push({ card: card2, similarity });
+          processed.add(card2.id);
+        }
+      } catch (e) {
+        // Skip cards that cause errors
+        continue;
+      }
+    }
+
+    if (group.length > 1) {
+      group.sort((a, b) => b.similarity - a.similarity);
+      duplicateGroups.push(group.map(g => ({ ...g.card, _similarity: g.similarity })));
+    }
+
+    // Update progress after each outer loop iteration
+    if (onProgress) {
+      onProgress((i + 1) / totalCards);
+    }
+    await yieldToMain();
+  }
+
+  if (onProgress) onProgress(1);
+
+  // Process groups to determine which to keep/delete
+  const toDelete = [];
+  const toKeep = [];
+
+  duplicateGroups.forEach(group => {
+    const best = selectBestCard(group);
+    toKeep.push(best);
+
+    group.forEach(card => {
+      if (card.id !== best.id) {
+        toDelete.push(card);
+      }
+    });
+  });
+
+  return {
+    toKeep,
+    toDelete,
+    groups: duplicateGroups
+  };
+};

@@ -44,6 +44,7 @@ const StudyStats = lazy(() => import('./components/StudyStats'));
 const AchievementsModal = lazy(() => import('./components/AchievementsModal'));
 const SessionSummary = lazy(() => import('./components/SessionSummary'));
 const HeatMapCalendar = lazy(() => import('./components/HeatMapCalendar'));
+const AICreateCardsModal = lazy(() => import('./components/AICreateCardsModal'));
 
 // Firebase configuration
 const firebaseConfig = {
@@ -179,6 +180,7 @@ function App() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showStudyTimer, setShowStudyTimer] = useState(false);
   const [showStudyStats, setShowStudyStats] = useState(false);
+  const [showAICreateCardsModal, setShowAICreateCardsModal] = useState(false);
 
   // Undo deletion state
   const [deletedCards, setDeletedCards] = useState([]);
@@ -4174,6 +4176,10 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
               setShowManageCardsModal(false);
               setShowCreateCardForm(true);
             }}
+            onCreateCardsAI={() => {
+              setShowManageCardsModal(false);
+              setShowAICreateCardsModal(true);
+            }}
             onImportExport={() => {
               setShowManageCardsModal(false);
               setShowImportExportModal(true);
@@ -4181,6 +4187,24 @@ IMPORTANT: Return ONLY HTML content, no markdown formatting, no code blocks.`;
             onBulkDelete={handleBulkDelete}
             onBulkUpdateCategory={handleBulkUpdateCategory}
             isDarkMode={isDarkMode}
+          />
+        )}
+      </Suspense>
+
+      {/* AI Create Cards Modal */}
+      <Suspense fallback={null}>
+        {showAICreateCardsModal && (
+          <AICreateCardsModal
+            isVisible={showAICreateCardsModal}
+            onClose={() => setShowAICreateCardsModal(false)}
+            onSaveCards={async (cards) => {
+              await bulkImportFlashcards(cards);
+              setMessage({ type: 'success', text: `Created ${cards.length} cards successfully!` });
+            }}
+            isDarkMode={isDarkMode}
+            apiKeys={apiKeys}
+            selectedProvider={selectedProvider}
+            categories={categories}
           />
         )}
       </Suspense>
