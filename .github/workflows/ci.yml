@@ -39,7 +39,8 @@ jobs:
       - name: Build application
         run: npm run build
         env:
-          CI: true
+          CI: false
+          GENERATE_SOURCEMAP: false
 
       - name: Upload coverage report
         if: matrix.node-version == 20
